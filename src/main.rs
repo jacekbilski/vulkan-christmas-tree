@@ -23,4 +23,7 @@ fn main() {
                     [(queue_family, 0.5)].iter().cloned()).expect("failed to create device")
     };
     println!("Got a device: {:?}", device);
+
+    let queue = queues.next().unwrap();
+    println!("Got a single queue: {:?}", queue);
 }
