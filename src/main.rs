@@ -116,7 +116,14 @@ fn main() {
     command_builder
         .begin_render_pass(framebuffer.clone(), false, vec![[0.015_7, 0., 0.360_7, 1.0].into()])
         .unwrap()
+
+        .draw(pipeline.clone(), &dynamic_state, vertex_buffer.clone(), (), ())
+        .unwrap()
+
         .end_render_pass()
+        .unwrap()
+
+        .copy_image_to_buffer(image.clone(), buf.clone())
         .unwrap();
     let command_buffer = command_builder.build().unwrap();
 
