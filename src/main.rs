@@ -1,3 +1,4 @@
+use image::{ImageBuffer, Rgba};
 use vulkano::buffer::{BufferUsage, CpuAccessibleBuffer};
 use vulkano::command_buffer::{AutoCommandBufferBuilder, CommandBuffer};
 use vulkano::device::{Device, DeviceExtensions, Features};
@@ -49,4 +50,8 @@ fn main() {
     let finished = command_buffer.execute(queue.clone()).unwrap();
     finished.then_signal_fence_and_flush().unwrap()
         .wait(None).unwrap();
+
+    let buffer_content = buf.read().unwrap();
+    let image = ImageBuffer::<Rgba<u8>, _>::from_raw(1024, 1024, &buffer_content[..]).unwrap();
+    image.save("image.png").unwrap();
 }
