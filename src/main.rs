@@ -1,4 +1,6 @@
 use vulkano::device::{Device, DeviceExtensions, Features};
+use vulkano::format::Format;
+use vulkano::image::{Dimensions, StorageImage};
 use vulkano::instance::{Instance, PhysicalDevice};
 use vulkano::instance::InstanceExtensions;
 
@@ -26,4 +28,8 @@ fn main() {
 
     let queue = queues.next().unwrap();
     println!("Got a single queue: {:?}", queue);
+
+    let image = StorageImage::new(device.clone(), Dimensions::Dim2d { width: 1024, height: 1024 },
+                                  Format::R8G8B8A8Unorm, Some(queue.family())).unwrap();
+    println!("Created a Vulkan StorageImage: {:?}", image);
 }
