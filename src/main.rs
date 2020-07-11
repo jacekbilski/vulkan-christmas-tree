@@ -43,10 +43,9 @@ fn main() {
         .expect("couldn't find a graphical queue family");
     println!("Got queue family: {:?}", queue_family);
 
-    let (device, mut queues) = {
-        Device::new(physical, &Features::none(), &DeviceExtensions::none(),
-                    [(queue_family, 0.5)].iter().cloned()).expect("failed to create device")
-    };
+    let (device, mut queues) =
+        Device::new(physical, &Features::none(), &DeviceExtensions::none(), [(queue_family, 0.5)].iter().cloned())
+            .expect("failed to create device");
     println!("Got a device: {:?}", device);
 
     let queue = queues.next().unwrap();
