@@ -1,12 +1,21 @@
+use std::sync::Arc;
+
 use image::{ImageBuffer, Rgba};
 use vulkano::buffer::{BufferUsage, CpuAccessibleBuffer};
 use vulkano::command_buffer::{AutoCommandBufferBuilder, CommandBuffer};
+use vulkano::descriptor::descriptor_set::PersistentDescriptorSet;
+use vulkano::descriptor::PipelineLayoutAbstract;
 use vulkano::device::{Device, DeviceExtensions, Features};
 use vulkano::format::{ClearValue, Format};
 use vulkano::image::{Dimensions, StorageImage};
 use vulkano::instance::{Instance, PhysicalDevice};
 use vulkano::instance::InstanceExtensions;
+use vulkano::pipeline::ComputePipeline;
 use vulkano::sync::GpuFuture;
+
+mod cs {
+    vulkano_shaders::shader!{ty: "compute", path: "src/shaders/mandelbrot.glsl"}
+}
 
 fn main() {
     let instance = Instance::new(None, &InstanceExtensions::none(), None)
@@ -37,13 +46,24 @@ fn main() {
                                   Format::R8G8B8A8Unorm, Some(queue.family())).unwrap();
     println!("Created a Vulkan StorageImage: {:?}", image);
 
+    let shader = cs::Shader::load(device.clone())
+        .expect("failed to create shader module");
+
+    let compute_pipeline = Arc::new(ComputePipeline::new(device.clone(), &shader.main_entry_point(), &())
+        .expect("failed to create compute pipeline"));
+
+    let layout = compute_pipeline.layout().descriptor_set_layout(0).unwrap();
+    let descriptor_set = Arc::new(PersistentDescriptorSet::start(layout.clone())
+        .add_image(image.clone()).unwrap()
+        .build().unwrap()
+    );
+
     let buf = CpuAccessibleBuffer::from_iter(device.clone(), BufferUsage::all(), false, (0 .. 1024 * 1024 * 4).map(|_| 0u8))
         .expect("failed to create buffer");
 
-    // clearing the image with "blue" colour
     let mut command_builder = AutoCommandBufferBuilder::new(device.clone(), queue.family()).unwrap();
     command_builder
-        .clear_color_image(image.clone(), ClearValue::Float([0.0, 0.0, 1.0, 1.0])).unwrap()
+        .dispatch([1024 / 8, 1024 / 8, 1], compute_pipeline.clone(), descriptor_set.clone(), ()).unwrap()
         .copy_image_to_buffer(image.clone(), buf.clone()).unwrap();
     let command_buffer = command_builder.build().unwrap();
 
