@@ -2,14 +2,23 @@ use std::sync::Arc;
 
 use image::{ImageBuffer, Rgba};
 use vulkano::buffer::{BufferUsage, CpuAccessibleBuffer};
-use vulkano::command_buffer::{AutoCommandBufferBuilder, CommandBuffer};
+use vulkano::command_buffer::{AutoCommandBufferBuilder, CommandBuffer, DynamicState};
 use vulkano::device::{Device, DeviceExtensions, Features};
 use vulkano::format::Format;
-use vulkano::framebuffer::Framebuffer;
+use vulkano::framebuffer::{Framebuffer, Subpass};
 use vulkano::image::{Dimensions, StorageImage};
-use vulkano::instance::{Instance, PhysicalDevice};
-use vulkano::instance::InstanceExtensions;
+use vulkano::instance::{Instance, InstanceExtensions, PhysicalDevice};
+use vulkano::pipeline::GraphicsPipeline;
+use vulkano::pipeline::viewport::Viewport;
 use vulkano::sync::GpuFuture;
+
+mod vs {
+    vulkano_shaders::shader!{ty: "vertex", path: "src/shaders/shader.vert"}
+}
+
+mod fs {
+    vulkano_shaders::shader!{ty: "fragment", path: "src/shaders/shader.frag"}
+}
 
 #[derive(Default, Copy, Clone)]
 struct Vertex {
@@ -75,6 +84,30 @@ fn main() {
 
     let vs = vs::Shader::load(device.clone()).expect("failed to create shader module");
     let fs = fs::Shader::load(device.clone()).expect("failed to create shader module");
+
+    let pipeline = Arc::new(GraphicsPipeline::start()
+        // Defines what kind of vertex input is expected.
+        .vertex_input_single_buffer::<Vertex>()
+        // The vertex shader.
+        .vertex_shader(vs.main_entry_point(), ())
+        // Defines the viewport (explanations below).
+        .viewports_dynamic_scissors_irrelevant(1)
+        // The fragment shader.
+        .fragment_shader(fs.main_entry_point(), ())
+        // This graphics pipeline object concerns the first pass of the render pass.
+        .render_pass(Subpass::from(render_pass.clone(), 0).unwrap())
+        // Now that everything is specified, we call `build`.
+        .build(device.clone())
+        .unwrap());
+
+    let dynamic_state = DynamicState {
+        viewports: Some(vec![Viewport {
+            origin: [0.0, 0.0],
+            dimensions: [1024.0, 1024.0],
+            depth_range: 0.0 .. 1.0,
+        }]),
+        .. DynamicState::none()
+    };
 
     let buf = CpuAccessibleBuffer::from_iter(device.clone(), BufferUsage::all(), false, (0 .. 1024 * 1024 * 4).map(|_| 0u8))
         .expect("failed to create buffer");
