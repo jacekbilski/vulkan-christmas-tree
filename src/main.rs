@@ -11,6 +11,13 @@ use vulkano::instance::{Instance, PhysicalDevice};
 use vulkano::instance::InstanceExtensions;
 use vulkano::sync::GpuFuture;
 
+#[derive(Default, Copy, Clone)]
+struct Vertex {
+    position: [f32; 2],
+}
+
+vulkano::impl_vertex!(Vertex, position);
+
 fn main() {
     let instance = Instance::new(None, &InstanceExtensions::none(), None)
         .expect("failed to create instance");
@@ -36,6 +43,13 @@ fn main() {
     let queue = queues.next().unwrap();
     println!("Got a single queue: {:?}", queue);
 
+    let vertex1 = Vertex { position: [-0.5, -0.5] };
+    let vertex2 = Vertex { position: [ 0.0,  0.5] };
+    let vertex3 = Vertex { position: [ 0.5, -0.25] };
+    let vertex_buffer = CpuAccessibleBuffer::from_iter(
+        device.clone(), BufferUsage::all(), false, vec![vertex1, vertex2, vertex3].into_iter())
+        .unwrap();
+
     let render_pass = Arc::new(vulkano::single_pass_renderpass!(device.clone(),
         attachments: {
             color: {
@@ -58,6 +72,9 @@ fn main() {
     let framebuffer = Arc::new(Framebuffer::start(render_pass.clone())
         .add(image.clone()).unwrap()
         .build().unwrap());
+
+    let vs = vs::Shader::load(device.clone()).expect("failed to create shader module");
+    let fs = fs::Shader::load(device.clone()).expect("failed to create shader module");
 
     let buf = CpuAccessibleBuffer::from_iter(device.clone(), BufferUsage::all(), false, (0 .. 1024 * 1024 * 4).map(|_| 0u8))
         .expect("failed to create buffer");
