@@ -1,4 +1,5 @@
 use std::sync::Arc;
+use std::time::Instant;
 
 use image::{ImageBuffer, Rgba};
 use vulkano::buffer::{BufferUsage, CpuAccessibleBuffer};
@@ -13,6 +14,7 @@ use vulkano::pipeline::GraphicsPipeline;
 use vulkano::pipeline::viewport::Viewport;
 use vulkano::sync::GpuFuture;
 use vulkano_win::VkSurfaceBuild;
+use winit::event_loop::{ControlFlow, EventLoop};
 use winit::window::WindowBuilder;
 
 mod vs {
@@ -31,10 +33,18 @@ struct Vertex {
 vulkano::impl_vertex!(Vertex, position);
 
 fn main() {
+    let mut start = Instant::now();
     let (instance, device, queue) = init_vulkan();
+    let mut duration = start.elapsed().as_millis();
+    println!("Vulkan initialized in {} ms", duration);
 
-    let surface = WindowBuilder::new().build_vk_surface(&events_loop, instance.clone()).unwrap();
+    start = Instant::now();
+    let event_loop = EventLoop::new();
+    let surface = WindowBuilder::new().build_vk_surface(&event_loop, instance.clone()).unwrap();
+    duration = start.elapsed().as_millis();
+    println!("Window created in {} ms", duration);
 
+    start = Instant::now();
     let render_pass = Arc::new(vulkano::single_pass_renderpass!(device.clone(),
         attachments: {
             color: {
@@ -65,7 +75,9 @@ fn main() {
         // Now that everything is specified, we call `build`.
         .build(device.clone())
         .unwrap());
-    let (render_pass, pipeline) = (render_pass, pipeline);
+    duration = start.elapsed().as_millis();
+    println!("Pipeline created in {} ms", duration);
+
     let vertex_buffer = create_vertex_buffer(&device);
 
     let dynamic_state = DynamicState {
@@ -88,6 +100,7 @@ fn main() {
     let buf = CpuAccessibleBuffer::from_iter(device.clone(), BufferUsage::all(), false, (0..1024 * 1024 * 4).map(|_| 0u8))
         .expect("failed to create buffer");
 
+    start = Instant::now();
     let mut command_builder = AutoCommandBufferBuilder::primary_one_time_submit(device.clone(), queue.family()).unwrap();
     command_builder
         .begin_render_pass(framebuffer.clone(), false, vec![[0.015_7, 0., 0.360_7, 1.0].into()])
@@ -102,14 +115,31 @@ fn main() {
         .copy_image_to_buffer(image.clone(), buf.clone())
         .unwrap();
     let command_buffer = command_builder.build().unwrap();
+    duration = start.elapsed().as_millis();
+    println!("Command buffer created in {} ms", duration);
 
+    start = Instant::now();
     let finished = command_buffer.execute(queue.clone()).unwrap();
     finished.then_signal_fence_and_flush().unwrap()
         .wait(None).unwrap();
+    duration = start.elapsed().as_millis();
+    println!("Command buffer executed in {} ms", duration);
 
+    start = Instant::now();
     let buffer_content = buf.read().unwrap();
     let result = ImageBuffer::<Rgba<u8>, _>::from_raw(1024, 1024, &buffer_content[..]).unwrap();
     result.save("image.png").unwrap();
+    duration = start.elapsed().as_millis();
+    println!("Result copied and saved in {} ms", duration);
+
+    event_loop.run(|event, _, control_flow| {
+        match event {
+            winit::event::Event::WindowEvent { event: winit::event::WindowEvent::CloseRequested, .. } => {
+                *control_flow = ControlFlow::Exit;
+            },
+            _ => ()
+        }
+    });
 }
 
 fn init_vulkan() -> (Arc<Instance>, Arc<Device>, Arc<Queue>) {
