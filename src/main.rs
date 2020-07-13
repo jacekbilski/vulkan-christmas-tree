@@ -7,11 +7,13 @@ use vulkano::device::{Device, DeviceExtensions, Features, Queue};
 use vulkano::format::Format;
 use vulkano::framebuffer::{Framebuffer, Subpass};
 use vulkano::image::{Dimensions, StorageImage};
-use vulkano::instance::{Instance, InstanceExtensions, PhysicalDevice};
+use vulkano::instance::{Instance, PhysicalDevice};
 use vulkano::memory::pool::{PotentialDedicatedAllocation, StdMemoryPoolAlloc};
 use vulkano::pipeline::GraphicsPipeline;
 use vulkano::pipeline::viewport::Viewport;
 use vulkano::sync::GpuFuture;
+use vulkano_win::VkSurfaceBuild;
+use winit::window::WindowBuilder;
 
 mod vs {
     vulkano_shaders::shader!{ty: "vertex", path: "src/shaders/shader.vert"}
@@ -29,7 +31,10 @@ struct Vertex {
 vulkano::impl_vertex!(Vertex, position);
 
 fn main() {
-    let (device, queue) = init_vulkan();
+    let (instance, device, queue) = init_vulkan();
+
+    let surface = WindowBuilder::new().build_vk_surface(&events_loop, instance.clone()).unwrap();
+
     let render_pass = Arc::new(vulkano::single_pass_renderpass!(device.clone(),
         attachments: {
             color: {
@@ -107,8 +112,9 @@ fn main() {
     result.save("image.png").unwrap();
 }
 
-fn init_vulkan() -> (Arc<Device>, Arc<Queue>) {
-    let instance = Instance::new(None, &InstanceExtensions::none(), None)
+fn init_vulkan() -> (Arc<Instance>, Arc<Device>, Arc<Queue>) {
+    let extensions = vulkano_win::required_extensions();
+    let instance = Instance::new(None, &extensions, None)
         .expect("failed to create instance");
     println!("Got instance: {:?}", instance);
 
@@ -130,7 +136,7 @@ fn init_vulkan() -> (Arc<Device>, Arc<Queue>) {
 
     let queue = queues.next().unwrap();
     println!("Got a single queue: {:?}", queue);
-    (device, queue)
+    (instance, device, queue)
 }
 
 fn create_vertex_buffer(device: &Arc<Device>) -> Arc<CpuAccessibleBuffer<[Vertex], PotentialDedicatedAllocation<StdMemoryPoolAlloc>>> {
