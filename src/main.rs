@@ -15,6 +15,7 @@ use vulkano::swapchain::{AcquireError, ColorSpace, FullscreenExclusive, PresentM
 use vulkano::sync;
 use vulkano::sync::{FlushError, GpuFuture};
 use vulkano_win::VkSurfaceBuild;
+use winit::dpi::PhysicalSize;
 use winit::event::WindowEvent;
 use winit::event_loop::{ControlFlow, EventLoop};
 use winit::window::{Window, WindowBuilder};
@@ -70,6 +71,7 @@ fn main() {
     start = Instant::now();
     let event_loop = EventLoop::new();
     let surface = WindowBuilder::new().build_vk_surface(&event_loop, instance.clone()).unwrap();
+    surface.window().set_inner_size(PhysicalSize::new(SCR_WIDTH, SCR_HEIGHT));
     duration = start.elapsed().as_millis();
     println!("Window created in {} ms", duration);
 
@@ -77,7 +79,6 @@ fn main() {
     let caps = surface.capabilities(physical)
         .expect("failed to get surface capabilities");
     let dimensions: [u32; 2] = surface.window().inner_size().into();
-    // let dimensions = caps.current_extent.unwrap_or([SCR_WIDTH, SCR_HEIGHT]);
     let alpha = caps.supported_composite_alpha.iter().next().unwrap();
     let format = caps.supported_formats[0].0;
     let (mut swapchain, images) =
@@ -206,12 +207,6 @@ fn main() {
                     .join(acquire_future)
                     .then_execute(queue.clone(), command_buffer)
                     .unwrap()
-                    // The color output is now expected to contain our triangle. But in order to show it on
-                    // the screen, we have to *present* the image by calling `present`.
-                    //
-                    // This function does not actually present the image immediately. Instead it submits a
-                    // present command at the end of the queue. This means that it will only be presented once
-                    // the GPU has finished executing the command buffer that draws the triangle.
                     .then_swapchain_present(queue.clone(), swapchain.clone(), image_num)
                     .then_signal_fence_and_flush();
 
