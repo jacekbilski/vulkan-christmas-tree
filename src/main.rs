@@ -4,25 +4,31 @@ use std::time::Instant;
 use image::{ImageBuffer, Rgba};
 use vulkano::buffer::{BufferUsage, CpuAccessibleBuffer};
 use vulkano::command_buffer::{AutoCommandBufferBuilder, CommandBuffer, DynamicState};
-use vulkano::device::{Device, DeviceExtensions, Features, Queue};
+use vulkano::device::{Device, DeviceExtensions, Features};
 use vulkano::format::Format;
 use vulkano::framebuffer::{Framebuffer, Subpass};
 use vulkano::image::{Dimensions, StorageImage};
+use vulkano::image::ImageUsage;
 use vulkano::instance::{Instance, PhysicalDevice};
 use vulkano::memory::pool::{PotentialDedicatedAllocation, StdMemoryPoolAlloc};
 use vulkano::pipeline::GraphicsPipeline;
 use vulkano::pipeline::viewport::Viewport;
+use vulkano::swapchain::{ColorSpace, FullscreenExclusive, PresentMode, SurfaceTransform, Swapchain};
 use vulkano::sync::GpuFuture;
 use vulkano_win::VkSurfaceBuild;
 use winit::event_loop::{ControlFlow, EventLoop};
 use winit::window::WindowBuilder;
 
+// settings
+pub const SCR_WIDTH: u32 = 1920;
+pub const SCR_HEIGHT: u32 = 1080;
+
 mod vs {
-    vulkano_shaders::shader!{ty: "vertex", path: "src/shaders/shader.vert"}
+    vulkano_shaders::shader! {ty: "vertex", path: "src/shaders/shader.vert"}
 }
 
 mod fs {
-    vulkano_shaders::shader!{ty: "fragment", path: "src/shaders/shader.frag"}
+    vulkano_shaders::shader! {ty: "fragment", path: "src/shaders/shader.frag"}
 }
 
 #[derive(Default, Copy, Clone)]
@@ -34,7 +40,30 @@ vulkano::impl_vertex!(Vertex, position);
 
 fn main() {
     let mut start = Instant::now();
-    let (instance, device, queue) = init_vulkan();
+    let extensions = vulkano_win::required_extensions();
+    let instance = Instance::new(None, &extensions, None)
+        .expect("failed to create instance");
+    println!("Got instance: {:?}", instance);
+    let physical = PhysicalDevice::enumerate(&instance).next().expect("no device available");
+    println!("Got physical device: {:?}", physical);
+    for family in physical.queue_families() {
+        println!("Found a queue family with {:?} queue(s)", family.queues_count());
+    }
+    let queue_family = physical.queue_families()
+        .find(|&q| q.supports_graphics())
+        .expect("couldn't find a graphical queue family");
+    println!("Got queue family: {:?}", queue_family);
+    let (device, mut queues) = {
+        let device_ext = vulkano::device::DeviceExtensions {
+            khr_swapchain: true,
+            ..DeviceExtensions::none()
+        };
+        Device::new(physical, &Features::none(), &device_ext, [(queue_family, 0.5)].iter().cloned())
+            .expect("failed to create device")
+    };
+    println!("Got a device: {:?}", device);
+    let queue = queues.next().unwrap();
+    println!("Got a single queue: {:?}", queue);
     let mut duration = start.elapsed().as_millis();
     println!("Vulkan initialized in {} ms", duration);
 
@@ -43,6 +72,21 @@ fn main() {
     let surface = WindowBuilder::new().build_vk_surface(&event_loop, instance.clone()).unwrap();
     duration = start.elapsed().as_millis();
     println!("Window created in {} ms", duration);
+
+    start = Instant::now();
+    let caps = surface.capabilities(physical)
+        .expect("failed to get surface capabilities");
+    let dimensions = caps.current_extent.unwrap_or([SCR_WIDTH, SCR_HEIGHT]);
+    let alpha = caps.supported_composite_alpha.iter().next().unwrap();
+    let format = caps.supported_formats[0].0;
+    let (swapchain, images) =
+        Swapchain::new(device.clone(), surface.clone(),
+                       caps.min_image_count, format, dimensions, 1, ImageUsage::color_attachment(), &queue,
+                       SurfaceTransform::Identity, alpha, PresentMode::Fifo, FullscreenExclusive::Default,
+                       true, ColorSpace::SrgbNonLinear)
+            .expect("failed to create swapchain");
+    duration = start.elapsed().as_millis();
+    println!("Swapchain created in {} ms", duration);
 
     start = Instant::now();
     let render_pass = Arc::new(vulkano::single_pass_renderpass!(device.clone(),
@@ -136,37 +180,10 @@ fn main() {
         match event {
             winit::event::Event::WindowEvent { event: winit::event::WindowEvent::CloseRequested, .. } => {
                 *control_flow = ControlFlow::Exit;
-            },
+            }
             _ => ()
         }
     });
-}
-
-fn init_vulkan() -> (Arc<Instance>, Arc<Device>, Arc<Queue>) {
-    let extensions = vulkano_win::required_extensions();
-    let instance = Instance::new(None, &extensions, None)
-        .expect("failed to create instance");
-    println!("Got instance: {:?}", instance);
-
-    let physical = PhysicalDevice::enumerate(&instance).next().expect("no device available");
-    println!("Got physical device: {:?}", physical);
-
-    for family in physical.queue_families() {
-        println!("Found a queue family with {:?} queue(s)", family.queues_count());
-    }
-    let queue_family = physical.queue_families()
-        .find(|&q| q.supports_graphics())
-        .expect("couldn't find a graphical queue family");
-    println!("Got queue family: {:?}", queue_family);
-
-    let (device, mut queues) =
-        Device::new(physical, &Features::none(), &DeviceExtensions::none(), [(queue_family, 0.5)].iter().cloned())
-            .expect("failed to create device");
-    println!("Got a device: {:?}", device);
-
-    let queue = queues.next().unwrap();
-    println!("Got a single queue: {:?}", queue);
-    (instance, device, queue)
 }
 
 fn create_vertex_buffer(device: &Arc<Device>) -> Arc<CpuAccessibleBuffer<[Vertex], PotentialDedicatedAllocation<StdMemoryPoolAlloc>>> {
