@@ -1,23 +1,23 @@
 use std::sync::Arc;
 use std::time::Instant;
 
-use image::{ImageBuffer, Rgba};
 use vulkano::buffer::{BufferUsage, CpuAccessibleBuffer};
-use vulkano::command_buffer::{AutoCommandBufferBuilder, CommandBuffer, DynamicState};
+use vulkano::command_buffer::{AutoCommandBufferBuilder, DynamicState};
 use vulkano::device::{Device, DeviceExtensions, Features};
-use vulkano::format::Format;
-use vulkano::framebuffer::{Framebuffer, Subpass};
-use vulkano::image::{Dimensions, StorageImage};
-use vulkano::image::ImageUsage;
+use vulkano::framebuffer::{Framebuffer, FramebufferAbstract, RenderPassAbstract, Subpass};
+use vulkano::image::{ImageUsage, SwapchainImage};
 use vulkano::instance::{Instance, PhysicalDevice};
 use vulkano::memory::pool::{PotentialDedicatedAllocation, StdMemoryPoolAlloc};
 use vulkano::pipeline::GraphicsPipeline;
 use vulkano::pipeline::viewport::Viewport;
-use vulkano::swapchain::{ColorSpace, FullscreenExclusive, PresentMode, SurfaceTransform, Swapchain};
-use vulkano::sync::GpuFuture;
+use vulkano::swapchain;
+use vulkano::swapchain::{AcquireError, ColorSpace, FullscreenExclusive, PresentMode, SurfaceTransform, Swapchain, SwapchainCreationError};
+use vulkano::sync;
+use vulkano::sync::{FlushError, GpuFuture};
 use vulkano_win::VkSurfaceBuild;
+use winit::event::WindowEvent;
 use winit::event_loop::{ControlFlow, EventLoop};
-use winit::window::WindowBuilder;
+use winit::window::{Window, WindowBuilder};
 
 // settings
 pub const SCR_WIDTH: u32 = 1920;
@@ -45,7 +45,7 @@ fn main() {
         .expect("failed to create instance");
     println!("Got instance: {:?}", instance);
     let physical = PhysicalDevice::enumerate(&instance).next().expect("no device available");
-    println!("Got physical device: {:?}", physical);
+    println!("Got physical device, name: {}, type: {:?}", physical.name(), physical.ty());
     for family in physical.queue_families() {
         println!("Found a queue family with {:?} queue(s)", family.queues_count());
     }
@@ -76,10 +76,11 @@ fn main() {
     start = Instant::now();
     let caps = surface.capabilities(physical)
         .expect("failed to get surface capabilities");
-    let dimensions = caps.current_extent.unwrap_or([SCR_WIDTH, SCR_HEIGHT]);
+    let dimensions: [u32; 2] = surface.window().inner_size().into();
+    // let dimensions = caps.current_extent.unwrap_or([SCR_WIDTH, SCR_HEIGHT]);
     let alpha = caps.supported_composite_alpha.iter().next().unwrap();
     let format = caps.supported_formats[0].0;
-    let (swapchain, images) =
+    let (mut swapchain, images) =
         Swapchain::new(device.clone(), surface.clone(),
                        caps.min_image_count, format, dimensions, 1, ImageUsage::color_attachment(), &queue,
                        SurfaceTransform::Identity, alpha, PresentMode::Fifo, FullscreenExclusive::Default,
@@ -94,7 +95,7 @@ fn main() {
             color: {
                 load: Clear,
                 store: Store,
-                format: Format::R8G8B8A8Unorm,
+                format: swapchain.format(),
                 samples: 1,
             }
         },
@@ -124,62 +125,109 @@ fn main() {
 
     let vertex_buffer = create_vertex_buffer(&device);
 
-    let dynamic_state = DynamicState {
-        viewports: Some(vec![Viewport {
-            origin: [0.0, 0.0],
-            dimensions: [1024.0, 1024.0],
-            depth_range: 0.0..1.0,
-        }]),
-        ..DynamicState::none()
+    let mut dynamic_state = DynamicState {
+        line_width: None,
+        viewports: None,
+        scissors: None,
+        compare_mask: None,
+        write_mask: None,
+        reference: None,
     };
 
-    let image = StorageImage::new(device.clone(), Dimensions::Dim2d { width: 1024, height: 1024 },
-                                  Format::R8G8B8A8Unorm, Some(queue.family())).unwrap();
-    println!("Created a Vulkan StorageImage: {:?}", image);
+    let mut framebuffers =
+        window_size_dependent_setup(&images, render_pass.clone(), &mut dynamic_state);
 
-    let framebuffer = Arc::new(Framebuffer::start(render_pass.clone())
-        .add(image.clone()).unwrap()
-        .build().unwrap());
-
-    let buf = CpuAccessibleBuffer::from_iter(device.clone(), BufferUsage::all(), false, (0..1024 * 1024 * 4).map(|_| 0u8))
-        .expect("failed to create buffer");
-
-    start = Instant::now();
-    let mut command_builder = AutoCommandBufferBuilder::primary_one_time_submit(device.clone(), queue.family()).unwrap();
-    command_builder
-        .begin_render_pass(framebuffer.clone(), false, vec![[0.015_7, 0., 0.360_7, 1.0].into()])
-        .unwrap()
-
-        .draw(pipeline.clone(), &dynamic_state, vertex_buffer.clone(), (), ())
-        .unwrap()
-
-        .end_render_pass()
-        .unwrap()
-
-        .copy_image_to_buffer(image.clone(), buf.clone())
-        .unwrap();
-    let command_buffer = command_builder.build().unwrap();
-    duration = start.elapsed().as_millis();
-    println!("Command buffer created in {} ms", duration);
-
-    start = Instant::now();
-    let finished = command_buffer.execute(queue.clone()).unwrap();
-    finished.then_signal_fence_and_flush().unwrap()
-        .wait(None).unwrap();
-    duration = start.elapsed().as_millis();
-    println!("Command buffer executed in {} ms", duration);
-
-    start = Instant::now();
-    let buffer_content = buf.read().unwrap();
-    let result = ImageBuffer::<Rgba<u8>, _>::from_raw(1024, 1024, &buffer_content[..]).unwrap();
-    result.save("image.png").unwrap();
-    duration = start.elapsed().as_millis();
-    println!("Result copied and saved in {} ms", duration);
-
-    event_loop.run(|event, _, control_flow| {
+    let mut recreate_swapchain = false;
+    let mut previous_frame_end = Some(sync::now(device.clone()).boxed());
+    event_loop.run(move |event, _, control_flow| {
         match event {
             winit::event::Event::WindowEvent { event: winit::event::WindowEvent::CloseRequested, .. } => {
                 *control_flow = ControlFlow::Exit;
+            }
+            winit::event::Event::WindowEvent {
+                event: WindowEvent::Resized(_),
+                ..
+            } => {
+                recreate_swapchain = true;
+            }
+            winit::event::Event::RedrawEventsCleared => {
+                previous_frame_end.as_mut().unwrap().cleanup_finished();
+                if recreate_swapchain {
+                    // Get the new dimensions of the window.
+                    let dimensions: [u32; 2] = surface.window().inner_size().into();
+                    let (new_swapchain, new_images) =
+                        match swapchain.recreate_with_dimensions(dimensions) {
+                            Ok(r) => r,
+                            // This error tends to happen when the user is manually resizing the window.
+                            // Simply restarting the loop is the easiest way to fix this issue.
+                            Err(SwapchainCreationError::UnsupportedDimensions) => return,
+                            Err(e) => panic!("Failed to recreate swapchain: {:?}", e),
+                        };
+
+                    swapchain = new_swapchain;
+                    // Because framebuffers contains an Arc on the old swapchain, we need to
+                    // recreate framebuffers as well.
+                    framebuffers = window_size_dependent_setup(
+                        &new_images,
+                        render_pass.clone(),
+                        &mut dynamic_state,
+                    );
+                    recreate_swapchain = false;
+                }
+                let (image_num, suboptimal, acquire_future) =
+                    match swapchain::acquire_next_image(swapchain.clone(), None) {
+                        Ok(r) => r,
+                        Err(AcquireError::OutOfDate) => {
+                            recreate_swapchain = true;
+                            return;
+                        }
+                        Err(e) => panic!("Failed to acquire next image: {:?}", e),
+                    };
+                if suboptimal {
+                    recreate_swapchain = true;
+                }
+                let clear_values = vec![[0.015_7, 0., 0.360_7, 1.0].into()];
+
+                let mut command_builder = AutoCommandBufferBuilder::primary_one_time_submit(device.clone(), queue.family()).unwrap();
+                command_builder
+                    .begin_render_pass(framebuffers[image_num].clone(), false, clear_values)
+                    .unwrap()
+
+                    .draw(pipeline.clone(), &dynamic_state, vertex_buffer.clone(), (), ())
+                    .unwrap()
+
+                    .end_render_pass()
+                    .unwrap();
+                let command_buffer = command_builder.build().unwrap();
+
+                let future = previous_frame_end
+                    .take()
+                    .unwrap()
+                    .join(acquire_future)
+                    .then_execute(queue.clone(), command_buffer)
+                    .unwrap()
+                    // The color output is now expected to contain our triangle. But in order to show it on
+                    // the screen, we have to *present* the image by calling `present`.
+                    //
+                    // This function does not actually present the image immediately. Instead it submits a
+                    // present command at the end of the queue. This means that it will only be presented once
+                    // the GPU has finished executing the command buffer that draws the triangle.
+                    .then_swapchain_present(queue.clone(), swapchain.clone(), image_num)
+                    .then_signal_fence_and_flush();
+
+                match future {
+                    Ok(future) => {
+                        previous_frame_end = Some(future.boxed());
+                    }
+                    Err(FlushError::OutOfDate) => {
+                        recreate_swapchain = true;
+                        previous_frame_end = Some(sync::now(device.clone()).boxed());
+                    }
+                    Err(e) => {
+                        println!("Failed to flush future: {:?}", e);
+                        previous_frame_end = Some(sync::now(device.clone()).boxed());
+                    }
+                }
             }
             _ => ()
         }
@@ -194,4 +242,32 @@ fn create_vertex_buffer(device: &Arc<Device>) -> Arc<CpuAccessibleBuffer<[Vertex
         device.clone(), BufferUsage::all(), false, vec![vertex1, vertex2, vertex3].into_iter())
         .unwrap();
     vertex_buffer
+}
+
+fn window_size_dependent_setup(
+    images: &[Arc<SwapchainImage<Window>>],
+    render_pass: Arc<dyn RenderPassAbstract + Send + Sync>,
+    dynamic_state: &mut DynamicState,
+) -> Vec<Arc<dyn FramebufferAbstract + Send + Sync>> {
+    let dimensions = images[0].dimensions();
+
+    let viewport = Viewport {
+        origin: [0.0, 0.0],
+        dimensions: [dimensions[0] as f32, dimensions[1] as f32],
+        depth_range: 0.0..1.0,
+    };
+    dynamic_state.viewports = Some(vec![viewport]);
+
+    images
+        .iter()
+        .map(|image| {
+            Arc::new(
+                Framebuffer::start(render_pass.clone())
+                    .add(image.clone())
+                    .unwrap()
+                    .build()
+                    .unwrap(),
+            ) as Arc<dyn FramebufferAbstract + Send + Sync>
+        })
+        .collect::<Vec<_>>()
 }
