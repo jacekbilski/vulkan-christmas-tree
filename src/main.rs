@@ -3,7 +3,7 @@ use std::time::Instant;
 
 use vulkano::buffer::{BufferUsage, CpuAccessibleBuffer};
 use vulkano::command_buffer::{AutoCommandBufferBuilder, DynamicState};
-use vulkano::device::{Device, DeviceExtensions, Features};
+use vulkano::device::{Device, DeviceExtensions, Features, Queue};
 use vulkano::framebuffer::{Framebuffer, FramebufferAbstract, RenderPassAbstract, Subpass};
 use vulkano::image::{ImageUsage, SwapchainImage};
 use vulkano::instance::{Instance, PhysicalDevice};
@@ -40,43 +40,20 @@ struct Vertex {
 vulkano::impl_vertex!(Vertex, position);
 
 fn main() {
-    let mut start = Instant::now();
-    let extensions = vulkano_win::required_extensions();
-    let instance = Instance::new(None, &extensions, None)
-        .expect("failed to create instance");
-    println!("Got instance: {:?}", instance);
-    let physical = PhysicalDevice::enumerate(&instance).next().expect("no device available");
-    println!("Got physical device, name: {}, type: {:?}", physical.name(), physical.ty());
-    for family in physical.queue_families() {
-        println!("Found a queue family with {:?} queue(s)", family.queues_count());
-    }
-    let queue_family = physical.queue_families()
-        .find(|&q| q.supports_graphics())
-        .expect("couldn't find a graphical queue family");
-    println!("Got queue family: {:?}", queue_family);
-    let (device, mut queues) = {
-        let device_ext = vulkano::device::DeviceExtensions {
-            khr_swapchain: true,
-            ..DeviceExtensions::none()
-        };
-        Device::new(physical, &Features::none(), &device_ext, [(queue_family, 0.5)].iter().cloned())
-            .expect("failed to create device")
-    };
-    println!("Got a device: {:?}", device);
-    let queue = queues.next().unwrap();
-    println!("Got a single queue: {:?}", queue);
-    let mut duration = start.elapsed().as_millis();
-    println!("Vulkan initialized in {} ms", duration);
+    // bummer, I cannot store PhysicalDevice directly, there's a problem with lifetime
+    let (instance, physical_device_index, device, queue) = init_vulkan();
 
-    start = Instant::now();
+    let mut start = Instant::now();
     let event_loop = EventLoop::new();
     let surface = WindowBuilder::new().build_vk_surface(&event_loop, instance.clone()).unwrap();
-    surface.window().set_inner_size(PhysicalSize::new(SCR_WIDTH, SCR_HEIGHT));
-    duration = start.elapsed().as_millis();
+    let window = surface.window();
+    window.set_inner_size(PhysicalSize::new(SCR_WIDTH, SCR_HEIGHT));
+    window.set_title("Vulkan Christmas Tree");
+    let mut duration = start.elapsed().as_millis();
     println!("Window created in {} ms", duration);
 
     start = Instant::now();
-    let caps = surface.capabilities(physical)
+    let caps = surface.capabilities(PhysicalDevice::from_index(&instance, physical_device_index).unwrap())
         .expect("failed to get surface capabilities");
     let dimensions: [u32; 2] = surface.window().inner_size().into();
     let alpha = caps.supported_composite_alpha.iter().next().unwrap();
@@ -145,10 +122,7 @@ fn main() {
             winit::event::Event::WindowEvent { event: winit::event::WindowEvent::CloseRequested, .. } => {
                 *control_flow = ControlFlow::Exit;
             }
-            winit::event::Event::WindowEvent {
-                event: WindowEvent::Resized(_),
-                ..
-            } => {
+            winit::event::Event::WindowEvent { event: WindowEvent::Resized(_), .. } => {
                 recreate_swapchain = true;
             }
             winit::event::Event::RedrawEventsCleared => {
@@ -227,6 +201,38 @@ fn main() {
             _ => ()
         }
     });
+}
+
+fn init_vulkan() -> (Arc<Instance>, usize, Arc<Device>, Arc<Queue>) {
+    let start = Instant::now();
+    let extensions = vulkano_win::required_extensions();
+    let instance = Instance::new(None, &extensions, None)
+        .expect("failed to create instance");
+    println!("Got instance: {:?}", instance);
+    let physical_device_index = PhysicalDevice::enumerate(&instance).position(|_device| true).expect("no device available");
+    let physical = PhysicalDevice::from_index(&instance, physical_device_index).expect("no device available");
+    println!("Got physical device, name: {}, type: {:?}", physical.name(), physical.ty());
+    for family in physical.queue_families() {
+        println!("Found a queue family with {:?} queue(s)", family.queues_count());
+    }
+    let queue_family = physical.queue_families()
+        .find(|&q| q.supports_graphics())
+        .expect("couldn't find a graphical queue family");
+    println!("Got queue family: {:?}", queue_family);
+    let (device, mut queues) = {
+        let device_ext = vulkano::device::DeviceExtensions {
+            khr_swapchain: true,
+            ..DeviceExtensions::none()
+        };
+        Device::new(physical, &Features::none(), &device_ext, [(queue_family, 0.5)].iter().cloned())
+            .expect("failed to create device")
+    };
+    println!("Got a device: {:?}", device);
+    let queue = queues.next().unwrap();
+    println!("Got a single queue: {:?}", queue);
+    let duration = start.elapsed().as_millis();
+    println!("Vulkan initialized in {} ms", duration);
+    (instance, physical_device_index, device, queue)
 }
 
 fn create_vertex_buffer(device: &Arc<Device>) -> Arc<CpuAccessibleBuffer<[Vertex], PotentialDedicatedAllocation<StdMemoryPoolAlloc>>> {
