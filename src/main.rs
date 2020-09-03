@@ -11,7 +11,7 @@ use vulkano::memory::pool::{PotentialDedicatedAllocation, StdMemoryPoolAlloc};
 use vulkano::pipeline::GraphicsPipeline;
 use vulkano::pipeline::viewport::Viewport;
 use vulkano::swapchain;
-use vulkano::swapchain::{AcquireError, ColorSpace, FullscreenExclusive, PresentMode, SurfaceTransform, Swapchain, SwapchainCreationError};
+use vulkano::swapchain::{AcquireError, ColorSpace, FullscreenExclusive, PresentMode, Surface, SurfaceTransform, Swapchain, SwapchainCreationError};
 use vulkano::sync;
 use vulkano::sync::{FlushError, GpuFuture};
 use vulkano_win::VkSurfaceBuild;
@@ -43,14 +43,8 @@ fn main() {
     // bummer, I cannot store PhysicalDevice directly, there's a problem with lifetime
     let (instance, physical_device_index, device, queue) = init_vulkan();
 
-    let mut start = Instant::now();
     let event_loop = EventLoop::new();
-    let surface = WindowBuilder::new().build_vk_surface(&event_loop, instance.clone()).unwrap();
-    let window = surface.window();
-    window.set_inner_size(PhysicalSize::new(SCR_WIDTH, SCR_HEIGHT));
-    window.set_title("Vulkan Christmas Tree");
-    let mut duration = start.elapsed().as_millis();
-    println!("Window created in {} ms", duration);
+    let surface = setup_window(&instance, &event_loop);
 
     start = Instant::now();
     let caps = surface.capabilities(PhysicalDevice::from_index(&instance, physical_device_index).unwrap())
@@ -233,6 +227,13 @@ fn init_vulkan() -> (Arc<Instance>, usize, Arc<Device>, Arc<Queue>) {
     let duration = start.elapsed().as_millis();
     println!("Vulkan initialized in {} ms", duration);
     (instance, physical_device_index, device, queue)
+}
+
+fn setup_window(instance: &Arc<Instance>, event_loop: &EventLoop<()>) -> Arc<Surface<Window>> {
+    let surface = WindowBuilder::new().build_vk_surface(&event_loop, instance.clone()).unwrap();
+    surface.window().set_inner_size(PhysicalSize::new(SCR_WIDTH, SCR_HEIGHT));
+    surface.window().set_title("Vulkan Christmas Tree");
+    surface
 }
 
 fn create_vertex_buffer(device: &Arc<Device>) -> Arc<CpuAccessibleBuffer<[Vertex], PotentialDedicatedAllocation<StdMemoryPoolAlloc>>> {
