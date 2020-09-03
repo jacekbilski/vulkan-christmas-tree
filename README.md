@@ -61,3 +61,19 @@ let command_buffer = command_builder.build().unwrap();
 ```
 
 Here, it starts the render pass, then draws something using the pipeline, finishes the render pass and copies what the GPU created to a buffer. The buffer can now be transformed into an image and saved to the disk. I didn't draw anything on the screen yet!
+
+### Drawing something on the screen
+
+First, obvious, thing is that I need a window with a VK_Surface. `winit` can deal with that. It also provides me with a list of all required extensions. The window should also be open until I close it explicitly.
+
+Next thing is a swapchain. It's a series of images the app should be drawing into. Think double/tripple buffering. This is also where the resolution of the thing I'll be drawing is chosen. That also means that every window resizing requires recreating the whole swapchain.
+
+Mow magical things happen. I need a loop now that repeats itself every frame drawn. There are two parts to that. First is waiting for a `winit::event::Event::RedrawEventsCleared`. That means all my draw commans were executed. But that's not enough. If I'm issuing commands faster than the images are displayed, I'll not be able to get the next image from a swapchain, because it will still be waiting to be presented. So there's this `previous_frame_end`, a `Future` I need to wait on.
+
+Inside a loop I need to:
+
+1. acquire next image from the swapchain,
+1. build a command buffer with all render passes and `draw` commands,
+1. actually wait until `previous_frame_end` and `acquire_future` resolve (aka wait until previous frame ... something, not clear to me just yet, basically wait until we're ready to start drawing),
+1. execute command buffer,
+1. present the results.
