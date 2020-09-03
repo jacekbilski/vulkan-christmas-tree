@@ -46,21 +46,8 @@ fn main() {
     let event_loop = EventLoop::new();
     let surface = setup_window(&instance, &event_loop);
     let (mut swapchain, images) = setup_swapchain(&instance, physical_device_index, &device, &queue, &surface);
+    let render_pass = setup_render_pass(&device, &mut swapchain);
 
-    let render_pass = Arc::new(vulkano::single_pass_renderpass!(device.clone(),
-        attachments: {
-            color: {
-                load: Clear,
-                store: Store,
-                format: swapchain.format(),
-                samples: 1,
-            }
-        },
-        pass: {
-            color: [color],
-            depth_stencil: {}
-        }
-    ).unwrap());
     let vs = vs::Shader::load(device.clone()).expect("failed to create shader module");
     let fs = fs::Shader::load(device.clone()).expect("failed to create shader module");
     let pipeline = Arc::new(GraphicsPipeline::start()
@@ -232,6 +219,24 @@ fn setup_swapchain(instance: &Arc<Instance>, physical_device_index: usize, devic
                        true, ColorSpace::SrgbNonLinear)
             .expect("failed to create swapchain");
     (swapchain, images)
+}
+
+fn setup_render_pass(device: &Arc<Device>, swapchain: &Arc<Swapchain<Window>>) -> Arc<dyn RenderPassAbstract + Send + Sync> {
+    let render_pass = Arc::new(vulkano::single_pass_renderpass!(device.clone(),
+        attachments: {
+            color: {
+                load: Clear,
+                store: Store,
+                format: swapchain.format(),
+                samples: 1,
+            }
+        },
+        pass: {
+            color: [color],
+            depth_stencil: {}
+        }
+    ).unwrap());
+    render_pass
 }
 
 fn create_vertex_buffer(device: &Arc<Device>) -> Arc<CpuAccessibleBuffer<[Vertex], PotentialDedicatedAllocation<StdMemoryPoolAlloc>>> {
