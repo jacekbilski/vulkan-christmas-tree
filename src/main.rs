@@ -45,23 +45,8 @@ fn main() {
 
     let event_loop = EventLoop::new();
     let surface = setup_window(&instance, &event_loop);
+    let (mut swapchain, images) = setup_swapchain(&instance, physical_device_index, &device, &queue, &surface);
 
-    start = Instant::now();
-    let caps = surface.capabilities(PhysicalDevice::from_index(&instance, physical_device_index).unwrap())
-        .expect("failed to get surface capabilities");
-    let dimensions: [u32; 2] = surface.window().inner_size().into();
-    let alpha = caps.supported_composite_alpha.iter().next().unwrap();
-    let format = caps.supported_formats[0].0;
-    let (mut swapchain, images) =
-        Swapchain::new(device.clone(), surface.clone(),
-                       caps.min_image_count, format, dimensions, 1, ImageUsage::color_attachment(), &queue,
-                       SurfaceTransform::Identity, alpha, PresentMode::Fifo, FullscreenExclusive::Default,
-                       true, ColorSpace::SrgbNonLinear)
-            .expect("failed to create swapchain");
-    duration = start.elapsed().as_millis();
-    println!("Swapchain created in {} ms", duration);
-
-    start = Instant::now();
     let render_pass = Arc::new(vulkano::single_pass_renderpass!(device.clone(),
         attachments: {
             color: {
@@ -92,8 +77,6 @@ fn main() {
         // Now that everything is specified, we call `build`.
         .build(device.clone())
         .unwrap());
-    duration = start.elapsed().as_millis();
-    println!("Pipeline created in {} ms", duration);
 
     let vertex_buffer = create_vertex_buffer(&device);
 
@@ -234,6 +217,21 @@ fn setup_window(instance: &Arc<Instance>, event_loop: &EventLoop<()>) -> Arc<Sur
     surface.window().set_inner_size(PhysicalSize::new(SCR_WIDTH, SCR_HEIGHT));
     surface.window().set_title("Vulkan Christmas Tree");
     surface
+}
+
+fn setup_swapchain(instance: &Arc<Instance>, physical_device_index: usize, device: &Arc<Device>, queue: &Arc<Queue>, surface: &Arc<Surface<Window>>) -> (Arc<Swapchain<Window>>, Vec<Arc<SwapchainImage<Window>>>) {
+    let caps = surface.capabilities(PhysicalDevice::from_index(&instance, physical_device_index).unwrap())
+        .expect("failed to get surface capabilities");
+    let dimensions: [u32; 2] = surface.window().inner_size().into();
+    let alpha = caps.supported_composite_alpha.iter().next().unwrap();
+    let format = caps.supported_formats[0].0;
+    let (swapchain, images) =
+        Swapchain::new(device.clone(), surface.clone(),
+                       caps.min_image_count, format, dimensions, 1, ImageUsage::color_attachment(), queue,
+                       SurfaceTransform::Identity, alpha, PresentMode::Fifo, FullscreenExclusive::Default,
+                       true, ColorSpace::SrgbNonLinear)
+            .expect("failed to create swapchain");
+    (swapchain, images)
 }
 
 fn create_vertex_buffer(device: &Arc<Device>) -> Arc<CpuAccessibleBuffer<[Vertex], PotentialDedicatedAllocation<StdMemoryPoolAlloc>>> {
