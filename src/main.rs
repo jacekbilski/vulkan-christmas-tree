@@ -44,26 +44,14 @@ vulkano::impl_vertex!(Vertex, position);
 fn main() {
     // bummer, I cannot store PhysicalDevice directly, there's a problem with lifetime
     let (instance, physical_device_index, device, queue) = init_vulkan();
-
     let event_loop = EventLoop::new();
     let surface = setup_window(&instance, &event_loop);
     let (mut swapchain, images) = setup_swapchain(&instance, physical_device_index, &device, &queue, &surface);
     let render_pass = setup_render_pass(&device, &mut swapchain);
     let pipeline = create_pipeline(&device, &render_pass);
-
+    let mut dynamic_state = create_dynamic_state();
+    let mut framebuffers = window_size_dependent_setup(&images, render_pass.clone(), &mut dynamic_state);
     let vertex_buffer = create_vertex_buffer(&device);
-
-    let mut dynamic_state = DynamicState {
-        line_width: None,
-        viewports: None,
-        scissors: None,
-        compare_mask: None,
-        write_mask: None,
-        reference: None,
-    };
-
-    let mut framebuffers =
-        window_size_dependent_setup(&images, render_pass.clone(), &mut dynamic_state);
 
     let mut recreate_swapchain = false;
     let mut previous_frame_end = Some(sync::now(device.clone()).boxed());
@@ -243,6 +231,17 @@ fn create_pipeline(device: &Arc<Device>, render_pass: &Arc<dyn RenderPassAbstrac
         .build(device.clone())
         .unwrap());
     pipeline
+}
+
+fn create_dynamic_state() -> DynamicState {
+    DynamicState {
+        line_width: None,
+        viewports: None,
+        scissors: None,
+        compare_mask: None,
+        write_mask: None,
+        reference: None,
+    }
 }
 
 fn create_vertex_buffer(device: &Arc<Device>) -> Arc<CpuAccessibleBuffer<[Vertex], PotentialDedicatedAllocation<StdMemoryPoolAlloc>>> {
