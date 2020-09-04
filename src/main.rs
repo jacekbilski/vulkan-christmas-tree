@@ -53,7 +53,7 @@ fn main() {
     let mut framebuffers = window_size_dependent_setup(&images, render_pass.clone(), &mut dynamic_state);
     let vertex_buffer = create_vertex_buffer(&device);
 
-    let mut recreate_swapchain = false;
+    let mut recreating_swapchain_necessary = false;
     let mut previous_frame_end = Some(sync::now(device.clone()).boxed());
     event_loop.run(move |event, _, control_flow| {
         match event {
@@ -61,11 +61,11 @@ fn main() {
                 *control_flow = ControlFlow::Exit;
             }
             winit::event::Event::WindowEvent { event: WindowEvent::Resized(_), .. } => {
-                recreate_swapchain = true;
+                recreating_swapchain_necessary = true;
             }
             winit::event::Event::RedrawEventsCleared => {
                 previous_frame_end.as_mut().unwrap().cleanup_finished();
-                if recreate_swapchain {
+                if recreating_swapchain_necessary {
                     // Get the new dimensions of the window.
                     let dimensions: [u32; 2] = surface.window().inner_size().into();
                     let (new_swapchain, new_images) =
@@ -85,19 +85,19 @@ fn main() {
                         render_pass.clone(),
                         &mut dynamic_state,
                     );
-                    recreate_swapchain = false;
+                    recreating_swapchain_necessary = false;
                 }
                 let (image_num, suboptimal, acquire_future) =
                     match swapchain::acquire_next_image(swapchain.clone(), None) {
                         Ok(r) => r,
                         Err(AcquireError::OutOfDate) => {
-                            recreate_swapchain = true;
+                            recreating_swapchain_necessary = true;
                             return;
                         }
                         Err(e) => panic!("Failed to acquire next image: {:?}", e),
                     };
                 if suboptimal {
-                    recreate_swapchain = true;
+                    recreating_swapchain_necessary = true;
                 }
                 let clear_values = vec![[0.015_7, 0., 0.360_7, 1.0].into()];
 
@@ -127,7 +127,7 @@ fn main() {
                         previous_frame_end = Some(future.boxed());
                     }
                     Err(FlushError::OutOfDate) => {
-                        recreate_swapchain = true;
+                        recreating_swapchain_necessary = true;
                         previous_frame_end = Some(sync::now(device.clone()).boxed());
                     }
                     Err(e) => {
@@ -146,17 +146,12 @@ fn init_vulkan() -> (Arc<Instance>, usize, Arc<Device>, Arc<Queue>) {
     let extensions = vulkano_win::required_extensions();
     let instance = Instance::new(None, &extensions, None)
         .expect("failed to create instance");
-    println!("Got instance: {:?}", instance);
     let physical_device_index = PhysicalDevice::enumerate(&instance).position(|_device| true).expect("no device available");
     let physical = PhysicalDevice::from_index(&instance, physical_device_index).expect("no device available");
     println!("Got physical device, name: {}, type: {:?}", physical.name(), physical.ty());
-    for family in physical.queue_families() {
-        println!("Found a queue family with {:?} queue(s)", family.queues_count());
-    }
     let queue_family = physical.queue_families()
         .find(|&q| q.supports_graphics())
         .expect("couldn't find a graphical queue family");
-    println!("Got queue family: {:?}", queue_family);
     let (device, mut queues) = {
         let device_ext = vulkano::device::DeviceExtensions {
             khr_swapchain: true,
@@ -165,11 +160,8 @@ fn init_vulkan() -> (Arc<Instance>, usize, Arc<Device>, Arc<Queue>) {
         Device::new(physical, &Features::none(), &device_ext, [(queue_family, 0.5)].iter().cloned())
             .expect("failed to create device")
     };
-    println!("Got a device: {:?}", device);
     let queue = queues.next().unwrap();
-    println!("Got a single queue: {:?}", queue);
     let duration = start.elapsed().as_millis();
-    println!("Vulkan initialized in {} ms", duration);
     (instance, physical_device_index, device, queue)
 }
 
@@ -186,17 +178,15 @@ fn setup_swapchain(instance: &Arc<Instance>, physical_device_index: usize, devic
     let dimensions: [u32; 2] = surface.window().inner_size().into();
     let alpha = caps.supported_composite_alpha.iter().next().unwrap();
     let format = caps.supported_formats[0].0;
-    let (swapchain, images) =
-        Swapchain::new(device.clone(), surface.clone(),
-                       caps.min_image_count, format, dimensions, 1, ImageUsage::color_attachment(), queue,
-                       SurfaceTransform::Identity, alpha, PresentMode::Fifo, FullscreenExclusive::Default,
-                       true, ColorSpace::SrgbNonLinear)
-            .expect("failed to create swapchain");
-    (swapchain, images)
+    Swapchain::new(device.clone(), surface.clone(),
+                   caps.min_image_count, format, dimensions, 1, ImageUsage::color_attachment(), queue,
+                   SurfaceTransform::Identity, alpha, PresentMode::Fifo, FullscreenExclusive::Default,
+                   true, ColorSpace::SrgbNonLinear)
+        .expect("failed to create swapchain")
 }
 
 fn setup_render_pass(device: &Arc<Device>, swapchain: &Arc<Swapchain<Window>>) -> Arc<dyn RenderPassAbstract + Send + Sync> {
-    let render_pass = Arc::new(vulkano::single_pass_renderpass!(device.clone(),
+    Arc::new(vulkano::single_pass_renderpass!(device.clone(),
         attachments: {
             color: {
                 load: Clear,
@@ -209,14 +199,13 @@ fn setup_render_pass(device: &Arc<Device>, swapchain: &Arc<Swapchain<Window>>) -
             color: [color],
             depth_stencil: {}
         }
-    ).unwrap());
-    render_pass
+    ).unwrap())
 }
 
 fn create_pipeline(device: &Arc<Device>, render_pass: &Arc<dyn RenderPassAbstract + Send + Sync>) -> Arc<GraphicsPipeline<SingleBufferDefinition<Vertex>, Box<dyn PipelineLayoutAbstract + Send + Sync>, Arc<dyn RenderPassAbstract + Send + Sync>>> {
     let vs = vs::Shader::load(device.clone()).expect("failed to create shader module");
     let fs = fs::Shader::load(device.clone()).expect("failed to create shader module");
-    let pipeline = Arc::new(GraphicsPipeline::start()
+    Arc::new(GraphicsPipeline::start()
         // Defines what kind of vertex input is expected.
         .vertex_input_single_buffer::<Vertex>()
         // The vertex shader.
@@ -229,8 +218,7 @@ fn create_pipeline(device: &Arc<Device>, render_pass: &Arc<dyn RenderPassAbstrac
         .render_pass(Subpass::from(render_pass.clone(), 0).unwrap())
         // Now that everything is specified, we call `build`.
         .build(device.clone())
-        .unwrap());
-    pipeline
+        .unwrap())
 }
 
 fn create_dynamic_state() -> DynamicState {
@@ -248,10 +236,9 @@ fn create_vertex_buffer(device: &Arc<Device>) -> Arc<CpuAccessibleBuffer<[Vertex
     let vertex1 = Vertex { position: [-0.5, -0.5] };
     let vertex2 = Vertex { position: [0.0, 0.5] };
     let vertex3 = Vertex { position: [0.5, -0.25] };
-    let vertex_buffer = CpuAccessibleBuffer::from_iter(
+    CpuAccessibleBuffer::from_iter(
         device.clone(), BufferUsage::all(), false, vec![vertex1, vertex2, vertex3].into_iter())
-        .unwrap();
-    vertex_buffer
+        .unwrap()
 }
 
 fn window_size_dependent_setup(
