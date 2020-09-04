@@ -3,12 +3,14 @@ use std::time::Instant;
 
 use vulkano::buffer::{BufferUsage, CpuAccessibleBuffer};
 use vulkano::command_buffer::{AutoCommandBufferBuilder, DynamicState};
+use vulkano::descriptor::PipelineLayoutAbstract;
 use vulkano::device::{Device, DeviceExtensions, Features, Queue};
 use vulkano::framebuffer::{Framebuffer, FramebufferAbstract, RenderPassAbstract, Subpass};
 use vulkano::image::{ImageUsage, SwapchainImage};
 use vulkano::instance::{Instance, PhysicalDevice};
 use vulkano::memory::pool::{PotentialDedicatedAllocation, StdMemoryPoolAlloc};
 use vulkano::pipeline::GraphicsPipeline;
+use vulkano::pipeline::vertex::SingleBufferDefinition;
 use vulkano::pipeline::viewport::Viewport;
 use vulkano::swapchain;
 use vulkano::swapchain::{AcquireError, ColorSpace, FullscreenExclusive, PresentMode, Surface, SurfaceTransform, Swapchain, SwapchainCreationError};
@@ -47,23 +49,7 @@ fn main() {
     let surface = setup_window(&instance, &event_loop);
     let (mut swapchain, images) = setup_swapchain(&instance, physical_device_index, &device, &queue, &surface);
     let render_pass = setup_render_pass(&device, &mut swapchain);
-
-    let vs = vs::Shader::load(device.clone()).expect("failed to create shader module");
-    let fs = fs::Shader::load(device.clone()).expect("failed to create shader module");
-    let pipeline = Arc::new(GraphicsPipeline::start()
-        // Defines what kind of vertex input is expected.
-        .vertex_input_single_buffer::<Vertex>()
-        // The vertex shader.
-        .vertex_shader(vs.main_entry_point(), ())
-        // Defines the viewport (explanations below).
-        .viewports_dynamic_scissors_irrelevant(1)
-        // The fragment shader.
-        .fragment_shader(fs.main_entry_point(), ())
-        // This graphics pipeline object concerns the first pass of the render pass.
-        .render_pass(Subpass::from(render_pass.clone(), 0).unwrap())
-        // Now that everything is specified, we call `build`.
-        .build(device.clone())
-        .unwrap());
+    let pipeline = create_pipeline(&device, &render_pass);
 
     let vertex_buffer = create_vertex_buffer(&device);
 
@@ -237,6 +223,26 @@ fn setup_render_pass(device: &Arc<Device>, swapchain: &Arc<Swapchain<Window>>) -
         }
     ).unwrap());
     render_pass
+}
+
+fn create_pipeline(device: &Arc<Device>, render_pass: &Arc<dyn RenderPassAbstract + Send + Sync>) -> Arc<GraphicsPipeline<SingleBufferDefinition<Vertex>, Box<dyn PipelineLayoutAbstract + Send + Sync>, Arc<dyn RenderPassAbstract + Send + Sync>>> {
+    let vs = vs::Shader::load(device.clone()).expect("failed to create shader module");
+    let fs = fs::Shader::load(device.clone()).expect("failed to create shader module");
+    let pipeline = Arc::new(GraphicsPipeline::start()
+        // Defines what kind of vertex input is expected.
+        .vertex_input_single_buffer::<Vertex>()
+        // The vertex shader.
+        .vertex_shader(vs.main_entry_point(), ())
+        // Defines the viewport (explanations below).
+        .viewports_dynamic_scissors_irrelevant(1)
+        // The fragment shader.
+        .fragment_shader(fs.main_entry_point(), ())
+        // This graphics pipeline object concerns the first pass of the render pass.
+        .render_pass(Subpass::from(render_pass.clone(), 0).unwrap())
+        // Now that everything is specified, we call `build`.
+        .build(device.clone())
+        .unwrap());
+    pipeline
 }
 
 fn create_vertex_buffer(device: &Arc<Device>) -> Arc<CpuAccessibleBuffer<[Vertex], PotentialDedicatedAllocation<StdMemoryPoolAlloc>>> {
