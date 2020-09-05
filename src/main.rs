@@ -17,7 +17,7 @@ use vulkano::sync;
 use vulkano::sync::{FlushError, GpuFuture};
 use vulkano_win::VkSurfaceBuild;
 use winit::dpi::PhysicalSize;
-use winit::event::{ElementState, KeyboardInput, VirtualKeyCode, WindowEvent};
+use winit::event::{ElementState, Event, KeyboardInput, VirtualKeyCode, WindowEvent};
 use winit::event_loop::{ControlFlow, EventLoop};
 use winit::window::{Window, WindowBuilder};
 
@@ -59,13 +59,13 @@ fn main() {
     let mut previous_frame_end = Some(sync::now(device.clone()).boxed());
     event_loop.run(move |event, _, control_flow| {
         match event {
-            winit::event::Event::WindowEvent { event: WindowEvent::CloseRequested, .. } => {
+            Event::WindowEvent { event: WindowEvent::CloseRequested, .. } => {
                 *control_flow = ControlFlow::Exit;
             }
-            winit::event::Event::WindowEvent { event: WindowEvent::Resized(_), .. } => {
+            Event::WindowEvent { event: WindowEvent::Resized(_), .. } => {
                 recreating_swapchain_necessary = true;
             }
-            winit::event::Event::WindowEvent {
+            Event::WindowEvent {
                 event: WindowEvent::KeyboardInput {
                     input: KeyboardInput {
                         virtual_keycode: Some(virtual_code),
@@ -80,7 +80,7 @@ fn main() {
                     _ => ()
                 }
             }
-            winit::event::Event::RedrawEventsCleared => {
+            Event::RedrawEventsCleared => {
                 previous_frame_end.as_mut().unwrap().cleanup_finished();
                 if recreating_swapchain_necessary {
                     // I cannot assign directly to variables, see https://github.com/rust-lang/rfcs/issues/372
