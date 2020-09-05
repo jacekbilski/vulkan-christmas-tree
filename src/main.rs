@@ -1,5 +1,4 @@
 use std::sync::Arc;
-use std::time::Instant;
 
 use vulkano::buffer::{BufferUsage, CpuAccessibleBuffer};
 use vulkano::command_buffer::{AutoCommandBufferBuilder, DynamicState};
@@ -51,7 +50,9 @@ fn main() {
     let pipeline = create_pipeline(&device, &render_pass);
     let mut dynamic_state = create_dynamic_state();
     let mut framebuffers = window_size_dependent_setup(&images, render_pass.clone(), &mut dynamic_state);
+
     let vertex_buffer = create_vertex_buffer(&device);
+    let clear_values = vec![[0.015_7, 0., 0.360_7, 1.0].into()];
 
     let mut recreating_swapchain_necessary = false;
     let mut previous_frame_end = Some(sync::now(device.clone()).boxed());
@@ -66,25 +67,10 @@ fn main() {
             winit::event::Event::RedrawEventsCleared => {
                 previous_frame_end.as_mut().unwrap().cleanup_finished();
                 if recreating_swapchain_necessary {
-                    // Get the new dimensions of the window.
-                    let dimensions: [u32; 2] = surface.window().inner_size().into();
-                    let (new_swapchain, new_images) =
-                        match swapchain.recreate_with_dimensions(dimensions) {
-                            Ok(r) => r,
-                            // This error tends to happen when the user is manually resizing the window.
-                            // Simply restarting the loop is the easiest way to fix this issue.
-                            Err(SwapchainCreationError::UnsupportedDimensions) => return,
-                            Err(e) => panic!("Failed to recreate swapchain: {:?}", e),
-                        };
-
+                    // I cannot assign directly to variables, see https://github.com/rust-lang/rfcs/issues/372
+                    let (new_swapchain, new_framebuffers) = recreate_swapchain(surface.clone(), swapchain.clone(), render_pass.clone(), &mut dynamic_state);
                     swapchain = new_swapchain;
-                    // Because framebuffers contains an Arc on the old swapchain, we need to
-                    // recreate framebuffers as well.
-                    framebuffers = window_size_dependent_setup(
-                        &new_images,
-                        render_pass.clone(),
-                        &mut dynamic_state,
-                    );
+                    framebuffers = new_framebuffers;
                     recreating_swapchain_necessary = false;
                 }
                 let (image_num, suboptimal, acquire_future) =
@@ -99,11 +85,10 @@ fn main() {
                 if suboptimal {
                     recreating_swapchain_necessary = true;
                 }
-                let clear_values = vec![[0.015_7, 0., 0.360_7, 1.0].into()];
 
                 let mut command_builder = AutoCommandBufferBuilder::primary_one_time_submit(device.clone(), queue.family()).unwrap();
                 command_builder
-                    .begin_render_pass(framebuffers[image_num].clone(), false, clear_values)
+                    .begin_render_pass(framebuffers[image_num].clone(), false, clear_values.clone())
                     .unwrap()
 
                     .draw(pipeline.clone(), &dynamic_state, vertex_buffer.clone(), (), ())
@@ -142,7 +127,6 @@ fn main() {
 }
 
 fn init_vulkan() -> (Arc<Instance>, usize, Arc<Device>, Arc<Queue>) {
-    let start = Instant::now();
     let extensions = vulkano_win::required_extensions();
     let instance = Instance::new(None, &extensions, None)
         .expect("failed to create instance");
@@ -161,7 +145,6 @@ fn init_vulkan() -> (Arc<Instance>, usize, Arc<Device>, Arc<Queue>) {
             .expect("failed to create device")
     };
     let queue = queues.next().unwrap();
-    let duration = start.elapsed().as_millis();
     (instance, physical_device_index, device, queue)
 }
 
@@ -267,4 +250,30 @@ fn window_size_dependent_setup(
             ) as Arc<dyn FramebufferAbstract + Send + Sync>
         })
         .collect::<Vec<_>>()
+}
+
+fn recreate_swapchain(
+    surface: Arc<Surface<Window>>,
+    swapchain: Arc<Swapchain<Window>>,
+    render_pass: Arc<dyn RenderPassAbstract + Send + Sync>,
+    mut dynamic_state: &mut DynamicState) -> (Arc<Swapchain<Window>>, Vec<Arc<dyn FramebufferAbstract + Send + Sync>>) {
+// Get the new dimensions of the window.
+    let dimensions: [u32; 2] = surface.window().inner_size().into();
+    let (new_swapchain, new_images) =
+        match swapchain.recreate_with_dimensions(dimensions) {
+            Ok(r) => r,
+            // This error tends to happen when the user is manually resizing the window.
+            // Simply restarting the loop is the easiest way to fix this issue.
+            Err(SwapchainCreationError::UnsupportedDimensions) => panic!("Unsupported dimensions: {:?}", dimensions),
+            Err(e) => panic!("Failed to recreate swapchain: {:?}", e),
+        };
+
+    // Because framebuffers contains an Arc on the old swapchain, we need to
+    // recreate framebuffers as well.
+    let framebuffers = window_size_dependent_setup(
+        &new_images,
+        render_pass.clone(),
+        &mut dynamic_state,
+    );
+    (new_swapchain, framebuffers)
 }
