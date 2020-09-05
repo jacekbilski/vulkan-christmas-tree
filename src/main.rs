@@ -36,9 +36,10 @@ mod fs {
 #[derive(Default, Copy, Clone)]
 struct Vertex {
     position: [f32; 2],
+    colour: [f32; 3],
 }
 
-vulkano::impl_vertex!(Vertex, position);
+vulkano::impl_vertex!(Vertex, position, colour);
 
 fn main() {
     // bummer, I cannot store PhysicalDevice directly, there's a problem with lifetime
@@ -216,9 +217,9 @@ fn create_dynamic_state() -> DynamicState {
 }
 
 fn create_vertex_buffer(device: &Arc<Device>) -> Arc<CpuAccessibleBuffer<[Vertex], PotentialDedicatedAllocation<StdMemoryPoolAlloc>>> {
-    let vertex1 = Vertex { position: [-0.5, -0.5] };
-    let vertex2 = Vertex { position: [0.0, 0.5] };
-    let vertex3 = Vertex { position: [0.5, -0.25] };
+    let vertex1 = Vertex { position: [-0.5, -0.5], colour: [1.0, 0.0, 0.0] };
+    let vertex2 = Vertex { position: [0.0, 0.5], colour: [0.0, 1.0, 0.0]  };
+    let vertex3 = Vertex { position: [0.5, -0.25], colour: [0.0, 0.0, 1.0]  };
     CpuAccessibleBuffer::from_iter(
         device.clone(), BufferUsage::all(), false, vec![vertex1, vertex2, vertex3].into_iter())
         .unwrap()
