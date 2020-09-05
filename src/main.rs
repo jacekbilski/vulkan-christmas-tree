@@ -1,15 +1,12 @@
 use std::sync::Arc;
 
-use vulkano::buffer::{BufferUsage, CpuAccessibleBuffer};
+use vulkano::buffer::{BufferAccess, BufferUsage, CpuAccessibleBuffer};
 use vulkano::command_buffer::{AutoCommandBufferBuilder, DynamicState};
-use vulkano::descriptor::PipelineLayoutAbstract;
 use vulkano::device::{Device, DeviceExtensions, Features, Queue};
 use vulkano::framebuffer::{Framebuffer, FramebufferAbstract, RenderPassAbstract, Subpass};
 use vulkano::image::{ImageUsage, SwapchainImage};
 use vulkano::instance::{Instance, PhysicalDevice};
-use vulkano::memory::pool::{PotentialDedicatedAllocation, StdMemoryPoolAlloc};
-use vulkano::pipeline::GraphicsPipeline;
-use vulkano::pipeline::vertex::SingleBufferDefinition;
+use vulkano::pipeline::{GraphicsPipeline, GraphicsPipelineAbstract};
 use vulkano::pipeline::viewport::Viewport;
 use vulkano::swapchain;
 use vulkano::swapchain::{AcquireError, ColorSpace, FullscreenExclusive, PresentMode, Surface, SurfaceTransform, Swapchain, SwapchainCreationError};
@@ -20,6 +17,8 @@ use winit::dpi::PhysicalSize;
 use winit::event::{ElementState, Event, KeyboardInput, VirtualKeyCode, WindowEvent};
 use winit::event_loop::{ControlFlow, EventLoop};
 use winit::window::{Window, WindowBuilder};
+
+// use cgmath::Matrix4;
 
 // settings
 pub const SCR_WIDTH: u32 = 1920;
@@ -107,7 +106,7 @@ fn main() {
                     .begin_render_pass(framebuffers[image_num].clone(), false, clear_values.clone())
                     .unwrap()
 
-                    .draw(pipeline.clone(), &dynamic_state, vertex_buffer.clone(), (), ())
+                    .draw(pipeline.clone(), &dynamic_state, vec![vertex_buffer.clone()], (), ())
                     .unwrap()
 
                     .end_render_pass()
@@ -201,7 +200,7 @@ fn setup_render_pass(device: &Arc<Device>, swapchain: &Arc<Swapchain<Window>>) -
     ).unwrap())
 }
 
-fn create_pipeline(device: &Arc<Device>, render_pass: &Arc<dyn RenderPassAbstract + Send + Sync>) -> Arc<GraphicsPipeline<SingleBufferDefinition<Vertex>, Box<dyn PipelineLayoutAbstract + Send + Sync>, Arc<dyn RenderPassAbstract + Send + Sync>>> {
+fn create_pipeline(device: &Arc<Device>, render_pass: &Arc<dyn RenderPassAbstract + Send + Sync>) -> Arc<dyn GraphicsPipelineAbstract + Send + Sync> {
     let vs = vs::Shader::load(device.clone()).expect("failed to create shader module");
     let fs = fs::Shader::load(device.clone()).expect("failed to create shader module");
     Arc::new(GraphicsPipeline::start()
@@ -231,7 +230,7 @@ fn create_dynamic_state() -> DynamicState {
     }
 }
 
-fn create_vertex_buffer(device: &Arc<Device>) -> Arc<CpuAccessibleBuffer<[Vertex], PotentialDedicatedAllocation<StdMemoryPoolAlloc>>> {
+fn create_vertex_buffer(device: &Arc<Device>) -> Arc<dyn BufferAccess + Send + Sync> {
     let vertex1 = Vertex { position: [-0.5, -0.5], colour: [1.0, 0.0, 0.0] };
     let vertex2 = Vertex { position: [0.0, 0.5], colour: [0.0, 1.0, 0.0]  };
     let vertex3 = Vertex { position: [0.5, -0.25], colour: [0.0, 0.0, 1.0]  };
