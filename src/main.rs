@@ -3,6 +3,7 @@ use std::sync::Arc;
 use vulkano::buffer::{BufferAccess, BufferUsage, CpuAccessibleBuffer};
 use vulkano::command_buffer::{AutoCommandBufferBuilder, DynamicState};
 use vulkano::device::{Device, DeviceExtensions, Features, Queue};
+use vulkano::format::ClearValue;
 use vulkano::framebuffer::{Framebuffer, FramebufferAbstract, RenderPassAbstract, Subpass};
 use vulkano::image::{ImageUsage, SwapchainImage};
 use vulkano::instance::{Instance, PhysicalDevice};
@@ -25,6 +26,8 @@ use winit::window::{Window, WindowBuilder};
 pub const SCR_WIDTH: u32 = 1920;
 pub const SCR_HEIGHT: u32 = 1080;
 
+pub const CLEAR_VALUE: ClearValue = ClearValue::Float([0.015_7, 0., 0.360_7, 1.0]);
+
 const VALIDATION_LAYERS: &[&str] = &[
     "VK_LAYER_KHRONOS_validation"
 ];
@@ -45,107 +48,173 @@ struct Vertex {
 
 vulkano::impl_vertex!(Vertex, position, colour);
 
-fn main() {
-    let instance = create_instance();
-    // bummer, I cannot store PhysicalDevice directly, there's a problem with lifetime
-    let (physical_device_index, device, queue) = init_vulkan(&instance);
-    let _debug_callback = setup_debug_callback(&instance);
-    let event_loop = EventLoop::new();
-    let surface = setup_window(&instance, &event_loop);
-    let (mut swapchain, images) = setup_swapchain(&instance, physical_device_index, &device, &queue, &surface);
-    let render_pass = setup_render_pass(&device, &mut swapchain);
-    let pipeline = create_pipeline(&device, &render_pass);
-    let mut dynamic_state = create_dynamic_state();
-    let mut framebuffers = window_size_dependent_setup(&images, render_pass.clone(), &mut dynamic_state);
+struct App {
+    instance: Arc<Instance>,
+    #[allow(unused)]
+    debug_callback: DebugCallback,
 
-    let vertex_buffer = create_vertex_buffer(&device);
-    let clear_values = vec![[0.015_7, 0., 0.360_7, 1.0].into()];
+    event_loop: EventLoop<()>,
+    surface: Arc<Surface<Window>>,
 
-    let mut recreating_swapchain_necessary = false;
-    let mut previous_frame_end = Some(sync::now(device.clone()).boxed());
-    event_loop.run(move |event, _, control_flow| {
-        match event {
-            Event::WindowEvent { event: WindowEvent::CloseRequested, .. } => {
-                *control_flow = ControlFlow::Exit;
-            }
-            Event::WindowEvent { event: WindowEvent::Resized(_), .. } => {
-                recreating_swapchain_necessary = true;
-            }
-            Event::WindowEvent {
-                event: WindowEvent::KeyboardInput {
-                    input: KeyboardInput {
-                        virtual_keycode: Some(virtual_code),
-                        state: ElementState::Pressed,
-                        ..},
-                    ..},
-                .. } => {
-                match virtual_code {
-                    VirtualKeyCode::Escape => {
-                        *control_flow = ControlFlow::Exit;
-                    }
-                    _ => ()
-                }
-            }
-            Event::RedrawEventsCleared => {
-                previous_frame_end.as_mut().unwrap().cleanup_finished();
-                if recreating_swapchain_necessary {
-                    // I cannot assign directly to variables, see https://github.com/rust-lang/rfcs/issues/372
-                    let (new_swapchain, new_framebuffers) = recreate_swapchain(surface.clone(), swapchain.clone(), render_pass.clone(), &mut dynamic_state);
-                    swapchain = new_swapchain;
-                    framebuffers = new_framebuffers;
-                    recreating_swapchain_necessary = false;
-                }
-                let (image_num, suboptimal, acquire_future) =
-                    match swapchain::acquire_next_image(swapchain.clone(), None) {
-                        Ok(r) => r,
-                        Err(AcquireError::OutOfDate) => {
-                            recreating_swapchain_necessary = true;
-                            return;
-                        }
-                        Err(e) => panic!("Failed to acquire next image: {:?}", e),
-                    };
-                if suboptimal {
-                    recreating_swapchain_necessary = true;
-                }
+    physical_device_index: usize, // bummer, I cannot store PhysicalDevice directly, there's a problem with lifetime
+    device: Arc<Device>,
 
-                let mut command_builder = AutoCommandBufferBuilder::primary_one_time_submit(device.clone(), queue.family()).unwrap();
-                command_builder
-                    .begin_render_pass(framebuffers[image_num].clone(), false, clear_values.clone())
-                    .unwrap()
+    queue: Arc<Queue>,
 
-                    .draw(pipeline.clone(), &dynamic_state, vec![vertex_buffer.clone()], (), ())
-                    .unwrap()
+    swapchain: Arc<Swapchain<Window>>,
+    swapchain_images: Vec<Arc<SwapchainImage<Window>>>,
 
-                    .end_render_pass()
-                    .unwrap();
-                let command_buffer = command_builder.build().unwrap();
+    render_pass: Arc<dyn RenderPassAbstract + Send + Sync>,
+    graphics_pipeline: Arc<dyn GraphicsPipelineAbstract + Send + Sync>,
 
-                let future = previous_frame_end
-                    .take()
-                    .unwrap()
-                    .join(acquire_future)
-                    .then_execute(queue.clone(), command_buffer)
-                    .unwrap()
-                    .then_swapchain_present(queue.clone(), swapchain.clone(), image_num)
-                    .then_signal_fence_and_flush();
+    dynamic_state: DynamicState,
 
-                match future {
-                    Ok(future) => {
-                        previous_frame_end = Some(future.boxed());
-                    }
-                    Err(FlushError::OutOfDate) => {
-                        recreating_swapchain_necessary = true;
-                        previous_frame_end = Some(sync::now(device.clone()).boxed());
-                    }
-                    Err(e) => {
-                        println!("Failed to flush future: {:?}", e);
-                        previous_frame_end = Some(sync::now(device.clone()).boxed());
-                    }
-                }
-            }
-            _ => ()
+    framebuffers: Vec<Arc<dyn FramebufferAbstract + Send + Sync>>,
+
+    vertex_buffer: Arc<dyn BufferAccess + Send + Sync>,
+
+    previous_frame_end: Option<Box<dyn GpuFuture>>,
+    recreating_swapchain_necessary: bool,
+}
+
+impl App {
+    pub fn initialize() -> Self {
+        let instance = create_instance();
+
+        let (physical_device_index, device, queue) = init_vulkan(&instance);
+        let debug_callback = setup_debug_callback(&instance);
+        let event_loop = EventLoop::new();
+        let surface = setup_window(&instance, &event_loop);
+        let (mut swapchain, swapchain_images) = setup_swapchain(&instance, physical_device_index, &device, &queue, &surface);
+        let render_pass = setup_render_pass(&device, &mut swapchain);
+        let pipeline = create_pipeline(&device, &render_pass);
+        let mut dynamic_state = create_dynamic_state();
+        let framebuffers = window_size_dependent_setup(&swapchain_images, render_pass.clone(), &mut dynamic_state);
+
+        let vertex_buffer = create_vertex_buffer(&device);
+
+        let recreating_swapchain_necessary = false;
+        let previous_frame_end = Some(sync::now(device.clone()).boxed());
+
+        Self {
+            instance,
+            debug_callback,
+
+            event_loop,
+            surface,
+
+            physical_device_index,
+            device,
+
+            queue,
+
+            swapchain,
+            swapchain_images,
+
+            render_pass,
+            graphics_pipeline: pipeline,
+
+            dynamic_state,
+
+            framebuffers,
+
+            vertex_buffer,
+
+            previous_frame_end,
+            recreating_swapchain_necessary
         }
-    });
+    }
+
+    pub fn run(&mut self) {
+        self.event_loop.run(|event, _, control_flow| {
+            match event {
+                Event::WindowEvent { event: WindowEvent::CloseRequested, .. } => {
+                    *control_flow = ControlFlow::Exit;
+                }
+                Event::WindowEvent { event: WindowEvent::Resized(_), .. } => {
+                    self.recreating_swapchain_necessary = true;
+                }
+                Event::WindowEvent {
+                    event: WindowEvent::KeyboardInput {
+                        input: KeyboardInput {
+                            virtual_keycode: Some(virtual_code),
+                            state: ElementState::Pressed,
+                            ..},
+                        ..},
+                    .. } => {
+                    match virtual_code {
+                        VirtualKeyCode::Escape => {
+                            *control_flow = ControlFlow::Exit;
+                        }
+                        _ => ()
+                    }
+                }
+                Event::RedrawEventsCleared => {
+                    self.previous_frame_end.as_mut().unwrap().cleanup_finished();
+                    if self.recreating_swapchain_necessary {
+                        // I cannot assign directly to variables, see https://github.com/rust-lang/rfcs/issues/372
+                        let (new_swapchain, new_framebuffers) = recreate_swapchain(self.surface.clone(), self.swapchain.clone(), self.render_pass.clone(), &mut self.dynamic_state);
+                        self.swapchain = new_swapchain;
+                        self.framebuffers = new_framebuffers;
+                        self.recreating_swapchain_necessary = false;
+                    }
+                    let (image_num, suboptimal, acquire_future) =
+                        match swapchain::acquire_next_image(self.swapchain.clone(), None) {
+                            Ok(r) => r,
+                            Err(AcquireError::OutOfDate) => {
+                                self.recreating_swapchain_necessary = true;
+                                return;
+                            }
+                            Err(e) => panic!("Failed to acquire next image: {:?}", e),
+                        };
+                    if suboptimal {
+                        self.recreating_swapchain_necessary = true;
+                    }
+
+                    let mut command_builder = AutoCommandBufferBuilder::primary_one_time_submit(self.device.clone(), self.queue.family()).unwrap();
+                    command_builder
+                        .begin_render_pass(self.framebuffers[image_num].clone(), false, vec![CLEAR_VALUE])
+                        .unwrap()
+
+                        .draw(self.graphics_pipeline.clone(), &self.dynamic_state, vec![self.vertex_buffer.clone()], (), ())
+                        .unwrap()
+
+                        .end_render_pass()
+                        .unwrap();
+                    let command_buffer = command_builder.build().unwrap();
+
+                    let future = self.previous_frame_end
+                        .take()
+                        .unwrap()
+                        .join(acquire_future)
+                        .then_execute(self.queue.clone(), command_buffer)
+                        .unwrap()
+                        .then_swapchain_present(self.queue.clone(), self.swapchain.clone(), image_num)
+                        .then_signal_fence_and_flush();
+
+                    match future {
+                        Ok(future) => {
+                            self.previous_frame_end = Some(future.boxed());
+                        }
+                        Err(FlushError::OutOfDate) => {
+                            self.recreating_swapchain_necessary = true;
+                            self.previous_frame_end = Some(sync::now(self.device.clone()).boxed());
+                        }
+                        Err(e) => {
+                            println!("Failed to flush future: {:?}", e);
+                            self.previous_frame_end = Some(sync::now(self.device.clone()).boxed());
+                        }
+                    }
+                }
+                _ => ()
+            }
+        });
+    }
+}
+
+fn main() {
+    let mut app = App::initialize();
+    app.run();
 }
 
 fn create_instance() -> Arc<Instance> {
@@ -300,7 +369,8 @@ fn recreate_swapchain(
     surface: Arc<Surface<Window>>,
     swapchain: Arc<Swapchain<Window>>,
     render_pass: Arc<dyn RenderPassAbstract + Send + Sync>,
-    mut dynamic_state: &mut DynamicState) -> (Arc<Swapchain<Window>>, Vec<Arc<dyn FramebufferAbstract + Send + Sync>>) {
+    mut dynamic_state: &mut DynamicState,
+) -> (Arc<Swapchain<Window>>, Vec<Arc<dyn FramebufferAbstract + Send + Sync>>) {
 // Get the new dimensions of the window.
     let dimensions: [u32; 2] = surface.window().inner_size().into();
     let (new_swapchain, new_images) =

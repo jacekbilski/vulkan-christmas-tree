@@ -39,7 +39,7 @@ A render pass consists attachments and passes. It basically defines the format o
 
 Framebuffer is the realization of a render pass. Render pass alone just defines things, framebuffer makes that all happen.
 
-Dynamic state - no clue still what that is.
+Dynamic state - it keeps things that might change over time, for example: viewport. It will be necessary to support for example window resizing. But ther are more things I don't yet understand.
 
 And finally drawing. It is done by issuing a command to a queue, like so:
 
