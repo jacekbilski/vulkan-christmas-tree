@@ -6,6 +6,7 @@ use vulkano::device::{Device, DeviceExtensions, Features, Queue};
 use vulkano::framebuffer::{Framebuffer, FramebufferAbstract, RenderPassAbstract, Subpass};
 use vulkano::image::{ImageUsage, SwapchainImage};
 use vulkano::instance::{Instance, PhysicalDevice};
+use vulkano::instance::debug::{DebugCallback, MessageSeverity, MessageType};
 use vulkano::pipeline::{GraphicsPipeline, GraphicsPipelineAbstract};
 use vulkano::pipeline::viewport::Viewport;
 use vulkano::swapchain;
@@ -23,6 +24,10 @@ use winit::window::{Window, WindowBuilder};
 // settings
 pub const SCR_WIDTH: u32 = 1920;
 pub const SCR_HEIGHT: u32 = 1080;
+
+const VALIDATION_LAYERS: &[&str] = &[
+    "VK_LAYER_KHRONOS_validation"
+];
 
 mod vs {
     vulkano_shaders::shader! {ty: "vertex", path: "src/shaders/shader.vert"}
@@ -43,6 +48,7 @@ vulkano::impl_vertex!(Vertex, position, colour);
 fn main() {
     // bummer, I cannot store PhysicalDevice directly, there's a problem with lifetime
     let (instance, physical_device_index, device, queue) = init_vulkan();
+    let _debug_callback = setup_debug_callback(&instance);
     let event_loop = EventLoop::new();
     let surface = setup_window(&instance, &event_loop);
     let (mut swapchain, images) = setup_swapchain(&instance, physical_device_index, &device, &queue, &surface);
@@ -142,8 +148,9 @@ fn main() {
 }
 
 fn init_vulkan() -> (Arc<Instance>, usize, Arc<Device>, Arc<Queue>) {
-    let extensions = vulkano_win::required_extensions();
-    let instance = Instance::new(None, &extensions, None)
+    let mut required_extensions = vulkano_win::required_extensions();
+    required_extensions.ext_debug_utils = true;
+    let instance = Instance::new(None, &required_extensions, VALIDATION_LAYERS.iter().cloned())
         .expect("failed to create instance");
     let physical_device_index = PhysicalDevice::enumerate(&instance).position(|_device| true).expect("no device available");
     let physical = PhysicalDevice::from_index(&instance, physical_device_index).expect("no device available");
@@ -161,6 +168,23 @@ fn init_vulkan() -> (Arc<Instance>, usize, Arc<Device>, Arc<Queue>) {
     };
     let queue = queues.next().unwrap();
     (instance, physical_device_index, device, queue)
+}
+
+fn setup_debug_callback(instance: &Arc<Instance>) -> DebugCallback {
+    let severity = MessageSeverity {
+        error: true,
+        warning: true,
+        information: true,
+        verbose: true,
+    };
+    let types = MessageType {
+        general: true,
+        performance: true,
+        validation: true,
+    };
+    DebugCallback::new(&instance, severity, types, |msg| {
+        println!("validation layer: {:?}", msg.description);
+    }).expect("Failed to register DebugCallback")
 }
 
 fn setup_window(instance: &Arc<Instance>, event_loop: &EventLoop<()>) -> Arc<Surface<Window>> {
