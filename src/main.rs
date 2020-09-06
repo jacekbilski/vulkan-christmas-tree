@@ -46,8 +46,9 @@ struct Vertex {
 vulkano::impl_vertex!(Vertex, position, colour);
 
 fn main() {
+    let instance = create_instance();
     // bummer, I cannot store PhysicalDevice directly, there's a problem with lifetime
-    let (instance, physical_device_index, device, queue) = init_vulkan();
+    let (physical_device_index, device, queue) = init_vulkan(&instance);
     let _debug_callback = setup_debug_callback(&instance);
     let event_loop = EventLoop::new();
     let surface = setup_window(&instance, &event_loop);
@@ -147,11 +148,14 @@ fn main() {
     });
 }
 
-fn init_vulkan() -> (Arc<Instance>, usize, Arc<Device>, Arc<Queue>) {
+fn create_instance() -> Arc<Instance> {
     let mut required_extensions = vulkano_win::required_extensions();
     required_extensions.ext_debug_utils = true;
-    let instance = Instance::new(None, &required_extensions, VALIDATION_LAYERS.iter().cloned())
-        .expect("failed to create instance");
+    Instance::new(None, &required_extensions, VALIDATION_LAYERS.iter().cloned())
+        .expect("failed to create instance")
+}
+
+fn init_vulkan(instance: &Arc<Instance>) -> (usize, Arc<Device>, Arc<Queue>) {
     let physical_device_index = PhysicalDevice::enumerate(&instance).position(|_device| true).expect("no device available");
     let physical = PhysicalDevice::from_index(&instance, physical_device_index).expect("no device available");
     println!("Got physical device, name: {}, type: {:?}", physical.name(), physical.ty());
@@ -167,7 +171,7 @@ fn init_vulkan() -> (Arc<Instance>, usize, Arc<Device>, Arc<Queue>) {
             .expect("failed to create device")
     };
     let queue = queues.next().unwrap();
-    (instance, physical_device_index, device, queue)
+    (physical_device_index, device, queue)
 }
 
 fn setup_debug_callback(instance: &Arc<Instance>) -> DebugCallback {
@@ -188,10 +192,11 @@ fn setup_debug_callback(instance: &Arc<Instance>) -> DebugCallback {
 }
 
 fn setup_window(instance: &Arc<Instance>, event_loop: &EventLoop<()>) -> Arc<Surface<Window>> {
-    let surface = WindowBuilder::new().build_vk_surface(&event_loop, instance.clone()).unwrap();
-    surface.window().set_inner_size(PhysicalSize::new(SCR_WIDTH, SCR_HEIGHT));
-    surface.window().set_title("Vulkan Christmas Tree");
-    surface
+    WindowBuilder::new()
+        .with_title("Vulkan Christmas Tree")
+        .with_inner_size(PhysicalSize::new(SCR_WIDTH, SCR_HEIGHT))
+        .build_vk_surface(&event_loop, instance.clone())
+        .expect("Failed to create window surface")
 }
 
 fn setup_swapchain(instance: &Arc<Instance>, physical_device_index: usize, device: &Arc<Device>, queue: &Arc<Queue>, surface: &Arc<Surface<Window>>) -> (Arc<Swapchain<Window>>, Vec<Arc<SwapchainImage<Window>>>) {
