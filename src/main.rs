@@ -18,6 +18,7 @@ use vulkano_win::VkSurfaceBuild;
 use winit::dpi::PhysicalSize;
 use winit::event::{ElementState, Event, KeyboardInput, VirtualKeyCode, WindowEvent};
 use winit::event_loop::{ControlFlow, EventLoop};
+use winit::platform::desktop::EventLoopExtDesktop;
 use winit::window::{Window, WindowBuilder};
 
 // use cgmath::Matrix4;
@@ -53,7 +54,6 @@ struct App {
     #[allow(unused)]
     debug_callback: DebugCallback,
 
-    event_loop: EventLoop<()>,
     surface: Arc<Surface<Window>>,
 
     physical_device_index: usize, // bummer, I cannot store PhysicalDevice directly, there's a problem with lifetime
@@ -78,7 +78,7 @@ struct App {
 }
 
 impl App {
-    pub fn initialize() -> Self {
+    pub fn initialize() -> (Self, EventLoop<()>) {
         let instance = create_instance();
 
         let (physical_device_index, device, queue) = init_vulkan(&instance);
@@ -96,11 +96,10 @@ impl App {
         let recreating_swapchain_necessary = false;
         let previous_frame_end = Some(sync::now(device.clone()).boxed());
 
-        Self {
+        (Self {
             instance,
             debug_callback,
 
-            event_loop,
             surface,
 
             physical_device_index,
@@ -122,11 +121,11 @@ impl App {
 
             previous_frame_end,
             recreating_swapchain_necessary
-        }
+        }, event_loop)
     }
 
-    pub fn run(&mut self) {
-        self.event_loop.run(|event, _, control_flow| {
+    pub fn run(&mut self, mut event_loop: EventLoop<()>) {
+        event_loop.run_return(|event, _, control_flow| {
             match event {
                 Event::WindowEvent { event: WindowEvent::CloseRequested, .. } => {
                     *control_flow = ControlFlow::Exit;
@@ -213,8 +212,8 @@ impl App {
 }
 
 fn main() {
-    let mut app = App::initialize();
-    app.run();
+    let (mut app, event_loop) = App::initialize();
+    app.run(event_loop);
 }
 
 fn create_instance() -> Arc<Instance> {
