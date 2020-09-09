@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::sync::Arc;
 
 use vulkano::buffer::{BufferAccess, BufferUsage, CpuAccessibleBuffer};
@@ -13,7 +14,7 @@ use vulkano::pipeline::viewport::Viewport;
 use vulkano::swapchain;
 use vulkano::swapchain::{AcquireError, ColorSpace, FullscreenExclusive, PresentMode, Surface, SurfaceTransform, Swapchain, SwapchainCreationError};
 use vulkano::sync;
-use vulkano::sync::{FlushError, GpuFuture};
+use vulkano::sync::{FlushError, GpuFuture, SharingMode};
 use vulkano_win::VkSurfaceBuild;
 use winit::dpi::PhysicalSize;
 use winit::event::{ElementState, Event, KeyboardInput, VirtualKeyCode, WindowEvent};
@@ -27,11 +28,33 @@ use winit::window::{Window, WindowBuilder};
 pub const SCR_WIDTH: u32 = 1920;
 pub const SCR_HEIGHT: u32 = 1080;
 
-pub const CLEAR_VALUE: ClearValue = ClearValue::Float([0.015_7, 0., 0.360_7, 1.0]);
+const CLEAR_VALUE: ClearValue = ClearValue::Float([0.015_7, 0., 0.360_7, 1.0]);
 
 const VALIDATION_LAYERS: &[&str] = &[
     "VK_LAYER_KHRONOS_validation"
 ];
+
+fn required_device_extensions() -> DeviceExtensions {
+    DeviceExtensions {
+        khr_swapchain: true,
+        ..DeviceExtensions::none()
+    }
+}
+
+struct QueueFamilyIndices {
+    graphics_family: i32,
+    present_family: i32,
+    compute_family: i32,
+}
+impl QueueFamilyIndices {
+    fn new() -> Self {
+        Self { graphics_family: -1, present_family: -1, compute_family: -1 }
+    }
+
+    fn is_complete(&self) -> bool {
+        self.graphics_family >= 0 && self.present_family >= 0 && self.compute_family >= 0
+    }
+}
 
 mod vs {
     vulkano_shaders::shader! {ty: "vertex", path: "src/shaders/shader.vert"}
@@ -60,7 +83,9 @@ struct App {
     physical_device_index: usize,
     device: Arc<Device>,
 
-    queue: Arc<Queue>,
+    graphics_queue: Arc<Queue>,
+    present_queue: Arc<Queue>,
+    compute_queue: Arc<Queue>,
 
     swapchain: Arc<Swapchain<Window>>,
     swapchain_images: Vec<Arc<SwapchainImage<Window>>>,
@@ -82,11 +107,12 @@ impl App {
     pub fn initialize() -> (Self, EventLoop<()>) {
         let instance = Self::create_instance();
 
-        let (physical_device_index, device, queue) = Self::init_vulkan(&instance);
         let debug_callback = Self::setup_debug_callback(&instance);
         let event_loop = EventLoop::new();
         let surface = Self::setup_window(&instance, &event_loop);
-        let (mut swapchain, swapchain_images) = Self::setup_swapchain(&instance, physical_device_index, &device, &queue, &surface);
+        let physical_device_index = Self::select_physical_device(&instance, &surface);
+        let (device, graphics_queue, present_queue, compute_queue) = Self::setup_device(&instance, &surface, physical_device_index);
+        let (mut swapchain, swapchain_images) = Self::setup_swapchain(&instance, physical_device_index, &device, &graphics_queue, &present_queue, &surface);
         let render_pass = Self::setup_render_pass(&device, &mut swapchain);
         let pipeline = Self::create_pipeline(&device, &render_pass);
         let mut dynamic_state = Self::create_dynamic_state();
@@ -106,7 +132,9 @@ impl App {
             physical_device_index,
             device,
 
-            queue,
+            graphics_queue,
+            present_queue,
+            compute_queue,
 
             swapchain,
             swapchain_images,
@@ -130,25 +158,6 @@ impl App {
         required_extensions.ext_debug_utils = true;
         Instance::new(None, &required_extensions, VALIDATION_LAYERS.iter().cloned())
             .expect("failed to create instance")
-    }
-
-    fn init_vulkan(instance: &Arc<Instance>) -> (usize, Arc<Device>, Arc<Queue>) {
-        let physical_device_index = PhysicalDevice::enumerate(&instance).position(|_device| true).expect("no device available");
-        let physical = PhysicalDevice::from_index(&instance, physical_device_index).expect("no device available");
-        println!("Got physical device, name: {}, type: {:?}", physical.name(), physical.ty());
-        let queue_family = physical.queue_families()
-            .find(|&q| q.supports_graphics())
-            .expect("couldn't find a graphical queue family");
-        let (device, mut queues) = {
-            let device_ext = vulkano::device::DeviceExtensions {
-                khr_swapchain: true,
-                ..DeviceExtensions::none()
-            };
-            Device::new(physical, &Features::none(), &device_ext, [(queue_family, 0.5)].iter().cloned())
-                .expect("failed to create device")
-        };
-        let queue = queues.next().unwrap();
-        (physical_device_index, device, queue)
     }
 
     fn setup_debug_callback(instance: &Arc<Instance>) -> DebugCallback {
@@ -176,17 +185,117 @@ impl App {
             .expect("Failed to create window surface")
     }
 
-    fn setup_swapchain(instance: &Arc<Instance>, physical_device_index: usize, device: &Arc<Device>, queue: &Arc<Queue>, surface: &Arc<Surface<Window>>) -> (Arc<Swapchain<Window>>, Vec<Arc<SwapchainImage<Window>>>) {
-        let caps = surface.capabilities(PhysicalDevice::from_index(&instance, physical_device_index).unwrap())
+    fn select_physical_device(instance: &Arc<Instance>, surface: &Arc<Surface<Window>>) -> usize {
+        PhysicalDevice::enumerate(&instance)
+            .position(|device| Self::is_device_suitable(surface, &device))
+            .expect("no suitable devices available")
+    }
+
+    fn is_device_suitable(surface: &Arc<Surface<Window>>, device: &PhysicalDevice) -> bool {
+        let indices = Self::find_queue_families(surface, device);
+        let extensions_supported = Self::does_device_supports_required_extensions(device);
+
+        let swap_chain_adequate = if extensions_supported {
+            let capabilities = surface.capabilities(*device)
+                .expect("failed to get surface capabilities");
+            !capabilities.supported_formats.is_empty() &&
+                capabilities.present_modes.iter().next().is_some()
+        } else {
+            false
+        };
+
+        indices.is_complete() && extensions_supported && swap_chain_adequate
+    }
+
+    fn find_queue_families(surface: &Arc<Surface<Window>>, device: &PhysicalDevice) -> QueueFamilyIndices {
+        let mut indices = QueueFamilyIndices::new();
+        for (i, queue_family) in device.queue_families().enumerate() {
+            if queue_family.supports_graphics() {
+                indices.graphics_family = i as i32;
+            }
+
+            if surface.is_supported(queue_family).unwrap() {
+                indices.present_family = i as i32;
+            }
+
+            if queue_family.supports_compute() {
+                indices.compute_family = i as i32;
+            }
+
+            if indices.is_complete() {
+                break;
+            }
+        }
+
+        indices
+    }
+
+    fn does_device_supports_required_extensions(device: &PhysicalDevice) -> bool {
+        let available_extensions = DeviceExtensions::supported_by_device(*device);
+        let device_extensions = required_device_extensions();
+        available_extensions.intersection(&device_extensions) == device_extensions
+    }
+
+    fn setup_device(
+        instance: &Arc<Instance>,
+        surface: &Arc<Surface<Window>>,
+        physical_device_index: usize,
+    ) -> (Arc<Device>, Arc<Queue>, Arc<Queue>, Arc<Queue>) {
+        let physical_device = PhysicalDevice::from_index(&instance, physical_device_index).expect("no device available");
+        println!("Got physical device, name: {}, type: {:?}", physical_device.name(), physical_device.ty());
+        let queue_family_indices = Self::find_queue_families(&surface, &physical_device);
+
+        let unique_families: HashSet<i32> = [queue_family_indices.graphics_family, queue_family_indices.present_family, queue_family_indices.compute_family].iter().cloned().collect();
+        let queue_families = unique_families
+            .iter()
+            .map(|i| (physical_device.queue_families().nth(*i as usize).unwrap(), 1.0));
+
+        let (device, mut queues) = Device::new(
+            physical_device,
+            &Features::none(),
+            &required_device_extensions(),
+            queue_families)
+                .expect("failed to create device");
+        let graphics_queue = queues.next().unwrap();
+        let present_queue = queues.next().unwrap_or_else(|| graphics_queue.clone());
+        let compute_queue = queues.next().unwrap_or_else(|| present_queue.clone());
+        (device, graphics_queue, present_queue, compute_queue)
+    }
+
+    fn setup_swapchain(
+        instance: &Arc<Instance>,
+        physical_device_index: usize,
+        device: &Arc<Device>,
+        graphics_queue: &Arc<Queue>,
+        present_queue: &Arc<Queue>,
+        surface: &Arc<Surface<Window>>
+    ) -> (Arc<Swapchain<Window>>, Vec<Arc<SwapchainImage<Window>>>) {
+        let capabilities = surface.capabilities(PhysicalDevice::from_index(&instance, physical_device_index).unwrap())
             .expect("failed to get surface capabilities");
+        let format = capabilities.supported_formats[0].0;
         let dimensions: [u32; 2] = surface.window().inner_size().into();
-        let alpha = caps.supported_composite_alpha.iter().next().unwrap();
-        let format = caps.supported_formats[0].0;
-        Swapchain::new(device.clone(), surface.clone(),
-                       caps.min_image_count, format, dimensions, 1, ImageUsage::color_attachment(), queue,
-                       SurfaceTransform::Identity, alpha, PresentMode::Fifo, FullscreenExclusive::Default,
-                       true, ColorSpace::SrgbNonLinear)
-            .expect("failed to create swapchain")
+        let sharing: SharingMode = if graphics_queue.family().id() != present_queue.family().id() {
+            vec![graphics_queue, present_queue].as_slice().into()
+        } else {
+            graphics_queue.into()
+        };
+        let alpha = capabilities.supported_composite_alpha.iter().next().unwrap();
+        Swapchain::new(
+            device.clone(),
+            surface.clone(),
+            capabilities.min_image_count,
+            format,
+            dimensions,
+            1,
+            ImageUsage::color_attachment(),
+            sharing,
+            SurfaceTransform::Identity,
+            alpha,
+            PresentMode::Fifo,
+            FullscreenExclusive::Default,
+            true,
+            ColorSpace::SrgbNonLinear
+        ).expect("failed to create swapchain")
     }
 
     fn setup_render_pass(device: &Arc<Device>, swapchain: &Arc<Swapchain<Window>>) -> Arc<dyn RenderPassAbstract + Send + Sync> {
@@ -357,7 +466,7 @@ impl App {
             self.recreating_swapchain_necessary = true;
         }
 
-        let mut command_builder = AutoCommandBufferBuilder::primary_one_time_submit(self.device.clone(), self.queue.family()).unwrap();
+        let mut command_builder = AutoCommandBufferBuilder::primary_one_time_submit(self.device.clone(), self.graphics_queue.family()).unwrap();
         command_builder
             .begin_render_pass(self.framebuffers[image_num].clone(), false, vec![CLEAR_VALUE])
             .unwrap()
@@ -373,9 +482,9 @@ impl App {
             .take()
             .unwrap()
             .join(acquire_future)
-            .then_execute(self.queue.clone(), command_buffer)
+            .then_execute(self.graphics_queue.clone(), command_buffer)
             .unwrap()
-            .then_swapchain_present(self.queue.clone(), self.swapchain.clone(), image_num)
+            .then_swapchain_present(self.present_queue.clone(), self.swapchain.clone(), image_num)
             .then_signal_fence_and_flush();
 
         match future {
