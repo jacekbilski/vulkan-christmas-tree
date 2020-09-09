@@ -73,22 +73,22 @@ struct Vertex {
 vulkano::impl_vertex!(Vertex, position, colour);
 
 struct App {
-    instance: Arc<Instance>,
+    // instance: Arc<Instance>,
     #[allow(unused)]
     debug_callback: DebugCallback,
 
     surface: Arc<Surface<Window>>,
 
     // bummer, I cannot store PhysicalDevice directly, there's a problem with lifetime
-    physical_device_index: usize,
+    // physical_device_index: usize,
     device: Arc<Device>,
 
     graphics_queue: Arc<Queue>,
     present_queue: Arc<Queue>,
-    compute_queue: Arc<Queue>,
+    // compute_queue: Arc<Queue>,
 
     swapchain: Arc<Swapchain<Window>>,
-    swapchain_images: Vec<Arc<SwapchainImage<Window>>>,
+    // swapchain_images: Vec<Arc<SwapchainImage<Window>>>,
 
     render_pass: Arc<dyn RenderPassAbstract + Send + Sync>,
     graphics_pipeline: Arc<dyn GraphicsPipelineAbstract + Send + Sync>,
@@ -111,7 +111,7 @@ impl App {
         let event_loop = EventLoop::new();
         let surface = Self::setup_window(&instance, &event_loop);
         let physical_device_index = Self::select_physical_device(&instance, &surface);
-        let (device, graphics_queue, present_queue, compute_queue) = Self::setup_device(&instance, &surface, physical_device_index);
+        let (device, graphics_queue, present_queue, _compute_queue) = Self::setup_device(&instance, &surface, physical_device_index);
         let (mut swapchain, swapchain_images) = Self::setup_swapchain(&instance, physical_device_index, &device, &graphics_queue, &present_queue, &surface);
         let render_pass = Self::setup_render_pass(&device, &mut swapchain);
         let pipeline = Self::create_pipeline(&device, &render_pass);
@@ -124,20 +124,20 @@ impl App {
         let previous_frame_end = Some(sync::now(device.clone()).boxed());
 
         (Self {
-            instance,
+            // instance,
             debug_callback,
 
             surface,
 
-            physical_device_index,
+            // physical_device_index,
             device,
 
             graphics_queue,
             present_queue,
-            compute_queue,
+            // compute_queue,
 
             swapchain,
-            swapchain_images,
+            // swapchain_images,
 
             render_pass,
             graphics_pipeline: pipeline,
