@@ -26,6 +26,8 @@ use winit::event_loop::{ControlFlow, EventLoop};
 use winit::platform::desktop::EventLoopExtDesktop;
 use winit::window::{Window, WindowBuilder};
 
+mod coords;
+
 // settings
 pub const SCR_WIDTH: u32 = 1920;
 pub const SCR_HEIGHT: u32 = 1080;
