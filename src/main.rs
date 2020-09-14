@@ -1,7 +1,7 @@
 use std::collections::HashSet;
 use std::sync::Arc;
 
-use cgmath::{Matrix4, SquareMatrix};
+use cgmath::{Deg, Matrix4, perspective, Point3, SquareMatrix, vec3};
 use vulkano::buffer::{BufferAccess, BufferUsage, CpuAccessibleBuffer, CpuBufferPool};
 use vulkano::buffer::cpu_pool::CpuBufferPoolSubbuffer;
 use vulkano::command_buffer::{AutoCommandBufferBuilder, DynamicState};
@@ -25,6 +25,8 @@ use winit::event::{ElementState, Event, KeyboardInput, VirtualKeyCode, WindowEve
 use winit::event_loop::{ControlFlow, EventLoop};
 use winit::platform::desktop::EventLoopExtDesktop;
 use winit::window::{Window, WindowBuilder};
+
+use crate::coords::SphericalPoint3;
 
 mod coords;
 
@@ -132,7 +134,7 @@ impl App {
         let mut dynamic_state = Self::create_dynamic_state();
         let framebuffers = Self::window_size_dependent_setup(&swapchain_images, render_pass.clone(), &mut dynamic_state);
         let vertex_buffer = Self::create_vertex_buffer(&device);
-        let uniform_buffers = Self::create_camera_ubo(&device, pipeline.clone());
+        let uniform_buffers = Self::create_camera_ubo(&device, pipeline.clone(), swapchain.dimensions());
 
         let recreating_swapchain_necessary = false;
         let previous_frame_end = Some(sync::now(device.clone()).boxed());
@@ -373,13 +375,16 @@ impl App {
     fn create_camera_ubo(
         device: &Arc<Device>,
         pipeline: Arc<dyn GraphicsPipelineAbstract + Send + Sync>,
+        window_size: [u32; 2],
     ) -> Arc<PersistentDescriptorSet<((), PersistentDescriptorSetBuf<CpuBufferPoolSubbuffer<Camera, Arc<StdMemoryPool>>>)>> {
         let buffer_pool = CpuBufferPool::<Camera>::new(device.clone(), BufferUsage::all());
+        let position: SphericalPoint3<f32> = SphericalPoint3::new(18., 1.7, 0.9);
+        let look_at: Point3<f32> = Point3::new(0., -1., 0.);
 
         let camera = Camera {
             model: Matrix4::identity(),
-            view: Matrix4::identity(),
-            projection: Matrix4::identity(),
+            view: Matrix4::look_at(position.into(), look_at, vec3(0.0, 1.0, 0.0)),
+            projection: perspective(Deg(45.0), window_size[0] as f32 / window_size[1] as f32, 0.1, 100.0),
         };
 
         let buffer = buffer_pool.next(camera).unwrap();
