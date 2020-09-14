@@ -1,14 +1,18 @@
 use std::collections::HashSet;
 use std::sync::Arc;
 
-use vulkano::buffer::{BufferAccess, BufferUsage, CpuAccessibleBuffer};
+use cgmath::{Matrix4, SquareMatrix};
+use vulkano::buffer::{BufferAccess, BufferUsage, CpuAccessibleBuffer, CpuBufferPool};
+use vulkano::buffer::cpu_pool::CpuBufferPoolSubbuffer;
 use vulkano::command_buffer::{AutoCommandBufferBuilder, DynamicState};
+use vulkano::descriptor::descriptor_set::{PersistentDescriptorSet, PersistentDescriptorSetBuf};
 use vulkano::device::{Device, DeviceExtensions, Features, Queue};
 use vulkano::format::ClearValue;
 use vulkano::framebuffer::{Framebuffer, FramebufferAbstract, RenderPassAbstract, Subpass};
 use vulkano::image::{ImageUsage, SwapchainImage};
 use vulkano::instance::{Instance, PhysicalDevice};
 use vulkano::instance::debug::{DebugCallback, MessageSeverity, MessageType};
+use vulkano::memory::pool::StdMemoryPool;
 use vulkano::pipeline::{GraphicsPipeline, GraphicsPipelineAbstract};
 use vulkano::pipeline::viewport::Viewport;
 use vulkano::swapchain;
@@ -21,8 +25,6 @@ use winit::event::{ElementState, Event, KeyboardInput, VirtualKeyCode, WindowEve
 use winit::event_loop::{ControlFlow, EventLoop};
 use winit::platform::desktop::EventLoopExtDesktop;
 use winit::window::{Window, WindowBuilder};
-
-// use cgmath::Matrix4;
 
 // settings
 pub const SCR_WIDTH: u32 = 1920;
@@ -70,6 +72,13 @@ struct Vertex {
     colour: [f32; 3],
 }
 
+#[derive(Copy, Clone)]
+struct Camera {
+    model: Matrix4<f32>,
+    view: Matrix4<f32>,
+    projection: Matrix4<f32>,
+}
+
 vulkano::impl_vertex!(Vertex, position, colour);
 
 struct App {
@@ -99,6 +108,9 @@ struct App {
 
     vertex_buffer: Arc<dyn BufferAccess + Send + Sync>,
 
+    // this should be of type Arc<dyn DescriptorSetsCollection + Send + Sync>
+    uniform_buffers: Arc<PersistentDescriptorSet<((), PersistentDescriptorSetBuf<CpuBufferPoolSubbuffer<Camera, Arc<StdMemoryPool>>>)>>,
+
     previous_frame_end: Option<Box<dyn GpuFuture>>,
     recreating_swapchain_necessary: bool,
 }
@@ -117,8 +129,8 @@ impl App {
         let pipeline = Self::create_pipeline(&device, &render_pass);
         let mut dynamic_state = Self::create_dynamic_state();
         let framebuffers = Self::window_size_dependent_setup(&swapchain_images, render_pass.clone(), &mut dynamic_state);
-
         let vertex_buffer = Self::create_vertex_buffer(&device);
+        let uniform_buffers = Self::create_camera_ubo(&device, pipeline.clone());
 
         let recreating_swapchain_necessary = false;
         let previous_frame_end = Some(sync::now(device.clone()).boxed());
@@ -147,6 +159,8 @@ impl App {
             framebuffers,
 
             vertex_buffer,
+
+            uniform_buffers,
 
             previous_frame_end,
             recreating_swapchain_necessary,
@@ -354,6 +368,31 @@ impl App {
             .unwrap()
     }
 
+    fn create_camera_ubo(
+        device: &Arc<Device>,
+        pipeline: Arc<dyn GraphicsPipelineAbstract + Send + Sync>,
+    ) -> Arc<PersistentDescriptorSet<((), PersistentDescriptorSetBuf<CpuBufferPoolSubbuffer<Camera, Arc<StdMemoryPool>>>)>> {
+        let buffer_pool = CpuBufferPool::<Camera>::new(device.clone(), BufferUsage::all());
+
+        let camera = Camera {
+            model: Matrix4::identity(),
+            view: Matrix4::identity(),
+            projection: Matrix4::identity(),
+        };
+
+        let buffer = buffer_pool.next(camera).unwrap();
+
+        let layout = pipeline.descriptor_set_layout(0).unwrap();
+        let set = Arc::new(
+            PersistentDescriptorSet::start(layout.clone())
+                .add_buffer(buffer)
+                .unwrap()
+                .build()
+                .unwrap()
+        );
+        set
+    }
+
     fn window_size_dependent_setup(
         images: &[Arc<SwapchainImage<Window>>],
         render_pass: Arc<dyn RenderPassAbstract + Send + Sync>,
@@ -471,7 +510,7 @@ impl App {
             .begin_render_pass(self.framebuffers[image_num].clone(), false, vec![CLEAR_VALUE])
             .unwrap()
 
-            .draw(self.graphics_pipeline.clone(), &self.dynamic_state, vec![self.vertex_buffer.clone()], (), ())
+            .draw(self.graphics_pipeline.clone(), &self.dynamic_state, vec![self.vertex_buffer.clone()], self.uniform_buffers.clone(), ())
             .unwrap()
 
             .end_render_pass()
