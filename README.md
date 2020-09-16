@@ -90,3 +90,15 @@ Buffer should be typed. I can either take the type from compiled vertex shader o
 Next, I create a descriptor. First, I take a layout from the pipeline, id needs to match that in the shaders (`binding`). Then I create the descriptor from the layout and add the buffer to it.
 
 At last, I pass the descriptor to the `draw` command.
+
+### Instancing
+
+Not that complex. First of all, I need to create a struct holding the data per instance and the call `impl_vertex!` macro, just like for `Vertex` struct itself.
+
+Second, I need to create an instances buffer holding actual instances information. Technically it's a yet another buffer, like vertex buffer.
+
+Third, creating the pipeline changes a bit. In `vertex_input` call I need to say, that I'll be passing two buffers, one for vertices, one for instances.
+
+Fourth, to the `draw` call I'm passing in instances buffer as a second vertex buffer.
+
+As a last step I need to adapt the shader. Simply adding more `layout(location = x) in vec3 y;` is enough, just make sure locations are correct that is `x` is greater by one than last location taken from vertex buffer. 

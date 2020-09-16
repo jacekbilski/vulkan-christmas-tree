@@ -6,8 +6,12 @@ layout(binding = 0) uniform Camera {
     mat4 projection;
 } camera;
 
+// per-vertex data
 layout(location = 0) in vec3 position;
+
+// per-instance data
 layout(location = 1) in vec3 colour;
+
 layout(location = 0) out vec3 fragColour;
 
 void main() {

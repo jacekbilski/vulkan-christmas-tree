@@ -14,6 +14,7 @@ use vulkano::instance::{Instance, PhysicalDevice};
 use vulkano::instance::debug::{DebugCallback, MessageSeverity, MessageType};
 use vulkano::memory::pool::StdMemoryPool;
 use vulkano::pipeline::{GraphicsPipeline, GraphicsPipelineAbstract};
+use vulkano::pipeline::vertex::OneVertexOneInstanceDefinition;
 use vulkano::pipeline::viewport::Viewport;
 use vulkano::swapchain;
 use vulkano::swapchain::{AcquireError, ColorSpace, FullscreenExclusive, PresentMode, Surface, SurfaceTransform, Swapchain, SwapchainCreationError};
@@ -73,8 +74,14 @@ mod fs {
 #[derive(Default, Copy, Clone)]
 struct Vertex {
     position: [f32; 3],
+}
+vulkano::impl_vertex!(Vertex, position);
+
+#[derive(Default, Copy, Clone)]
+struct InstanceData {
     colour: [f32; 3],
 }
+vulkano::impl_vertex!(InstanceData, colour);
 
 #[derive(Copy, Clone)]
 struct Camera {
@@ -82,8 +89,6 @@ struct Camera {
     view: Matrix4<f32>,
     projection: Matrix4<f32>,
 }
-
-vulkano::impl_vertex!(Vertex, position, colour);
 
 struct App {
     // instance: Arc<Instance>,
@@ -112,6 +117,7 @@ struct App {
 
     vertex_buffer: Arc<dyn BufferAccess + Send + Sync>,
     index_buffer: Arc<dyn TypedBufferAccess<Content = [u32]> + Send + Sync>,
+    instances_buffer: Arc<dyn BufferAccess + Send + Sync>,
 
     // this should be of type Arc<dyn DescriptorSetsCollection + Send + Sync>
     uniform_buffers: Arc<PersistentDescriptorSet<((), PersistentDescriptorSetBuf<CpuBufferPoolSubbuffer<Camera, Arc<StdMemoryPool>>>)>>,
@@ -134,7 +140,7 @@ impl App {
         let pipeline = Self::create_pipeline(&device, &render_pass);
         let mut dynamic_state = Self::create_dynamic_state();
         let framebuffers = Self::window_size_dependent_setup(&swapchain_images, render_pass.clone(), &mut dynamic_state);
-        let (vertex_buffer, index_buffer) = Self::create_mesh(&device);
+        let (vertex_buffer, index_buffer, instances_buffer) = Self::create_mesh(&device);
         let uniform_buffers = Self::create_camera_ubo(&device, pipeline.clone(), swapchain.dimensions());
 
         let recreating_swapchain_necessary = false;
@@ -165,6 +171,7 @@ impl App {
 
             vertex_buffer,
             index_buffer,
+            instances_buffer,
 
             uniform_buffers,
 
@@ -336,11 +343,11 @@ impl App {
     }
 
     fn create_pipeline(device: &Arc<Device>, render_pass: &Arc<dyn RenderPassAbstract + Send + Sync>) -> Arc<dyn GraphicsPipelineAbstract + Send + Sync> {
-        let vs = vs::Shader::load(device.clone()).expect("failed to create shader module");
-        let fs = fs::Shader::load(device.clone()).expect("failed to create shader module");
+        let vs = vs::Shader::load(device.clone()).expect("failed to create vertex shader module");
+        let fs = fs::Shader::load(device.clone()).expect("failed to create fragment shader module");
         Arc::new(GraphicsPipeline::start()
             // Defines what kind of vertex input is expected.
-            .vertex_input_single_buffer::<Vertex>()
+            .vertex_input(OneVertexOneInstanceDefinition::<Vertex, InstanceData>::new())
             // The vertex shader.
             .vertex_shader(vs.main_entry_point(), ())
             // Defines the viewport (explanations below).
@@ -365,12 +372,16 @@ impl App {
         }
     }
 
-    fn create_mesh(device: &Arc<Device>) -> (Arc<dyn BufferAccess + Send + Sync>, Arc<dyn TypedBufferAccess<Content = [u32]> + Send + Sync>) {
+    fn create_mesh(device: &Arc<Device>) -> (
+        Arc<dyn BufferAccess + Send + Sync>,
+        Arc<dyn TypedBufferAccess<Content = [u32]> + Send + Sync>,
+        Arc<dyn BufferAccess + Send + Sync>,
+    ) {
         let vertices: Vec<Vertex> = vec![
-            Vertex { position: [-10., 5., -10.], colour: [1.0, 0.0, 0.0] },   // far
-            Vertex { position: [-10., 5., 10.], colour: [1.0, 1.0, 0.0] }, // left
-            Vertex { position: [10., 5., -10.], colour: [1.0, 0.0, 1.0] }, // right
-            Vertex { position: [10., 5., 10.], colour: [1.0, 0.0, 1.0] }, // near
+            Vertex { position: [-10., 5., -10.] },   // far
+            Vertex { position: [-10., 5., 10.] }, // left
+            Vertex { position: [10., 5., -10.] }, // right
+            Vertex { position: [10., 5., 10.] }, // near
         ];
         let vertex_buffer = CpuAccessibleBuffer::from_iter(
             device.clone(), BufferUsage::all(), false, vertices.into_iter())
@@ -384,7 +395,15 @@ impl App {
         let index_buffer =
             CpuAccessibleBuffer::from_iter(device.clone(), BufferUsage::all(), false, indices.iter().cloned()).unwrap();
 
-        (vertex_buffer, index_buffer)
+        let instances: Vec<InstanceData> = vec![
+            InstanceData { colour: [1.0, 1.0, 1.0] }
+        ];
+
+        let instances_buffer = CpuAccessibleBuffer::from_iter(
+            device.clone(), BufferUsage::all(), false, instances.into_iter())
+            .unwrap();
+
+        (vertex_buffer, index_buffer, instances_buffer)
     }
 
     fn create_camera_ubo(
@@ -532,7 +551,7 @@ impl App {
             .begin_render_pass(self.framebuffers[image_num].clone(), false, vec![CLEAR_VALUE])
             .unwrap()
 
-            .draw_indexed(self.graphics_pipeline.clone(), &self.dynamic_state, vec![self.vertex_buffer.clone()], self.index_buffer.clone(), self.uniform_buffers.clone(), ())
+            .draw_indexed(self.graphics_pipeline.clone(), &self.dynamic_state, vec![self.vertex_buffer.clone(), self.instances_buffer.clone()], self.index_buffer.clone(), self.uniform_buffers.clone(), ())
             .unwrap()
 
             .end_render_pass()
