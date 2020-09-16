@@ -2,7 +2,7 @@ use std::collections::HashSet;
 use std::sync::Arc;
 
 use cgmath::{Deg, Matrix4, perspective, Point3, SquareMatrix, vec3};
-use vulkano::buffer::{BufferAccess, BufferUsage, CpuAccessibleBuffer, CpuBufferPool, TypedBufferAccess};
+use vulkano::buffer::{BufferUsage, CpuAccessibleBuffer, CpuBufferPool};
 use vulkano::buffer::cpu_pool::CpuBufferPoolSubbuffer;
 use vulkano::command_buffer::{AutoCommandBufferBuilder, DynamicState};
 use vulkano::descriptor::descriptor_set::{PersistentDescriptorSet, PersistentDescriptorSetBuf};
@@ -28,8 +28,10 @@ use winit::platform::desktop::EventLoopExtDesktop;
 use winit::window::{Window, WindowBuilder};
 
 use crate::coords::SphericalPoint3;
+use crate::mesh::{InstanceData, Mesh, Vertex};
 
 mod coords;
+mod mesh;
 
 // settings
 pub const SCR_WIDTH: u32 = 1920;
@@ -71,19 +73,8 @@ mod fs {
     vulkano_shaders::shader! {ty: "fragment", path: "src/shaders/shader.frag"}
 }
 
-#[derive(Default, Copy, Clone)]
-struct Vertex {
-    position: [f32; 3],
-}
-vulkano::impl_vertex!(Vertex, position);
-
-#[derive(Default, Copy, Clone)]
-struct InstanceData {
-    colour: [f32; 3],
-}
-vulkano::impl_vertex!(InstanceData, colour);
-
 #[derive(Copy, Clone)]
+#[allow(unused)]
 struct Camera {
     model: Matrix4<f32>,
     view: Matrix4<f32>,
@@ -115,9 +106,7 @@ struct App {
 
     framebuffers: Vec<Arc<dyn FramebufferAbstract + Send + Sync>>,
 
-    vertex_buffer: Arc<dyn BufferAccess + Send + Sync>,
-    index_buffer: Arc<dyn TypedBufferAccess<Content = [u32]> + Send + Sync>,
-    instances_buffer: Arc<dyn BufferAccess + Send + Sync>,
+    mesh: Mesh,
 
     // this should be of type Arc<dyn DescriptorSetsCollection + Send + Sync>
     uniform_buffers: Arc<PersistentDescriptorSet<((), PersistentDescriptorSetBuf<CpuBufferPoolSubbuffer<Camera, Arc<StdMemoryPool>>>)>>,
@@ -140,7 +129,7 @@ impl App {
         let pipeline = Self::create_pipeline(&device, &render_pass);
         let mut dynamic_state = Self::create_dynamic_state();
         let framebuffers = Self::window_size_dependent_setup(&swapchain_images, render_pass.clone(), &mut dynamic_state);
-        let (vertex_buffer, index_buffer, instances_buffer) = Self::create_mesh(&device);
+        let mesh = Self::create_mesh(&device);
         let uniform_buffers = Self::create_camera_ubo(&device, pipeline.clone(), swapchain.dimensions());
 
         let recreating_swapchain_necessary = false;
@@ -169,9 +158,7 @@ impl App {
 
             framebuffers,
 
-            vertex_buffer,
-            index_buffer,
-            instances_buffer,
+            mesh,
 
             uniform_buffers,
 
@@ -195,7 +182,7 @@ impl App {
             verbose: true,
         };
         let types = MessageType {
-            general: true,
+            general: false,
             performance: true,
             validation: true,
         };
@@ -372,11 +359,7 @@ impl App {
         }
     }
 
-    fn create_mesh(device: &Arc<Device>) -> (
-        Arc<dyn BufferAccess + Send + Sync>,
-        Arc<dyn TypedBufferAccess<Content = [u32]> + Send + Sync>,
-        Arc<dyn BufferAccess + Send + Sync>,
-    ) {
+    fn create_mesh(device: &Arc<Device>) -> Mesh {
         let vertices: Vec<Vertex> = vec![
             Vertex { position: [-10., 5., -10.] },   // far
             Vertex { position: [-10., 5., 10.] }, // left
@@ -403,7 +386,7 @@ impl App {
             device.clone(), BufferUsage::all(), false, instances.into_iter())
             .unwrap();
 
-        (vertex_buffer, index_buffer, instances_buffer)
+        Mesh { vertex_buffer, index_buffer, instances_buffer }
     }
 
     fn create_camera_ubo(
@@ -551,7 +534,7 @@ impl App {
             .begin_render_pass(self.framebuffers[image_num].clone(), false, vec![CLEAR_VALUE])
             .unwrap()
 
-            .draw_indexed(self.graphics_pipeline.clone(), &self.dynamic_state, vec![self.vertex_buffer.clone(), self.instances_buffer.clone()], self.index_buffer.clone(), self.uniform_buffers.clone(), ())
+            .draw_indexed(self.graphics_pipeline.clone(), &self.dynamic_state, vec![self.mesh.vertex_buffer.clone(), self.mesh.instances_buffer.clone()], self.mesh.index_buffer.clone(), self.uniform_buffers.clone(), ())
             .unwrap()
 
             .end_render_pass()
