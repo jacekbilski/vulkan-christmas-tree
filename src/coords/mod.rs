@@ -3,7 +3,7 @@ use cgmath::Point3;
 
 /// A point P in 3-dimensional space.
 /// Unlike cgmath::Point3 it uses spherical coordinates instead of cartesian.
-/// The coordinate system itself is setup as in Vulkan with X axis pointing to the right, Y axis pointing upwards and Z axis pointing towards the camera so it's right-handed.
+/// The coordinate system itself is setup as in Vulkan with X axis pointing to the right, Y axis pointing downwards and Z axis pointing towards the camera so it's right-handed.
 /// r is the radial (Euclidean) distance between the P and O (0, 0, 0).
 /// theta (θ) is the polar angle between the positive part of Y axis and the OP line segment.
 /// phi (φ) is the azimuth or azimuthal angle, an angle between the positive part of Z axis and the orthogonal projection of the line segment OP on the OXZ plane.
@@ -47,7 +47,7 @@ impl<T: Float> From<Point3<T>> for SphericalPoint3<T> {
 
 /// A point P in 3-dimensional space.
 /// Unlike cgmath::Point3 it uses cylindrical coordinates instead of cartesian.
-/// The coordinate system itself is setup as in Vulkan with X axis pointing to the right, Y axis pointing upwards and Z axis pointing towards the camera so it's right-handed.
+/// The coordinate system itself is setup as in Vulkan with X axis pointing to the right, Y axis pointing downwards and Z axis pointing towards the camera so it's right-handed.
 /// r is the radial (Euclidean) distance between the P and OY.
 /// phi (φ) is the azimuth or azimuthal angle, an angle between the positive part of Z axis and the orthogonal projection of the line segment OP on the OXZ plane.
 /// h or axial coordinate is the signed distance from the P to OXZ plane.

@@ -2,7 +2,7 @@ use std::collections::HashSet;
 use std::sync::Arc;
 
 use cgmath::{Deg, Matrix4, perspective, Point3, SquareMatrix, vec3};
-use vulkano::buffer::{BufferAccess, BufferUsage, CpuAccessibleBuffer, CpuBufferPool};
+use vulkano::buffer::{BufferAccess, BufferUsage, CpuAccessibleBuffer, CpuBufferPool, TypedBufferAccess};
 use vulkano::buffer::cpu_pool::CpuBufferPoolSubbuffer;
 use vulkano::command_buffer::{AutoCommandBufferBuilder, DynamicState};
 use vulkano::descriptor::descriptor_set::{PersistentDescriptorSet, PersistentDescriptorSetBuf};
@@ -72,7 +72,7 @@ mod fs {
 
 #[derive(Default, Copy, Clone)]
 struct Vertex {
-    position: [f32; 2],
+    position: [f32; 3],
     colour: [f32; 3],
 }
 
@@ -111,6 +111,7 @@ struct App {
     framebuffers: Vec<Arc<dyn FramebufferAbstract + Send + Sync>>,
 
     vertex_buffer: Arc<dyn BufferAccess + Send + Sync>,
+    index_buffer: Arc<dyn TypedBufferAccess<Content = [u32]> + Send + Sync>,
 
     // this should be of type Arc<dyn DescriptorSetsCollection + Send + Sync>
     uniform_buffers: Arc<PersistentDescriptorSet<((), PersistentDescriptorSetBuf<CpuBufferPoolSubbuffer<Camera, Arc<StdMemoryPool>>>)>>,
@@ -133,7 +134,7 @@ impl App {
         let pipeline = Self::create_pipeline(&device, &render_pass);
         let mut dynamic_state = Self::create_dynamic_state();
         let framebuffers = Self::window_size_dependent_setup(&swapchain_images, render_pass.clone(), &mut dynamic_state);
-        let vertex_buffer = Self::create_vertex_buffer(&device);
+        let (vertex_buffer, index_buffer) = Self::create_mesh(&device);
         let uniform_buffers = Self::create_camera_ubo(&device, pipeline.clone(), swapchain.dimensions());
 
         let recreating_swapchain_necessary = false;
@@ -163,6 +164,7 @@ impl App {
             framebuffers,
 
             vertex_buffer,
+            index_buffer,
 
             uniform_buffers,
 
@@ -363,13 +365,26 @@ impl App {
         }
     }
 
-    fn create_vertex_buffer(device: &Arc<Device>) -> Arc<dyn BufferAccess + Send + Sync> {
-        let vertex1 = Vertex { position: [-0.5, -0.5], colour: [1.0, 0.0, 0.0] };
-        let vertex2 = Vertex { position: [0.0, 0.5], colour: [0.0, 1.0, 0.0] };
-        let vertex3 = Vertex { position: [0.5, -0.25], colour: [0.0, 0.0, 1.0] };
-        CpuAccessibleBuffer::from_iter(
-            device.clone(), BufferUsage::all(), false, vec![vertex1, vertex2, vertex3].into_iter())
-            .unwrap()
+    fn create_mesh(device: &Arc<Device>) -> (Arc<dyn BufferAccess + Send + Sync>, Arc<dyn TypedBufferAccess<Content = [u32]> + Send + Sync>) {
+        let vertices: Vec<Vertex> = vec![
+            Vertex { position: [-10., 5., -10.], colour: [1.0, 0.0, 0.0] },   // far
+            Vertex { position: [-10., 5., 10.], colour: [1.0, 1.0, 0.0] }, // left
+            Vertex { position: [10., 5., -10.], colour: [1.0, 0.0, 1.0] }, // right
+            Vertex { position: [10., 5., 10.], colour: [1.0, 0.0, 1.0] }, // near
+        ];
+        let vertex_buffer = CpuAccessibleBuffer::from_iter(
+            device.clone(), BufferUsage::all(), false, vertices.into_iter())
+            .unwrap();
+
+        let indices: Vec<u32> = vec![
+            0, 1, 2,
+            1, 3, 2,
+        ];
+
+        let index_buffer =
+            CpuAccessibleBuffer::from_iter(device.clone(), BufferUsage::all(), false, indices.iter().cloned()).unwrap();
+
+        (vertex_buffer, index_buffer)
     }
 
     fn create_camera_ubo(
@@ -379,7 +394,7 @@ impl App {
     ) -> Arc<PersistentDescriptorSet<((), PersistentDescriptorSetBuf<CpuBufferPoolSubbuffer<Camera, Arc<StdMemoryPool>>>)>> {
         let buffer_pool = CpuBufferPool::<Camera>::new(device.clone(), BufferUsage::all());
         let position: SphericalPoint3<f32> = SphericalPoint3::new(18., 1.7, 0.9);
-        let look_at: Point3<f32> = Point3::new(0., -1., 0.);
+        let look_at: Point3<f32> = Point3::new(0., 1., 0.);
 
         let camera = Camera {
             model: Matrix4::identity(),
@@ -517,7 +532,7 @@ impl App {
             .begin_render_pass(self.framebuffers[image_num].clone(), false, vec![CLEAR_VALUE])
             .unwrap()
 
-            .draw(self.graphics_pipeline.clone(), &self.dynamic_state, vec![self.vertex_buffer.clone()], self.uniform_buffers.clone(), ())
+            .draw_indexed(self.graphics_pipeline.clone(), &self.dynamic_state, vec![self.vertex_buffer.clone()], self.index_buffer.clone(), self.uniform_buffers.clone(), ())
             .unwrap()
 
             .end_render_pass()
