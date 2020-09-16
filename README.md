@@ -77,3 +77,16 @@ Inside a loop I need to:
 1. actually wait until `previous_frame_end` and `acquire_future` resolve (aka wait until previous frame ... something, not clear to me just yet, basically wait until we're ready to start drawing),
 1. execute command buffer,
 1. present the results.
+
+### Uniform buffers
+
+I need two things:
+
+1. buffer itself,
+1. and a descriptor.
+
+Buffer should be typed. I can either take the type from compiled vertex shader or duplicate it in my code.
+
+Next, I create a descriptor. First, I take a layout from the pipeline, id needs to match that in the shaders (`binding`). Then I create the descriptor from the layout and add the buffer to it.
+
+At last, I pass the descriptor to the `draw` command.
