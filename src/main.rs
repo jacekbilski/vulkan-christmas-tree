@@ -4,10 +4,9 @@ use std::sync::Arc;
 use cgmath::{Deg, Matrix4, perspective, Point3, SquareMatrix, vec3};
 use vulkano::buffer::{BufferUsage, CpuBufferPool};
 use vulkano::buffer::cpu_pool::CpuBufferPoolSubbuffer;
-use vulkano::command_buffer::{AutoCommandBufferBuilder, DynamicState};
+use vulkano::command_buffer::DynamicState;
 use vulkano::descriptor::descriptor_set::{PersistentDescriptorSet, PersistentDescriptorSetBuf};
 use vulkano::device::{Device, DeviceExtensions, Features, Queue};
-use vulkano::format::ClearValue;
 use vulkano::framebuffer::{Framebuffer, FramebufferAbstract, RenderPassAbstract, Subpass};
 use vulkano::image::{ImageUsage, SwapchainImage};
 use vulkano::instance::{Instance, PhysicalDevice};
@@ -28,8 +27,8 @@ use winit::platform::desktop::EventLoopExtDesktop;
 use winit::window::{Window, WindowBuilder};
 
 use crate::coords::SphericalPoint3;
-use crate::mesh::{InstanceData, Mesh, Vertex};
-use crate::scene::ground;
+use crate::mesh::{InstanceData, Vertex};
+use crate::scene::Scene;
 
 mod coords;
 mod mesh;
@@ -38,8 +37,6 @@ mod scene;
 // settings
 pub const SCR_WIDTH: u32 = 1920;
 pub const SCR_HEIGHT: u32 = 1080;
-
-const CLEAR_VALUE: ClearValue = ClearValue::Float([0.015_7, 0., 0.360_7, 1.0]);
 
 const VALIDATION_LAYERS: &[&str] = &[
     "VK_LAYER_KHRONOS_validation"
@@ -77,7 +74,7 @@ mod fs {
 
 #[derive(Copy, Clone)]
 #[allow(unused)]
-struct Camera {
+pub struct Camera {
     model: Matrix4<f32>,
     view: Matrix4<f32>,
     projection: Matrix4<f32>,
@@ -108,7 +105,7 @@ struct App {
 
     framebuffers: Vec<Arc<dyn FramebufferAbstract + Send + Sync>>,
 
-    mesh: Mesh,
+    scene: Scene,
 
     // this should be of type Arc<dyn DescriptorSetsCollection + Send + Sync>
     uniform_buffers: Arc<PersistentDescriptorSet<((), PersistentDescriptorSetBuf<CpuBufferPoolSubbuffer<Camera, Arc<StdMemoryPool>>>)>>,
@@ -131,7 +128,7 @@ impl App {
         let pipeline = Self::create_pipeline(&device, &render_pass);
         let mut dynamic_state = Self::create_dynamic_state();
         let framebuffers = Self::window_size_dependent_setup(&swapchain_images, render_pass.clone(), &mut dynamic_state);
-        let mesh = ground::create_mesh(graphics_queue.clone());
+        let scene = Scene::setup(graphics_queue.clone());
         let uniform_buffers = Self::create_camera_ubo(&device, pipeline.clone(), swapchain.dimensions());
 
         let recreating_swapchain_necessary = false;
@@ -160,7 +157,7 @@ impl App {
 
             framebuffers,
 
-            mesh,
+            scene,
 
             uniform_buffers,
 
@@ -501,17 +498,14 @@ impl App {
             self.recreating_swapchain_necessary = true;
         }
 
-        let mut command_builder = AutoCommandBufferBuilder::primary_one_time_submit(self.device.clone(), self.graphics_queue.family()).unwrap();
-        command_builder
-            .begin_render_pass(self.framebuffers[image_num].clone(), false, vec![CLEAR_VALUE])
-            .unwrap()
-
-            .draw_indexed(self.graphics_pipeline.clone(), &self.dynamic_state, vec![self.mesh.vertex_buffer.clone(), self.mesh.instances_buffer.clone()], self.mesh.index_buffer.clone(), self.uniform_buffers.clone(), ())
-            .unwrap()
-
-            .end_render_pass()
-            .unwrap();
-        let command_buffer = command_builder.build().unwrap();
+        let command_buffer = self.scene.draw(
+            self.device.clone(),
+            self.graphics_queue.clone(),
+            self.framebuffers[image_num].clone(),
+            self.graphics_pipeline.clone(),
+            &self.dynamic_state,
+            self.uniform_buffers.clone(),
+        );
 
         let future = self.previous_frame_end
             .take()
