@@ -4,20 +4,20 @@ use vulkano::buffer::{BufferUsage, ImmutableBuffer};
 use vulkano::device::Queue;
 use vulkano::sync::GpuFuture;
 
-use crate::mesh::{InstanceData, Mesh, Vertex};
+use crate::mesh::{InstanceData, Mesh, Vertex, VertexIndexType};
 
 pub fn create_mesh(queue: Arc<Queue>) -> Mesh {
     let vertices: Vec<Vertex> = vec![
-        Vertex { position: [-10., 5., -10.] },   // far
-        Vertex { position: [-10., 5., 10.] }, // left
-        Vertex { position: [10., 5., -10.] }, // right
-        Vertex { position: [10., 5., 10.] }, // near
+        Vertex { position: [-10., 5., -10.], normal: [0., -1., 0.] },   // far
+        Vertex { position: [-10., 5., 10.], normal: [0., -1., 0.] }, // left
+        Vertex { position: [10., 5., -10.], normal: [0., -1., 0.] }, // right
+        Vertex { position: [10., 5., 10.], normal: [0., -1., 0.] }, // near
     ];
     let (vertex_buffer, vertex_future) = ImmutableBuffer::from_iter(
         vertices.into_iter(), BufferUsage::vertex_buffer(), queue.clone())
         .unwrap();
 
-    let indices: Vec<u32> = vec![
+    let indices: Vec<VertexIndexType> = vec![
         0, 1, 2,
         1, 3, 2,
     ];
