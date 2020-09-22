@@ -2,7 +2,7 @@ use std::collections::HashSet;
 use std::sync::Arc;
 
 use cgmath::{Deg, Matrix4, perspective, Point3, SquareMatrix, vec3};
-use vulkano::buffer::{BufferUsage, CpuAccessibleBuffer, CpuBufferPool};
+use vulkano::buffer::{BufferUsage, CpuBufferPool, ImmutableBuffer};
 use vulkano::buffer::cpu_pool::CpuBufferPoolSubbuffer;
 use vulkano::command_buffer::{AutoCommandBufferBuilder, DynamicState};
 use vulkano::descriptor::descriptor_set::{PersistentDescriptorSet, PersistentDescriptorSetBuf};
@@ -129,7 +129,7 @@ impl App {
         let pipeline = Self::create_pipeline(&device, &render_pass);
         let mut dynamic_state = Self::create_dynamic_state();
         let framebuffers = Self::window_size_dependent_setup(&swapchain_images, render_pass.clone(), &mut dynamic_state);
-        let mesh = Self::create_mesh(&device);
+        let mesh = Self::create_mesh(graphics_queue.clone());
         let uniform_buffers = Self::create_camera_ubo(&device, pipeline.clone(), swapchain.dimensions());
 
         let recreating_swapchain_necessary = false;
@@ -359,15 +359,15 @@ impl App {
         }
     }
 
-    fn create_mesh(device: &Arc<Device>) -> Mesh {
+    fn create_mesh(queue: Arc<Queue>) -> Mesh {
         let vertices: Vec<Vertex> = vec![
             Vertex { position: [-10., 5., -10.] },   // far
             Vertex { position: [-10., 5., 10.] }, // left
             Vertex { position: [10., 5., -10.] }, // right
             Vertex { position: [10., 5., 10.] }, // near
         ];
-        let vertex_buffer = CpuAccessibleBuffer::from_iter(
-            device.clone(), BufferUsage::all(), false, vertices.into_iter())
+        let (vertex_buffer, vertex_future) = ImmutableBuffer::from_iter(
+            vertices.into_iter(), BufferUsage::vertex_buffer(), queue.clone())
             .unwrap();
 
         let indices: Vec<u32> = vec![
@@ -375,17 +375,20 @@ impl App {
             1, 3, 2,
         ];
 
-        let index_buffer =
-            CpuAccessibleBuffer::from_iter(device.clone(), BufferUsage::all(), false, indices.iter().cloned()).unwrap();
+        let (index_buffer, index_future) = ImmutableBuffer::from_iter(
+            indices.iter().cloned(), BufferUsage::index_buffer(), queue.clone()).unwrap();
 
         let instances: Vec<InstanceData> = vec![
             InstanceData { colour: [1.0, 1.0, 1.0] }
         ];
 
-        let instances_buffer = CpuAccessibleBuffer::from_iter(
-            device.clone(), BufferUsage::all(), false, instances.into_iter())
+        let (instances_buffer, instances_future) = ImmutableBuffer::from_iter(
+            instances.into_iter(), BufferUsage::vertex_buffer(), queue.clone())
             .unwrap();
 
+        vertex_future.flush().unwrap();
+        index_future.flush().unwrap();
+        instances_future.flush().unwrap();
         Mesh { vertex_buffer, index_buffer, instances_buffer }
     }
 
@@ -394,7 +397,7 @@ impl App {
         pipeline: Arc<dyn GraphicsPipelineAbstract + Send + Sync>,
         window_size: [u32; 2],
     ) -> Arc<PersistentDescriptorSet<((), PersistentDescriptorSetBuf<CpuBufferPoolSubbuffer<Camera, Arc<StdMemoryPool>>>)>> {
-        let buffer_pool = CpuBufferPool::<Camera>::new(device.clone(), BufferUsage::all());
+        let buffer_pool = CpuBufferPool::<Camera>::new(device.clone(), BufferUsage::uniform_buffer());
         let position: SphericalPoint3<f32> = SphericalPoint3::new(18., 1.7, 0.9);
         let look_at: Point3<f32> = Point3::new(0., 1., 0.);
 
@@ -510,7 +513,7 @@ impl App {
     fn draw_frame(&mut self) {
         self.previous_frame_end.as_mut().unwrap().cleanup_finished();
         if self.recreating_swapchain_necessary {
-            // I cannot assign directly to variables, see https://github.com/rust-lang/rfcs/issues/372
+            // I cannot assign directly to existing variables, see https://github.com/rust-lang/rfcs/issues/372
             let (new_swapchain, new_framebuffers) = Self::recreate_swapchain(self.surface.clone(), self.swapchain.clone(), self.render_pass.clone(), &mut self.dynamic_state);
             self.swapchain = new_swapchain;
             self.framebuffers = new_framebuffers;
