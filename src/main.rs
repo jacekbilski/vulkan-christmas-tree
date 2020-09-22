@@ -2,7 +2,7 @@ use std::collections::HashSet;
 use std::sync::Arc;
 
 use cgmath::{Deg, Matrix4, perspective, Point3, SquareMatrix, vec3};
-use vulkano::buffer::{BufferUsage, CpuBufferPool, ImmutableBuffer};
+use vulkano::buffer::{BufferUsage, CpuBufferPool};
 use vulkano::buffer::cpu_pool::CpuBufferPoolSubbuffer;
 use vulkano::command_buffer::{AutoCommandBufferBuilder, DynamicState};
 use vulkano::descriptor::descriptor_set::{PersistentDescriptorSet, PersistentDescriptorSetBuf};
@@ -29,9 +29,11 @@ use winit::window::{Window, WindowBuilder};
 
 use crate::coords::SphericalPoint3;
 use crate::mesh::{InstanceData, Mesh, Vertex};
+use crate::scene::ground;
 
 mod coords;
 mod mesh;
+mod scene;
 
 // settings
 pub const SCR_WIDTH: u32 = 1920;
@@ -129,7 +131,7 @@ impl App {
         let pipeline = Self::create_pipeline(&device, &render_pass);
         let mut dynamic_state = Self::create_dynamic_state();
         let framebuffers = Self::window_size_dependent_setup(&swapchain_images, render_pass.clone(), &mut dynamic_state);
-        let mesh = Self::create_mesh(graphics_queue.clone());
+        let mesh = ground::create_mesh(graphics_queue.clone());
         let uniform_buffers = Self::create_camera_ubo(&device, pipeline.clone(), swapchain.dimensions());
 
         let recreating_swapchain_necessary = false;
@@ -357,39 +359,6 @@ impl App {
             write_mask: None,
             reference: None,
         }
-    }
-
-    fn create_mesh(queue: Arc<Queue>) -> Mesh {
-        let vertices: Vec<Vertex> = vec![
-            Vertex { position: [-10., 5., -10.] },   // far
-            Vertex { position: [-10., 5., 10.] }, // left
-            Vertex { position: [10., 5., -10.] }, // right
-            Vertex { position: [10., 5., 10.] }, // near
-        ];
-        let (vertex_buffer, vertex_future) = ImmutableBuffer::from_iter(
-            vertices.into_iter(), BufferUsage::vertex_buffer(), queue.clone())
-            .unwrap();
-
-        let indices: Vec<u32> = vec![
-            0, 1, 2,
-            1, 3, 2,
-        ];
-
-        let (index_buffer, index_future) = ImmutableBuffer::from_iter(
-            indices.iter().cloned(), BufferUsage::index_buffer(), queue.clone()).unwrap();
-
-        let instances: Vec<InstanceData> = vec![
-            InstanceData { colour: [1.0, 1.0, 1.0] }
-        ];
-
-        let (instances_buffer, instances_future) = ImmutableBuffer::from_iter(
-            instances.into_iter(), BufferUsage::vertex_buffer(), queue.clone())
-            .unwrap();
-
-        vertex_future.flush().unwrap();
-        index_future.flush().unwrap();
-        instances_future.flush().unwrap();
-        Mesh { vertex_buffer, index_buffer, instances_buffer }
     }
 
     fn create_camera_ubo(
