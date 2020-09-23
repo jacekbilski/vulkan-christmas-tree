@@ -1,18 +1,70 @@
-use std::f32::consts::PI;
+use std::f32::consts::{FRAC_PI_2, FRAC_PI_4, FRAC_PI_6, FRAC_PI_8, PI};
 use std::sync::Arc;
 
-use cgmath::{Point3, vec3};
+use cgmath::{EuclideanSpace, Matrix4, Point3, vec3};
 use vulkano::buffer::{BufferUsage, ImmutableBuffer};
 use vulkano::device::Queue;
 use vulkano::sync::GpuFuture;
 
+use crate::coords::CylindricalPoint3;
 use crate::mesh::{InstanceData, Mesh, Vertex, VertexIndexType};
 
 const PRECISION: VertexIndexType = 8;
 const RADIUS: f32 = 0.2;
 
+struct Bauble {
+    center: CylindricalPoint3<f32>,
+    colour: [f32; 3],
+}
+
 pub fn create_mesh(queue: Arc<Queue>) -> Mesh {
     let (vertices, indices) = gen_sphere();
+
+    let red = [0.61424, 0.04136, 0.04136];
+    let blue = [0.04136, 0.04136, 0.61424];
+    let yellow = [0.61424, 0.61424, 0.04136];
+    let light_blue = [0.04136, 0.61424, 0.61424];
+    let violet = [0.61424, 0.04136, 0.61424];
+
+    let baubles: Vec<Bauble> = vec![
+        Bauble { center: CylindricalPoint3::new(0., 0., -2.7), colour: red },
+        Bauble { center: CylindricalPoint3::new(1.1, -0.5, -1.3), colour: blue },
+        Bauble { center: CylindricalPoint3::new(1.1, 1.7, -1.3), colour: yellow },
+        Bauble { center: CylindricalPoint3::new(1.5, 1.2, -0.25), colour: red },
+        Bauble { center: CylindricalPoint3::new(1.5, -1.7, -0.25), colour: light_blue },
+        Bauble { center: CylindricalPoint3::new(2.2, 1.0, 0.85), colour: light_blue },
+        Bauble { center: CylindricalPoint3::new(2.2, 3. * FRAC_PI_4, 0.85), colour: blue },
+        Bauble { center: CylindricalPoint3::new(2.2, -0.2, 0.85), colour: red },
+        Bauble { center: CylindricalPoint3::new(3., FRAC_PI_2, 1.8), colour: violet },
+        Bauble { center: CylindricalPoint3::new(3., -FRAC_PI_2, 1.8), colour: yellow },
+        Bauble { center: CylindricalPoint3::new(3., -FRAC_PI_4 - 3., 1.8), colour: red },
+        Bauble { center: CylindricalPoint3::new(3., 3.6, 1.8), colour: violet },
+        Bauble { center: CylindricalPoint3::new(3., 0.2, 1.8), colour: blue },
+        Bauble { center: CylindricalPoint3::new(3.6, 1. * FRAC_PI_6, 3.), colour: light_blue },
+        Bauble { center: CylindricalPoint3::new(3.6, 2. * FRAC_PI_6, 3.), colour: red },
+        Bauble { center: CylindricalPoint3::new(3.6, 4. * FRAC_PI_6, 3.), colour: blue },
+        Bauble { center: CylindricalPoint3::new(3.6, 5. * FRAC_PI_6, 3.), colour: violet },
+        Bauble { center: CylindricalPoint3::new(3.6, 6. * FRAC_PI_6, 3.), colour: yellow },
+        Bauble { center: CylindricalPoint3::new(3.6, 8. * FRAC_PI_6, 3.), colour: blue },
+        Bauble { center: CylindricalPoint3::new(3.6, 9. * FRAC_PI_6, 3.), colour: light_blue },
+        Bauble { center: CylindricalPoint3::new(3.6, 11. * FRAC_PI_6, 3.), colour: yellow },
+        Bauble { center: CylindricalPoint3::new(4., 3. * FRAC_PI_8, 4.1), colour: light_blue },
+        Bauble { center: CylindricalPoint3::new(4., 4. * FRAC_PI_8, 4.1), colour: yellow },
+        Bauble { center: CylindricalPoint3::new(4., 5. * FRAC_PI_8, 4.1), colour: blue },
+        Bauble { center: CylindricalPoint3::new(4., 7. * FRAC_PI_8, 4.1), colour: violet },
+        Bauble { center: CylindricalPoint3::new(4., 11. * FRAC_PI_8, 4.1), colour: red },
+        Bauble { center: CylindricalPoint3::new(4., 12. * FRAC_PI_8, 4.1), colour: blue },
+        Bauble { center: CylindricalPoint3::new(4., 13. * FRAC_PI_8, 4.1), colour: yellow },
+        Bauble { center: CylindricalPoint3::new(4., 17. * FRAC_PI_8, 4.1), colour: red },
+        Bauble { center: CylindricalPoint3::new(4., 21. * FRAC_PI_8, 4.1), colour: blue },
+    ];
+
+    let instances: Vec<InstanceData> = baubles.into_iter()
+        .map(|b| {
+            let point: Point3<f32> = b.center.into();
+            InstanceData { model: Matrix4::from_translation(point.to_vec()).into(), colour: b.colour }
+        })
+        .collect();
 
     let (vertex_buffer, vertex_future) = ImmutableBuffer::from_iter(
         vertices.into_iter(), BufferUsage::vertex_buffer(), queue.clone())
@@ -20,10 +72,6 @@ pub fn create_mesh(queue: Arc<Queue>) -> Mesh {
 
     let (index_buffer, index_future) = ImmutableBuffer::from_iter(
         indices.iter().cloned(), BufferUsage::index_buffer(), queue.clone()).unwrap();
-
-    let instances: Vec<InstanceData> = vec![
-        InstanceData { colour: [0.61424, 0.04136, 0.04136] }
-    ];
 
     let (instances_buffer, instances_future) = ImmutableBuffer::from_iter(
         instances.into_iter(), BufferUsage::vertex_buffer(), queue.clone())

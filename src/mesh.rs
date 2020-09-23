@@ -13,9 +13,10 @@ vulkano::impl_vertex!(Vertex, position, normal);
 
 #[derive(Default, Copy, Clone)]
 pub struct InstanceData {
+    pub model: [[f32; 4]; 4],
     pub colour: [f32; 3],
 }
-vulkano::impl_vertex!(InstanceData, colour);
+vulkano::impl_vertex!(InstanceData, model, colour);
 
 pub struct Mesh {
     pub vertex_buffer: Arc<dyn BufferAccess + Send + Sync>,

@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use cgmath::{Matrix4, SquareMatrix};
 use vulkano::buffer::{BufferUsage, ImmutableBuffer};
 use vulkano::device::Queue;
 use vulkano::sync::GpuFuture;
@@ -26,7 +27,7 @@ pub fn create_mesh(queue: Arc<Queue>) -> Mesh {
         indices.iter().cloned(), BufferUsage::index_buffer(), queue.clone()).unwrap();
 
     let instances: Vec<InstanceData> = vec![
-        InstanceData { colour: [1.0, 1.0, 1.0] }
+        InstanceData { model: Matrix4::identity().into(), colour: [1.0, 1.0, 1.0] }
     ];
 
     let (instances_buffer, instances_future) = ImmutableBuffer::from_iter(

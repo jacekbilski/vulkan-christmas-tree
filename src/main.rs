@@ -1,7 +1,7 @@
 use std::collections::HashSet;
 use std::sync::Arc;
 
-use cgmath::{Deg, Matrix4, perspective, Point3, SquareMatrix, vec3};
+use cgmath::{Deg, Matrix4, perspective, Point3, vec3};
 use vulkano::buffer::{BufferUsage, CpuBufferPool};
 use vulkano::buffer::cpu_pool::CpuBufferPoolSubbuffer;
 use vulkano::command_buffer::DynamicState;
@@ -75,7 +75,6 @@ mod fs {
 #[derive(Copy, Clone)]
 #[allow(unused)]
 pub struct Camera {
-    model: Matrix4<f32>,
     view: Matrix4<f32>,
     projection: Matrix4<f32>,
 }
@@ -368,7 +367,6 @@ impl App {
         let look_at: Point3<f32> = Point3::new(0., 1., 0.);
 
         let camera = Camera {
-            model: Matrix4::identity(),
             view: Matrix4::look_at(position.into(), look_at, vec3(0.0, 1.0, 0.0)),
             projection: perspective(Deg(45.0), window_size[0] as f32 / window_size[1] as f32, 0.1, 100.0),
         };
