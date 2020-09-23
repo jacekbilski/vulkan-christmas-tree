@@ -111,7 +111,7 @@ impl App {
         let pipeline = Self::create_pipeline(&device, &render_pass);
         let mut dynamic_state = Self::create_dynamic_state();
         let framebuffers = Self::window_size_dependent_setup(&swapchain_images, render_pass.clone(), &mut dynamic_state);
-        let scene = Scene::setup(&device, pipeline.clone(), graphics_queue.clone(), swapchain.dimensions());
+        let scene = Scene::setup(pipeline.clone(), graphics_queue.clone(), swapchain.dimensions());
 
         let recreating_swapchain_necessary = false;
         let previous_frame_end = Some(sync::now(device.clone()).boxed());
