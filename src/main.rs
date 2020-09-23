@@ -1,17 +1,12 @@
 use std::collections::HashSet;
 use std::sync::Arc;
 
-use cgmath::{Deg, Matrix4, perspective, Point3, vec3};
-use vulkano::buffer::{BufferUsage, CpuBufferPool};
-use vulkano::buffer::cpu_pool::CpuBufferPoolSubbuffer;
 use vulkano::command_buffer::DynamicState;
-use vulkano::descriptor::descriptor_set::{PersistentDescriptorSet, PersistentDescriptorSetBuf};
 use vulkano::device::{Device, DeviceExtensions, Features, Queue};
 use vulkano::framebuffer::{Framebuffer, FramebufferAbstract, RenderPassAbstract, Subpass};
 use vulkano::image::{ImageUsage, SwapchainImage};
 use vulkano::instance::{Instance, PhysicalDevice};
 use vulkano::instance::debug::{DebugCallback, MessageSeverity, MessageType};
-use vulkano::memory::pool::StdMemoryPool;
 use vulkano::pipeline::{GraphicsPipeline, GraphicsPipelineAbstract};
 use vulkano::pipeline::vertex::OneVertexOneInstanceDefinition;
 use vulkano::pipeline::viewport::Viewport;
@@ -26,7 +21,6 @@ use winit::event_loop::{ControlFlow, EventLoop};
 use winit::platform::desktop::EventLoopExtDesktop;
 use winit::window::{Window, WindowBuilder};
 
-use crate::coords::SphericalPoint3;
 use crate::mesh::{InstanceData, Vertex};
 use crate::scene::Scene;
 
@@ -72,13 +66,6 @@ mod fs {
     vulkano_shaders::shader! {ty: "fragment", path: "src/shaders/shader.frag"}
 }
 
-#[derive(Copy, Clone)]
-#[allow(unused)]
-pub struct Camera {
-    view: Matrix4<f32>,
-    projection: Matrix4<f32>,
-}
-
 struct App {
     // instance: Arc<Instance>,
     #[allow(unused)]
@@ -106,9 +93,6 @@ struct App {
 
     scene: Scene,
 
-    // this should be of type Arc<dyn DescriptorSetsCollection + Send + Sync>
-    uniform_buffers: Arc<PersistentDescriptorSet<((), PersistentDescriptorSetBuf<CpuBufferPoolSubbuffer<Camera, Arc<StdMemoryPool>>>)>>,
-
     previous_frame_end: Option<Box<dyn GpuFuture>>,
     recreating_swapchain_necessary: bool,
 }
@@ -127,8 +111,7 @@ impl App {
         let pipeline = Self::create_pipeline(&device, &render_pass);
         let mut dynamic_state = Self::create_dynamic_state();
         let framebuffers = Self::window_size_dependent_setup(&swapchain_images, render_pass.clone(), &mut dynamic_state);
-        let scene = Scene::setup(graphics_queue.clone());
-        let uniform_buffers = Self::create_camera_ubo(&device, pipeline.clone(), swapchain.dimensions());
+        let scene = Scene::setup(&device, pipeline.clone(), graphics_queue.clone(), swapchain.dimensions());
 
         let recreating_swapchain_necessary = false;
         let previous_frame_end = Some(sync::now(device.clone()).boxed());
@@ -157,8 +140,6 @@ impl App {
             framebuffers,
 
             scene,
-
-            uniform_buffers,
 
             previous_frame_end,
             recreating_swapchain_necessary,
@@ -357,33 +338,6 @@ impl App {
         }
     }
 
-    fn create_camera_ubo(
-        device: &Arc<Device>,
-        pipeline: Arc<dyn GraphicsPipelineAbstract + Send + Sync>,
-        window_size: [u32; 2],
-    ) -> Arc<PersistentDescriptorSet<((), PersistentDescriptorSetBuf<CpuBufferPoolSubbuffer<Camera, Arc<StdMemoryPool>>>)>> {
-        let buffer_pool = CpuBufferPool::<Camera>::new(device.clone(), BufferUsage::uniform_buffer());
-        let position: SphericalPoint3<f32> = SphericalPoint3::new(18., 1.7, 0.9);
-        let look_at: Point3<f32> = Point3::new(0., 1., 0.);
-
-        let camera = Camera {
-            view: Matrix4::look_at(position.into(), look_at, vec3(0.0, 1.0, 0.0)),
-            projection: perspective(Deg(45.0), window_size[0] as f32 / window_size[1] as f32, 0.1, 100.0),
-        };
-
-        let buffer = buffer_pool.next(camera).unwrap();
-
-        let layout = pipeline.descriptor_set_layout(0).unwrap();
-        let set = Arc::new(
-            PersistentDescriptorSet::start(layout.clone())
-                .add_buffer(buffer)
-                .unwrap()
-                .build()
-                .unwrap()
-        );
-        set
-    }
-
     fn window_size_dependent_setup(
         images: &[Arc<SwapchainImage<Window>>],
         render_pass: Arc<dyn RenderPassAbstract + Send + Sync>,
@@ -502,7 +456,6 @@ impl App {
             self.framebuffers[image_num].clone(),
             self.graphics_pipeline.clone(),
             &self.dynamic_state,
-            self.uniform_buffers.clone(),
         );
 
         let future = self.previous_frame_end
