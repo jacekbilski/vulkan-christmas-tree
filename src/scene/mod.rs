@@ -1,9 +1,9 @@
 use std::sync::Arc;
 
 use cgmath::Point3;
-use vulkano::buffer::BufferAccess;
 use vulkano::command_buffer::{AutoCommandBuffer, AutoCommandBufferBuilder, DynamicState};
-use vulkano::descriptor::descriptor_set::{PersistentDescriptorSet, PersistentDescriptorSetBuf};
+use vulkano::descriptor::descriptor_set::PersistentDescriptorSet;
+use vulkano::descriptor::DescriptorSet;
 use vulkano::device::{Device, Queue};
 use vulkano::format::ClearValue;
 use vulkano::framebuffer::FramebufferAbstract;
@@ -12,6 +12,7 @@ use vulkano::pipeline::GraphicsPipelineAbstract;
 use crate::coords::SphericalPoint3;
 use crate::mesh::Mesh;
 use crate::scene::camera::Camera;
+use crate::scene::lights::Lights;
 
 mod baubles;
 mod camera;
@@ -23,8 +24,7 @@ pub struct Scene {
     camera: Camera,
     meshes: Vec<Mesh>,
 
-    // this should be of type Arc<dyn DescriptorSetsCollection + Send + Sync>
-    uniform_buffers: Arc<PersistentDescriptorSet<((), PersistentDescriptorSetBuf<Arc<dyn BufferAccess + Send + Sync>>)>>,
+    uniform_buffers: Arc<dyn DescriptorSet + Send + Sync>,
 }
 
 impl Scene {
@@ -48,7 +48,7 @@ impl Scene {
         pipeline: Arc<dyn GraphicsPipelineAbstract + Send + Sync>,
         graphics_queue: Arc<Queue>,
         camera: Camera,
-    ) -> Arc<PersistentDescriptorSet<((), PersistentDescriptorSetBuf<Arc<dyn BufferAccess + Send + Sync>>)>> {
+    ) -> Arc<dyn DescriptorSet + Send + Sync> {
         let camera_buffer = camera.as_buffer(graphics_queue.clone());
 
         let layout = pipeline.descriptor_set_layout(0).unwrap();
