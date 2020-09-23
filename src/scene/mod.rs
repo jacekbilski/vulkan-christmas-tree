@@ -1,45 +1,23 @@
 use std::sync::Arc;
 
-use cgmath::{Deg, Matrix4, perspective, Point3, vec3};
-use vulkano::buffer::{BufferAccess, BufferUsage, ImmutableBuffer};
+use cgmath::Point3;
+use vulkano::buffer::BufferAccess;
 use vulkano::command_buffer::{AutoCommandBuffer, AutoCommandBufferBuilder, DynamicState};
 use vulkano::descriptor::descriptor_set::{PersistentDescriptorSet, PersistentDescriptorSetBuf};
 use vulkano::device::{Device, Queue};
 use vulkano::format::ClearValue;
 use vulkano::framebuffer::FramebufferAbstract;
 use vulkano::pipeline::GraphicsPipelineAbstract;
-use vulkano::sync::GpuFuture;
 
 use crate::coords::SphericalPoint3;
 use crate::mesh::Mesh;
+use crate::scene::camera::Camera;
 
 mod baubles;
+mod camera;
 mod ground;
 
 const CLEAR_VALUE: ClearValue = ClearValue::Float([0.015_7, 0., 0.360_7, 1.0]);
-
-#[derive(Copy, Clone)]
-#[allow(unused)]
-struct Camera {
-    view: Matrix4<f32>,
-    projection: Matrix4<f32>,
-}
-
-impl Camera {
-    fn new(position: SphericalPoint3<f32>, look_at: Point3<f32>, window_size: [u32; 2]) -> Self {
-        Camera {
-            view: Matrix4::look_at(position.into(), look_at, vec3(0.0, 1.0, 0.0)),
-            projection: perspective(Deg(45.0), window_size[0] as f32 / window_size[1] as f32, 0.1, 100.0),
-        }
-    }
-
-    fn as_buffer(&self, queue: Arc<Queue>) -> Arc<dyn BufferAccess + Send + Sync> {
-        let (buffer, future) = ImmutableBuffer::from_data(
-            self.clone(), BufferUsage::uniform_buffer(), queue.clone()).unwrap();
-        future.flush().unwrap();
-        buffer
-    }
-}
 
 pub struct Scene {
     camera: Camera,
