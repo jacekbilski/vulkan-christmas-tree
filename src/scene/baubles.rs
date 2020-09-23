@@ -12,19 +12,52 @@ use crate::mesh::{InstanceData, Mesh, Vertex, VertexIndexType};
 const PRECISION: VertexIndexType = 8;
 const RADIUS: f32 = 0.2;
 
+#[derive(Default, Copy, Clone)]
+struct Colour {
+    pub ambient: [f32; 3],
+    pub diffuse: [f32; 3],
+    pub specular: [f32; 3],
+    pub shininess: f32,
+}
+
 struct Bauble {
     center: CylindricalPoint3<f32>,
-    colour: [f32; 3],
+    colour: Colour
 }
 
 pub fn create_mesh(queue: Arc<Queue>) -> Mesh {
     let (vertices, indices) = gen_sphere();
 
-    let red = [0.61424, 0.04136, 0.04136];
-    let blue = [0.04136, 0.04136, 0.61424];
-    let yellow = [0.61424, 0.61424, 0.04136];
-    let light_blue = [0.04136, 0.61424, 0.61424];
-    let violet = [0.61424, 0.04136, 0.61424];
+    let red = Colour {
+        ambient: [0.1745, 0.01175, 0.01175],
+        diffuse: [0.61424, 0.04136, 0.04136],
+        specular: [0.727811, 0.626959, 0.626959],
+        shininess: 76.8,
+    };
+    let blue = Colour {
+        ambient: [0.01175, 0.01175, 0.1745],
+        diffuse: [0.04136, 0.04136, 0.61424],
+        specular: [0.626959, 0.626959, 0.61424],
+        shininess: 76.8,
+    };
+    let yellow = Colour {
+        ambient: [0.1745, 0.1745, 0.01175],
+        diffuse: [0.61424, 0.61424, 0.04136],
+        specular: [0.727811, 0.727811, 0.626959],
+        shininess: 76.8,
+    };
+    let light_blue = Colour {
+        ambient: [0.01175, 0.1745, 0.1745],
+        diffuse: [0.04136, 0.61424, 0.61424],
+        specular: [0.626959, 0.727811, 0.727811],
+        shininess: 76.8,
+    };
+    let violet = Colour {
+        ambient: [0.1745, 0.01175, 0.1745],
+        diffuse: [0.61424, 0.04136, 0.61424],
+        specular: [0.727811, 0.626959, 0.727811],
+        shininess: 76.8,
+    };
 
     let baubles: Vec<Bauble> = vec![
         Bauble { center: CylindricalPoint3::new(0., 0., -2.7), colour: red },
@@ -62,7 +95,13 @@ pub fn create_mesh(queue: Arc<Queue>) -> Mesh {
     let instances: Vec<InstanceData> = baubles.into_iter()
         .map(|b| {
             let point: Point3<f32> = b.center.into();
-            InstanceData { model: Matrix4::from_translation(point.to_vec()).into(), colour: b.colour }
+            InstanceData {
+                model: Matrix4::from_translation(point.to_vec()).into(),
+                ambient: b.colour.ambient,
+                diffuse: b.colour.diffuse,
+                specular: b.colour.specular,
+                shininess: b.colour.shininess,
+            }
         })
         .collect();
 

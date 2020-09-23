@@ -27,7 +27,13 @@ pub fn create_mesh(queue: Arc<Queue>) -> Mesh {
         indices.iter().cloned(), BufferUsage::index_buffer(), queue.clone()).unwrap();
 
     let instances: Vec<InstanceData> = vec![
-        InstanceData { model: Matrix4::identity().into(), colour: [1.0, 1.0, 1.0] }
+        InstanceData {
+            model: Matrix4::identity().into(),
+            ambient: [1., 1., 1.],
+            diffuse: [0.623960, 0.686685, 0.693872],
+            specular: [0.5, 0.5, 0.5],
+            shininess: 225.,
+        }
     ];
 
     let (instances_buffer, instances_future) = ImmutableBuffer::from_iter(
