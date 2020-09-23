@@ -12,7 +12,8 @@ use vulkano::pipeline::GraphicsPipelineAbstract;
 use crate::Camera;
 use crate::mesh::Mesh;
 
-pub mod ground;
+mod baubles;
+mod ground;
 
 const CLEAR_VALUE: ClearValue = ClearValue::Float([0.015_7, 0., 0.360_7, 1.0]);
 
@@ -23,7 +24,8 @@ pub struct Scene {
 impl Scene {
     pub fn setup(graphics_queue: Arc<Queue>) -> Self {
         let mut meshes: Vec<Mesh> = Vec::with_capacity(1);
-        meshes.push(ground::create_mesh(graphics_queue));
+        meshes.push(ground::create_mesh(graphics_queue.clone()));
+        meshes.push(baubles::create_mesh(graphics_queue.clone()));
         Self { meshes }
     }
 
@@ -39,11 +41,21 @@ impl Scene {
         let mut command_builder = AutoCommandBufferBuilder::primary_one_time_submit(device, graphics_queue.family()).unwrap();
         command_builder
             .begin_render_pass(framebuffer, false, vec![CLEAR_VALUE])
-            .unwrap()
+            .unwrap();
 
-            .draw_indexed(graphics_pipeline, dynamic_state, vec![self.meshes[0].vertex_buffer.clone(), self.meshes[0].instances_buffer.clone()], self.meshes[0].index_buffer.clone(), uniform_buffers, ())
-            .unwrap()
+        for mesh in &self.meshes[..] {
+            command_builder
+                .draw_indexed(
+                    graphics_pipeline.clone(),
+                    dynamic_state,
+                    vec![mesh.vertex_buffer.clone(), mesh.instances_buffer.clone()],
+                    mesh.index_buffer.clone(),
+                    uniform_buffers.clone(),
+                    ())
+                .unwrap();
+        }
 
+        command_builder
             .end_render_pass()
             .unwrap();
         command_builder.build().unwrap()
