@@ -69,15 +69,15 @@ impl Scene {
         lights: Lights,
     ) -> Arc<dyn DescriptorSet + Send + Sync> {
         let camera_buffer = camera.as_buffer(graphics_queue.clone());
-        let lights_buffer = lights.as_buffer(graphics_queue.clone());
+        // let lights_buffer = lights.as_buffer(graphics_queue.clone());
 
         let layout = pipeline.descriptor_set_layout(0).unwrap();
         let set = Arc::new(
             PersistentDescriptorSet::start(layout.clone())
                 .add_buffer(camera_buffer)
                 .unwrap()
-                .add_buffer(lights_buffer)
-                .unwrap()
+                // .add_buffer(lights_buffer)
+                // .unwrap()
                 .build()
                 .unwrap()
         );
