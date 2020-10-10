@@ -20,13 +20,35 @@ const WINDOW_TITLE: &'static str = "Vulkan Christmas Tree";
 
 const APPLICATION_VERSION: u32 = vk::make_version(0, 1, 0);
 const ENGINE_VERSION: u32 = vk::make_version(0, 1, 0);
-const VULKAN_API_VERSION: u32 = vk::make_version(1, 2, 148);
+const VULKAN_API_VERSION: u32 = vk::make_version(1, 2, 154);
+
+struct QueueFamilyIndices {
+    graphics_family: Option<u32>,
+    compute_family: Option<u32>,
+    transfer_family: Option<u32>,
+}
+impl QueueFamilyIndices {
+    fn new() -> Self {
+        Self {
+            graphics_family: None,
+            compute_family: None,
+            transfer_family: None,
+        }
+    }
+
+    fn is_complete(&self) -> bool {
+        self.graphics_family.is_some()
+            && self.compute_family.is_some()
+            && self.transfer_family.is_some()
+    }
+}
 
 struct App {
     _entry: ash::Entry,
     instance: ash::Instance,
     debug_utils_loader: ash::extensions::ext::DebugUtils,
     debug_messenger: vk::DebugUtilsMessengerEXT,
+    _physical_device: vk::PhysicalDevice,
 }
 
 impl App {
@@ -34,12 +56,14 @@ impl App {
         let entry = ash::Entry::new().unwrap();
         let instance = App::create_instance(&entry);
         let (debug_utils_loader, debug_messenger) = App::setup_debug_utils(&entry, &instance);
+        let physical_device = App::pick_physical_device(&instance);
 
         App {
             _entry: entry,
             instance,
             debug_utils_loader,
             debug_messenger,
+            _physical_device: physical_device,
         }
     }
 
@@ -52,15 +76,6 @@ impl App {
     }
 
     fn create_instance(entry: &ash::Entry) -> ash::Instance {
-
-        let layer_properties = entry
-            .enumerate_instance_layer_properties()
-            .expect("Failed to enumerate Instance Layers Properties");
-        println!("Found {} layers", layer_properties.len());
-        for layer_property in layer_properties.iter() {
-            println!("Found layer: {:?}", layer_property);
-        }
-
         let app_name = CString::new(WINDOW_TITLE).unwrap();
         let engine_name = CString::new("Vulkan Engine").unwrap();
         let app_info = vk::ApplicationInfo::builder()
@@ -80,7 +95,6 @@ impl App {
             .map(|layer_name| layer_name.as_ptr())
             .collect();
 
-        // let layer_names: Vec<*const c_char> = required_layer_names();
         let extension_names: Vec<*const c_char> = required_extension_names();
 
         let mut messenger_ci = App::build_messenger_create_info();
@@ -99,6 +113,102 @@ impl App {
         };
 
         instance
+    }
+
+    fn pick_physical_device(instance: &ash::Instance) -> vk::PhysicalDevice {
+        let physical_devices: Vec<vk::PhysicalDevice> = unsafe {
+            instance
+                .enumerate_physical_devices()
+                .expect("Failed to enumerate Physical Devices!")
+        };
+
+        println!(
+            "{} devices (GPU) found with vulkan support.",
+            physical_devices.len()
+        );
+
+        let result = physical_devices
+            .iter()
+            .find(|physical_device| App::is_physical_device_suitable(instance, **physical_device));
+
+        match result {
+            None => panic!("Failed to find a suitable GPU!"),
+            Some(physical_device) => *physical_device,
+        }
+    }
+
+    fn is_physical_device_suitable(
+        instance: &ash::Instance,
+        physical_device: vk::PhysicalDevice,
+    ) -> bool {
+        let device_properties = unsafe { instance.get_physical_device_properties(physical_device) };
+
+        unsafe {
+            let device_type = match device_properties.device_type {
+                vk::PhysicalDeviceType::CPU => "Cpu",
+                vk::PhysicalDeviceType::INTEGRATED_GPU => "Integrated GPU",
+                vk::PhysicalDeviceType::DISCRETE_GPU => "Discrete GPU",
+                vk::PhysicalDeviceType::VIRTUAL_GPU => "Virtual GPU",
+                vk::PhysicalDeviceType::OTHER => "Unknown",
+                _ => panic!(),
+            };
+            let device_name = CStr::from_ptr(device_properties.device_name.as_ptr());
+            println!(
+                "\tDevice Name: '{}', id: '{}', type: '{}'",
+                device_name.to_str().unwrap(),
+                device_properties.device_id,
+                device_type
+            );
+        }
+
+        {
+            let major_version = vk::version_major(device_properties.api_version);
+            let minor_version = vk::version_minor(device_properties.api_version);
+            let patch_version = vk::version_patch(device_properties.api_version);
+
+            println!(
+                "\tAPI Version: {}.{}.{}",
+                major_version, minor_version, patch_version
+            );
+        }
+
+        let indices = App::find_queue_family(instance, physical_device);
+
+        return indices.is_complete();
+    }
+
+    fn find_queue_family(
+        instance: &ash::Instance,
+        physical_device: vk::PhysicalDevice,
+    ) -> QueueFamilyIndices {
+        let queue_families = unsafe { instance.get_physical_device_queue_family_properties(physical_device) };
+
+        let mut queue_family_indices = QueueFamilyIndices::new();
+
+        let mut index: u32 = 0;
+        for queue_family in queue_families.iter() {
+            if queue_family.queue_count > 0 && queue_family.queue_flags.contains(vk::QueueFlags::GRAPHICS) {
+                queue_family_indices.graphics_family = Some(index);
+                queue_family_indices.transfer_family = Some(index);
+            }
+
+            if queue_family.queue_count > 0 && queue_family.queue_flags.contains(vk::QueueFlags::COMPUTE) {
+                queue_family_indices.compute_family = Some(index);
+                queue_family_indices.transfer_family = Some(index);
+            }
+
+            if queue_family.queue_count > 0 && queue_family.queue_flags.contains(vk::QueueFlags::TRANSFER) {
+                queue_family_indices.transfer_family = Some(index);
+            }
+
+            if queue_family_indices.is_complete() {
+                break;
+            }
+
+            index += 1;
+        }
+
+        queue_family_indices
     }
 
     fn setup_debug_utils(
