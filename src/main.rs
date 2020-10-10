@@ -1,3 +1,6 @@
+use std::ffi::{CStr, CString};
+use std::os::raw::{c_char, c_void};
+
 use ash::extensions::ext::DebugUtils;
 use ash::extensions::khr::{Surface, XlibSurface};
 use ash::version::{EntryV1_0, InstanceV1_0};
@@ -6,9 +9,6 @@ use ash::vk::DebugUtilsMessengerCreateInfoEXT;
 use winit::event::{ElementState, Event, KeyboardInput, VirtualKeyCode, WindowEvent};
 use winit::event_loop::{ControlFlow, EventLoop};
 use winit::window::Window;
-
-use std::ffi::{CStr, CString};
-use std::os::raw::{c_char, c_void};
 
 // settings
 const SCR_WIDTH: u32 = 1920;
@@ -181,23 +181,30 @@ impl App {
         instance: &ash::Instance,
         physical_device: vk::PhysicalDevice,
     ) -> QueueFamilyIndices {
-        let queue_families = unsafe { instance.get_physical_device_queue_family_properties(physical_device) };
+        let queue_families =
+            unsafe { instance.get_physical_device_queue_family_properties(physical_device) };
 
         let mut queue_family_indices = QueueFamilyIndices::new();
 
         let mut index: u32 = 0;
         for queue_family in queue_families.iter() {
-            if queue_family.queue_count > 0 && queue_family.queue_flags.contains(vk::QueueFlags::GRAPHICS) {
+            if queue_family.queue_count > 0
+                && queue_family.queue_flags.contains(vk::QueueFlags::GRAPHICS)
+            {
                 queue_family_indices.graphics_family = Some(index);
                 queue_family_indices.transfer_family = Some(index);
             }
 
-            if queue_family.queue_count > 0 && queue_family.queue_flags.contains(vk::QueueFlags::COMPUTE) {
+            if queue_family.queue_count > 0
+                && queue_family.queue_flags.contains(vk::QueueFlags::COMPUTE)
+            {
                 queue_family_indices.compute_family = Some(index);
                 queue_family_indices.transfer_family = Some(index);
             }
 
-            if queue_family.queue_count > 0 && queue_family.queue_flags.contains(vk::QueueFlags::TRANSFER) {
+            if queue_family.queue_count > 0
+                && queue_family.queue_flags.contains(vk::QueueFlags::TRANSFER)
+            {
                 queue_family_indices.transfer_family = Some(index);
             }
 
@@ -234,11 +241,13 @@ impl App {
                 vk::DebugUtilsMessageSeverityFlagsEXT::WARNING |
                     // vk::DebugUtilsMessageSeverityFlagsEXT::VERBOSE |
                     // vk::DebugUtilsMessageSeverityFlagsEXT::INFO |
-                    vk::DebugUtilsMessageSeverityFlagsEXT::ERROR)
+                    vk::DebugUtilsMessageSeverityFlagsEXT::ERROR,
+            )
             .message_type(
                 vk::DebugUtilsMessageTypeFlagsEXT::GENERAL
                     | vk::DebugUtilsMessageTypeFlagsEXT::PERFORMANCE
-                    | vk::DebugUtilsMessageTypeFlagsEXT::VALIDATION)
+                    | vk::DebugUtilsMessageTypeFlagsEXT::VALIDATION,
+            )
             .pfn_user_callback(Some(vulkan_debug_utils_callback))
             .build()
     }
@@ -248,36 +257,38 @@ impl App {
     }
 
     pub fn main_loop(mut self, event_loop: EventLoop<()>, window: Window) {
-        event_loop.run(move |event, _, control_flow| {
-            match event {
-                Event::WindowEvent { event: WindowEvent::CloseRequested, .. } => {
-                    *control_flow = ControlFlow::Exit;
-                }
-                Event::WindowEvent {
-                    event: WindowEvent::KeyboardInput {
-                        input: KeyboardInput {
-                            virtual_keycode: Some(virtual_code),
-                            state: ElementState::Pressed,
-                            ..
-                        },
+        event_loop.run(move |event, _, control_flow| match event {
+            Event::WindowEvent {
+                event: WindowEvent::CloseRequested,
+                ..
+            } => {
+                *control_flow = ControlFlow::Exit;
+            }
+            Event::WindowEvent {
+                event:
+                    WindowEvent::KeyboardInput {
+                        input:
+                            KeyboardInput {
+                                virtual_keycode: Some(virtual_code),
+                                state: ElementState::Pressed,
+                                ..
+                            },
                         ..
                     },
-                    .. } => {
-                    match virtual_code {
-                        VirtualKeyCode::Escape => {
-                            *control_flow = ControlFlow::Exit;
-                        }
-                        _ => ()
-                    }
+                ..
+            } => match virtual_code {
+                VirtualKeyCode::Escape => {
+                    *control_flow = ControlFlow::Exit;
                 }
-                Event::MainEventsCleared => {
-                    window.request_redraw();
-                }
-                Event::RedrawRequested(_window_id) => {
-                    self.draw_frame();
-                }
-                _ => ()
+                _ => (),
+            },
+            Event::MainEventsCleared => {
+                window.request_redraw();
             }
+            Event::RedrawRequested(_window_id) => {
+                self.draw_frame();
+            }
+            _ => (),
         });
     }
 }
@@ -285,7 +296,8 @@ impl App {
 impl Drop for App {
     fn drop(&mut self) {
         unsafe {
-            self.debug_utils_loader.destroy_debug_utils_messenger(self.debug_messenger, None);
+            self.debug_utils_loader
+                .destroy_debug_utils_messenger(self.debug_messenger, None);
             self.instance.destroy_instance(None);
         }
     }
