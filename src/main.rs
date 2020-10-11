@@ -3,7 +3,7 @@ use std::os::raw::{c_char, c_void};
 
 use ash::extensions::ext::DebugUtils;
 use ash::extensions::khr::{Surface, XlibSurface};
-use ash::version::{EntryV1_0, InstanceV1_0};
+use ash::version::{DeviceV1_0, EntryV1_0, InstanceV1_0};
 use ash::vk;
 use ash::vk::DebugUtilsMessengerCreateInfoEXT;
 use winit::event::{ElementState, Event, KeyboardInput, VirtualKeyCode, WindowEvent};
@@ -49,6 +49,8 @@ struct App {
     debug_utils_loader: ash::extensions::ext::DebugUtils,
     debug_messenger: vk::DebugUtilsMessengerEXT,
     _physical_device: vk::PhysicalDevice,
+    device: ash::Device,
+    _graphics_queue: vk::Queue,
 }
 
 impl App {
@@ -57,6 +59,8 @@ impl App {
         let instance = App::create_instance(&entry);
         let (debug_utils_loader, debug_messenger) = App::setup_debug_utils(&entry, &instance);
         let physical_device = App::pick_physical_device(&instance);
+        let (logical_device, graphics_queue) =
+            App::create_logical_device(&instance, physical_device);
 
         App {
             _entry: entry,
@@ -64,6 +68,8 @@ impl App {
             debug_utils_loader,
             debug_messenger,
             _physical_device: physical_device,
+            device: logical_device,
+            _graphics_queue: graphics_queue,
         }
     }
 
@@ -175,6 +181,47 @@ impl App {
         let indices = App::find_queue_family(instance, physical_device);
 
         return indices.is_complete();
+    }
+
+    fn create_logical_device(
+        instance: &ash::Instance,
+        physical_device: vk::PhysicalDevice,
+    ) -> (ash::Device, vk::Queue) {
+        let indices = App::find_queue_family(instance, physical_device);
+
+        let queue_priorities: [f32; 1] = [1.0];
+        let queue_create_info = vk::DeviceQueueCreateInfo::builder()
+            .queue_family_index(indices.graphics_family.unwrap())
+            .queue_priorities(&queue_priorities)
+            .build();
+
+        let physical_device_features = vk::PhysicalDeviceFeatures::builder().build();
+
+        let enable_layer_raw_names: Vec<CString> = required_layer_names()
+            .iter()
+            .map(|layer_name| CString::new(*layer_name).unwrap())
+            .collect();
+        let enable_layer_names: Vec<*const i8> = enable_layer_raw_names
+            .iter()
+            .map(|layer_name| layer_name.as_ptr())
+            .collect();
+
+        let device_create_info = vk::DeviceCreateInfo::builder()
+            .queue_create_infos(&[queue_create_info])
+            .enabled_layer_names(&enable_layer_names)
+            .enabled_features(&physical_device_features)
+            .build();
+
+        let device: ash::Device = unsafe {
+            instance
+                .create_device(physical_device, &device_create_info, None)
+                .expect("Failed to create logical Device!")
+        };
+
+        let graphics_queue =
+            unsafe { device.get_device_queue(indices.graphics_family.unwrap(), 0) };
+
+        (device, graphics_queue)
     }
 
     fn find_queue_family(
@@ -296,6 +343,7 @@ impl App {
 impl Drop for App {
     fn drop(&mut self) {
         unsafe {
+            self.device.destroy_device(None);
             self.debug_utils_loader
                 .destroy_debug_utils_messenger(self.debug_messenger, None);
             self.instance.destroy_instance(None);
