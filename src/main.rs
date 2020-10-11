@@ -26,6 +26,7 @@ struct QueueFamilyIndices {
     graphics_family: Option<u32>,
     compute_family: Option<u32>,
     transfer_family: Option<u32>,
+    present_family: Option<u32>,
 }
 impl QueueFamilyIndices {
     fn new() -> Self {
@@ -33,6 +34,7 @@ impl QueueFamilyIndices {
             graphics_family: None,
             compute_family: None,
             transfer_family: None,
+            present_family: None,
         }
     }
 
@@ -40,36 +42,49 @@ impl QueueFamilyIndices {
         self.graphics_family.is_some()
             && self.compute_family.is_some()
             && self.transfer_family.is_some()
+            && self.present_family.is_some()
     }
 }
 
 struct App {
     _entry: ash::Entry,
     instance: ash::Instance,
+    surface_loader: ash::extensions::khr::Surface,
+    surface: vk::SurfaceKHR,
     debug_utils_loader: ash::extensions::ext::DebugUtils,
     debug_messenger: vk::DebugUtilsMessengerEXT,
     _physical_device: vk::PhysicalDevice,
     device: ash::Device,
     _graphics_queue: vk::Queue,
+    _present_queue: vk::Queue,
 }
 
 impl App {
-    pub fn new() -> Self {
+    pub fn new(window: &Window) -> Self {
         let entry = ash::Entry::new().unwrap();
         let instance = App::create_instance(&entry);
+        let (surface_loader, surface) = App::create_surface(&entry, &instance, &window);
         let (debug_utils_loader, debug_messenger) = App::setup_debug_utils(&entry, &instance);
-        let physical_device = App::pick_physical_device(&instance);
-        let (logical_device, graphics_queue) =
-            App::create_logical_device(&instance, physical_device);
+        let physical_device = App::pick_physical_device(&instance, &surface_loader, surface);
+        let (device, family_indices) =
+            App::create_logical_device(&instance, physical_device, &surface_loader, surface);
+
+        let graphics_queue =
+            unsafe { device.get_device_queue(family_indices.graphics_family.unwrap(), 0) };
+        let present_queue =
+            unsafe { device.get_device_queue(family_indices.present_family.unwrap(), 0) };
 
         App {
             _entry: entry,
             instance,
+            surface_loader,
+            surface,
             debug_utils_loader,
             debug_messenger,
             _physical_device: physical_device,
-            device: logical_device,
+            device,
             _graphics_queue: graphics_queue,
+            _present_queue: present_queue,
         }
     }
 
@@ -79,6 +94,31 @@ impl App {
             .with_inner_size(winit::dpi::PhysicalSize::new(SCR_WIDTH, SCR_HEIGHT))
             .build(event_loop)
             .expect("Failed to create window.")
+    }
+
+    #[cfg(all(unix, not(target_os = "android"), not(target_os = "macos")))]
+    fn create_surface(
+        entry: &ash::Entry,
+        instance: &ash::Instance,
+        window: &winit::window::Window,
+    ) -> (ash::extensions::khr::Surface, vk::SurfaceKHR) {
+        let surface = unsafe {
+            use winit::platform::unix::WindowExtUnix;
+
+            let x11_window = window.xlib_window().unwrap();
+            let x11_display = window.xlib_display().unwrap();
+            let x11_create_info = vk::XlibSurfaceCreateInfoKHR::builder()
+                .window(x11_window)
+                .dpy(x11_display as *mut vk::Display)
+                .build();
+            let xlib_surface_loader = XlibSurface::new(entry, instance);
+            xlib_surface_loader
+                .create_xlib_surface(&x11_create_info, None)
+                .expect("Failed to create surface.")
+        };
+        let surface_loader = ash::extensions::khr::Surface::new(entry, instance);
+
+        (surface_loader, surface)
     }
 
     fn create_instance(entry: &ash::Entry) -> ash::Instance {
@@ -121,7 +161,11 @@ impl App {
         instance
     }
 
-    fn pick_physical_device(instance: &ash::Instance) -> vk::PhysicalDevice {
+    fn pick_physical_device(
+        instance: &ash::Instance,
+        surface_loader: &ash::extensions::khr::Surface,
+        surface: vk::SurfaceKHR,
+    ) -> vk::PhysicalDevice {
         let physical_devices: Vec<vk::PhysicalDevice> = unsafe {
             instance
                 .enumerate_physical_devices()
@@ -133,9 +177,9 @@ impl App {
             physical_devices.len()
         );
 
-        let result = physical_devices
-            .iter()
-            .find(|physical_device| App::is_physical_device_suitable(instance, **physical_device));
+        let result = physical_devices.iter().find(|physical_device| {
+            App::is_physical_device_suitable(instance, **physical_device, surface_loader, surface)
+        });
 
         match result {
             None => panic!("Failed to find a suitable GPU!"),
@@ -146,6 +190,8 @@ impl App {
     fn is_physical_device_suitable(
         instance: &ash::Instance,
         physical_device: vk::PhysicalDevice,
+        surface_loader: &ash::extensions::khr::Surface,
+        surface: vk::SurfaceKHR,
     ) -> bool {
         let device_properties = unsafe { instance.get_physical_device_properties(physical_device) };
 
@@ -178,7 +224,7 @@ impl App {
             );
         }
 
-        let indices = App::find_queue_family(instance, physical_device);
+        let indices = App::find_queue_family(instance, physical_device, surface_loader, surface);
 
         return indices.is_complete();
     }
@@ -186,8 +232,10 @@ impl App {
     fn create_logical_device(
         instance: &ash::Instance,
         physical_device: vk::PhysicalDevice,
-    ) -> (ash::Device, vk::Queue) {
-        let indices = App::find_queue_family(instance, physical_device);
+        surface_loader: &ash::extensions::khr::Surface,
+        surface: vk::SurfaceKHR,
+    ) -> (ash::Device, QueueFamilyIndices) {
+        let indices = App::find_queue_family(instance, physical_device, surface_loader, surface);
 
         let queue_priorities: [f32; 1] = [1.0];
         let queue_create_info = vk::DeviceQueueCreateInfo::builder()
@@ -218,15 +266,14 @@ impl App {
                 .expect("Failed to create logical Device!")
         };
 
-        let graphics_queue =
-            unsafe { device.get_device_queue(indices.graphics_family.unwrap(), 0) };
-
-        (device, graphics_queue)
+        (device, indices)
     }
 
     fn find_queue_family(
         instance: &ash::Instance,
         physical_device: vk::PhysicalDevice,
+        surface_loader: &ash::extensions::khr::Surface,
+        surface: vk::SurfaceKHR,
     ) -> QueueFamilyIndices {
         let queue_families =
             unsafe { instance.get_physical_device_queue_family_properties(physical_device) };
@@ -235,24 +282,29 @@ impl App {
 
         let mut index: u32 = 0;
         for queue_family in queue_families.iter() {
-            if queue_family.queue_count > 0
-                && queue_family.queue_flags.contains(vk::QueueFlags::GRAPHICS)
-            {
-                queue_family_indices.graphics_family = Some(index);
-                queue_family_indices.transfer_family = Some(index);
-            }
+            if queue_family.queue_count > 0 {
+                if queue_family.queue_flags.contains(vk::QueueFlags::GRAPHICS) {
+                    queue_family_indices.graphics_family = Some(index);
+                    queue_family_indices.transfer_family = Some(index);
+                }
 
-            if queue_family.queue_count > 0
-                && queue_family.queue_flags.contains(vk::QueueFlags::COMPUTE)
-            {
-                queue_family_indices.compute_family = Some(index);
-                queue_family_indices.transfer_family = Some(index);
-            }
+                if queue_family.queue_flags.contains(vk::QueueFlags::COMPUTE) {
+                    queue_family_indices.compute_family = Some(index);
+                    queue_family_indices.transfer_family = Some(index);
+                }
 
-            if queue_family.queue_count > 0
-                && queue_family.queue_flags.contains(vk::QueueFlags::TRANSFER)
-            {
-                queue_family_indices.transfer_family = Some(index);
+                if queue_family.queue_flags.contains(vk::QueueFlags::TRANSFER) {
+                    queue_family_indices.transfer_family = Some(index);
+                }
+
+                let is_present_support = unsafe {
+                    surface_loader
+                        .get_physical_device_surface_support(physical_device, index as u32, surface)
+                        .unwrap()
+                };
+                if is_present_support {
+                    queue_family_indices.present_family = Some(index);
+                }
             }
 
             if queue_family_indices.is_complete() {
@@ -344,6 +396,7 @@ impl Drop for App {
     fn drop(&mut self) {
         unsafe {
             self.device.destroy_device(None);
+            self.surface_loader.destroy_surface(self.surface, None);
             self.debug_utils_loader
                 .destroy_debug_utils_messenger(self.debug_messenger, None);
             self.instance.destroy_instance(None);
@@ -355,7 +408,7 @@ fn main() {
     let event_loop = EventLoop::new();
     let window = App::init_window(&event_loop);
 
-    let app = App::new();
+    let app = App::new(&window);
     app.main_loop(event_loop, window);
 }
 
