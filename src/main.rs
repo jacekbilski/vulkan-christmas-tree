@@ -158,6 +158,17 @@ impl App {
         let surface = unsafe {
             use winit::platform::unix::WindowExtUnix;
 
+            // let wayland_surface = window.wayland_surface().unwrap();
+            // let wayland_display = window.wayland_display().unwrap();
+            // let wayland_create_info = vk::WaylandSurfaceCreateInfoKHR::builder()
+            //     .surface(wayland_surface)
+            //     .display(wayland_display)
+            //     .build();
+            // let wayland_surface_loader = WaylandSurface::new(entry, instance);
+            // wayland_surface_loader
+            //     .create_wayland_surface(&wayland_create_info, None)
+            //     .expect("Failed to create surface.");
+
             let x11_window = window.xlib_window().unwrap();
             let x11_display = window.xlib_display().unwrap();
             let x11_create_info = vk::XlibSurfaceCreateInfoKHR::builder()
