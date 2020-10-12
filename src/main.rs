@@ -1,5 +1,7 @@
+use std::collections::HashSet;
 use std::ffi::{CStr, CString};
 use std::os::raw::{c_char, c_void};
+use std::ptr;
 
 use ash::extensions::ext::DebugUtils;
 use ash::extensions::khr::{Surface, XlibSurface};
@@ -15,6 +17,7 @@ const SCR_WIDTH: u32 = 1920;
 const SCR_HEIGHT: u32 = 1080;
 
 const VALIDATION_LAYER_NAME: &'static str = "VK_LAYER_KHRONOS_validation";
+const DEVICE_EXTENSIONS: [&'static str; 1] = ["VK_KHR_swapchain"];
 
 const WINDOW_TITLE: &'static str = "Vulkan Christmas Tree";
 
@@ -51,6 +54,20 @@ struct SurfaceComposite {
     surface: vk::SurfaceKHR,
 }
 
+struct SwapChainComposite {
+    loader: ash::extensions::khr::Swapchain,
+    swapchain: vk::SwapchainKHR,
+    images: Vec<vk::Image>,
+    format: vk::Format,
+    extent: vk::Extent2D,
+}
+
+struct SwapChainSupportDetails {
+    capabilities: vk::SurfaceCapabilitiesKHR,
+    formats: Vec<vk::SurfaceFormatKHR>,
+    present_modes: Vec<vk::PresentModeKHR>,
+}
+
 struct App {
     _entry: ash::Entry,
     instance: ash::Instance,
@@ -64,6 +81,12 @@ struct App {
 
     _graphics_queue: vk::Queue,
     _present_queue: vk::Queue,
+
+    swapchain_loader: ash::extensions::khr::Swapchain,
+    swapchain: vk::SwapchainKHR,
+    _swapchain_images: Vec<vk::Image>,
+    _swapchain_format: vk::Format,
+    _swapchain_extent: vk::Extent2D,
 }
 
 impl App {
@@ -75,6 +98,13 @@ impl App {
         let physical_device = App::pick_physical_device(&instance, &surface_composite);
         let (device, family_indices) =
             App::create_logical_device(&instance, physical_device, &surface_composite);
+        let swapchain_composite = App::create_swapchain(
+            &instance,
+            &device,
+            physical_device,
+            &surface_composite,
+            &family_indices,
+        );
 
         let graphics_queue =
             unsafe { device.get_device_queue(family_indices.graphics_family.unwrap(), 0) };
@@ -88,10 +118,18 @@ impl App {
             surface: surface_composite.surface,
             debug_utils_loader,
             debug_messenger,
+
             _physical_device: physical_device,
             device,
+
             _graphics_queue: graphics_queue,
             _present_queue: present_queue,
+
+            swapchain_loader: swapchain_composite.loader,
+            swapchain: swapchain_composite.swapchain,
+            _swapchain_format: swapchain_composite.format,
+            _swapchain_images: swapchain_composite.images,
+            _swapchain_extent: swapchain_composite.extent,
         }
     }
 
@@ -181,11 +219,6 @@ impl App {
                 .expect("Failed to enumerate Physical Devices!")
         };
 
-        println!(
-            "{} devices (GPU) found with vulkan support.",
-            physical_devices.len()
-        );
-
         let result = physical_devices.iter().find(|physical_device| {
             App::is_physical_device_suitable(instance, **physical_device, &surface_composite)
         });
@@ -201,40 +234,205 @@ impl App {
         physical_device: vk::PhysicalDevice,
         surface_composite: &SurfaceComposite,
     ) -> bool {
-        let device_properties = unsafe { instance.get_physical_device_properties(physical_device) };
-
-        unsafe {
-            let device_type = match device_properties.device_type {
-                vk::PhysicalDeviceType::CPU => "Cpu",
-                vk::PhysicalDeviceType::INTEGRATED_GPU => "Integrated GPU",
-                vk::PhysicalDeviceType::DISCRETE_GPU => "Discrete GPU",
-                vk::PhysicalDeviceType::VIRTUAL_GPU => "Virtual GPU",
-                vk::PhysicalDeviceType::OTHER => "Unknown",
-                _ => panic!(),
-            };
-            let device_name = CStr::from_ptr(device_properties.device_name.as_ptr());
-            println!(
-                "\tDevice Name: '{}', id: '{}', type: '{}'",
-                device_name.to_str().unwrap(),
-                device_properties.device_id,
-                device_type
-            );
-        }
-
-        {
-            let major_version = vk::version_major(device_properties.api_version);
-            let minor_version = vk::version_minor(device_properties.api_version);
-            let patch_version = vk::version_patch(device_properties.api_version);
-
-            println!(
-                "\tAPI Version: {}.{}.{}",
-                major_version, minor_version, patch_version
-            );
-        }
-
         let indices = App::find_queue_family(instance, physical_device, &surface_composite);
+        let is_queue_family_supported = indices.is_complete();
 
-        return indices.is_complete();
+        let is_device_extension_supported =
+            App::check_device_extension_support(instance, physical_device);
+
+        let is_swapchain_supported = if is_device_extension_supported {
+            let swapchain_support = App::find_swapchain_support(physical_device, surface_composite);
+            !swapchain_support.formats.is_empty() && !swapchain_support.present_modes.is_empty()
+        } else {
+            false
+        };
+
+        return is_queue_family_supported
+            && is_device_extension_supported
+            && is_swapchain_supported;
+    }
+
+    fn check_device_extension_support(
+        instance: &ash::Instance,
+        physical_device: vk::PhysicalDevice,
+    ) -> bool {
+        let available_extensions = unsafe {
+            instance
+                .enumerate_device_extension_properties(physical_device)
+                .expect("Failed to get device extension properties.")
+        };
+
+        let mut available_extension_names = vec![];
+
+        for extension in available_extensions.iter() {
+            let extension_name = unsafe { CStr::from_ptr(extension.extension_name.as_ptr()) }
+                .to_str()
+                .unwrap()
+                .to_owned();
+            available_extension_names.push(extension_name);
+        }
+
+        let mut required_extensions = HashSet::new();
+        for extension in DEVICE_EXTENSIONS.iter() {
+            required_extensions.insert(extension.to_string());
+        }
+
+        for extension_name in available_extension_names.iter() {
+            required_extensions.remove(extension_name);
+        }
+
+        return required_extensions.is_empty();
+    }
+
+    fn find_swapchain_support(
+        physical_device: vk::PhysicalDevice,
+        surface_composite: &SurfaceComposite,
+    ) -> SwapChainSupportDetails {
+        unsafe {
+            let capabilities = surface_composite
+                .loader
+                .get_physical_device_surface_capabilities(
+                    physical_device,
+                    surface_composite.surface,
+                )
+                .expect("Failed to query for surface capabilities.");
+            let formats = surface_composite
+                .loader
+                .get_physical_device_surface_formats(physical_device, surface_composite.surface)
+                .expect("Failed to query for surface formats.");
+            let present_modes = surface_composite
+                .loader
+                .get_physical_device_surface_present_modes(
+                    physical_device,
+                    surface_composite.surface,
+                )
+                .expect("Failed to query for surface present mode.");
+
+            SwapChainSupportDetails {
+                capabilities,
+                formats,
+                present_modes,
+            }
+        }
+    }
+
+    fn create_swapchain(
+        instance: &ash::Instance,
+        device: &ash::Device,
+        physical_device: vk::PhysicalDevice,
+        surface_composite: &SurfaceComposite,
+        queue_family: &QueueFamilyIndices,
+    ) -> SwapChainComposite {
+        let swapchain_support = App::find_swapchain_support(physical_device, surface_composite);
+
+        let surface_format = App::choose_swapchain_format(&swapchain_support.formats);
+        let present_mode = App::choose_swapchain_present_mode(&swapchain_support.present_modes);
+        let extent = App::choose_swapchain_extent(&swapchain_support.capabilities);
+
+        let image_count = swapchain_support.capabilities.min_image_count + 1;
+        let image_count = if swapchain_support.capabilities.max_image_count > 0 {
+            image_count.min(swapchain_support.capabilities.max_image_count)
+        } else {
+            image_count
+        };
+
+        let (image_sharing_mode, queue_family_index_count, queue_family_indices) =
+            if queue_family.graphics_family != queue_family.present_family {
+                (
+                    vk::SharingMode::EXCLUSIVE,
+                    2,
+                    vec![
+                        queue_family.graphics_family.unwrap(),
+                        queue_family.present_family.unwrap(),
+                    ],
+                )
+            } else {
+                (vk::SharingMode::EXCLUSIVE, 0, vec![])
+            };
+
+        let swapchain_create_info = vk::SwapchainCreateInfoKHR {
+            s_type: vk::StructureType::SWAPCHAIN_CREATE_INFO_KHR,
+            p_next: ptr::null(),
+            flags: vk::SwapchainCreateFlagsKHR::empty(),
+            surface: surface_composite.surface,
+            min_image_count: image_count,
+            image_color_space: surface_format.color_space,
+            image_format: surface_format.format,
+            image_extent: extent,
+            image_usage: vk::ImageUsageFlags::COLOR_ATTACHMENT,
+            image_sharing_mode,
+            p_queue_family_indices: queue_family_indices.as_ptr(),
+            queue_family_index_count,
+            pre_transform: swapchain_support.capabilities.current_transform,
+            composite_alpha: vk::CompositeAlphaFlagsKHR::OPAQUE,
+            present_mode,
+            clipped: vk::TRUE,
+            old_swapchain: vk::SwapchainKHR::null(),
+            image_array_layers: 1,
+        };
+
+        let loader = ash::extensions::khr::Swapchain::new(instance, device);
+        let swapchain = unsafe {
+            loader
+                .create_swapchain(&swapchain_create_info, None)
+                .expect("Failed to create Swapchain!")
+        };
+
+        let images = unsafe {
+            loader
+                .get_swapchain_images(swapchain)
+                .expect("Failed to get Swapchain Images.")
+        };
+
+        SwapChainComposite {
+            loader,
+            swapchain,
+            format: surface_format.format,
+            extent,
+            images,
+        }
+    }
+
+    fn choose_swapchain_format(
+        available_formats: &Vec<vk::SurfaceFormatKHR>,
+    ) -> vk::SurfaceFormatKHR {
+        // check if list contains most widely used R8G8B8A8 format with nonlinear color space
+        let selected_format = available_formats.iter().find(|format| {
+            format.format == vk::Format::B8G8R8A8_SRGB
+                && format.color_space == vk::ColorSpaceKHR::SRGB_NONLINEAR
+        });
+
+        // return the first format from the list
+        match selected_format {
+            Some(f) => f.clone(),
+            None => available_formats.first().unwrap().clone(),
+        }
+    }
+
+    fn choose_swapchain_present_mode(
+        available_present_modes: &Vec<vk::PresentModeKHR>,
+    ) -> vk::PresentModeKHR {
+        // prefer MAILBOX
+        let selected_present_mode = available_present_modes
+            .iter()
+            .find(|present_mode| **present_mode == vk::PresentModeKHR::MAILBOX);
+
+        // if not, use FIFO
+        match selected_present_mode {
+            Some(m) => *m,
+            None => vk::PresentModeKHR::FIFO,
+        }
+    }
+
+    fn choose_swapchain_extent(capabilities: &vk::SurfaceCapabilitiesKHR) -> vk::Extent2D {
+        if capabilities.current_extent.width != u32::max_value() {
+            capabilities.current_extent
+        } else {
+            vk::Extent2D {
+                width: SCR_WIDTH,
+                height: SCR_HEIGHT,
+            }
+        }
     }
 
     fn create_logical_device(
@@ -260,11 +458,15 @@ impl App {
             .iter()
             .map(|layer_name| layer_name.as_ptr())
             .collect();
+        let enable_extension_names = [
+            ash::extensions::khr::Swapchain::name().as_ptr(), // currently just enable the Swapchain extension.
+        ];
 
         let device_create_info = vk::DeviceCreateInfo::builder()
             .queue_create_infos(&[queue_create_info])
             .enabled_layer_names(&enable_layer_names)
             .enabled_features(&physical_device_features)
+            .enabled_extension_names(&enable_extension_names)
             .build();
 
         let device: ash::Device = unsafe {
@@ -406,6 +608,8 @@ impl App {
 impl Drop for App {
     fn drop(&mut self) {
         unsafe {
+            self.swapchain_loader
+                .destroy_swapchain(self.swapchain, None);
             self.device.destroy_device(None);
             self.surface_loader.destroy_surface(self.surface, None);
             self.debug_utils_loader
