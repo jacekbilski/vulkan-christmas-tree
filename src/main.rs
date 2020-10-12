@@ -1,7 +1,6 @@
 use std::collections::HashSet;
 use std::ffi::{CStr, CString};
 use std::os::raw::{c_char, c_void};
-use std::ptr;
 
 use ash::extensions::ext::DebugUtils;
 use ash::extensions::khr::{Surface, XlibSurface};
@@ -355,40 +354,34 @@ impl App {
             image_count
         };
 
-        let (image_sharing_mode, queue_family_index_count, queue_family_indices) =
+        let (image_sharing_mode, queue_family_indices) =
             if queue_family.graphics_family != queue_family.present_family {
                 (
                     vk::SharingMode::EXCLUSIVE,
-                    2,
                     vec![
                         queue_family.graphics_family.unwrap(),
                         queue_family.present_family.unwrap(),
                     ],
                 )
             } else {
-                (vk::SharingMode::EXCLUSIVE, 0, vec![])
+                (vk::SharingMode::EXCLUSIVE, vec![])
             };
 
-        let swapchain_create_info = vk::SwapchainCreateInfoKHR {
-            s_type: vk::StructureType::SWAPCHAIN_CREATE_INFO_KHR,
-            p_next: ptr::null(),
-            flags: vk::SwapchainCreateFlagsKHR::empty(),
-            surface: surface_composite.surface,
-            min_image_count: image_count,
-            image_color_space: surface_format.color_space,
-            image_format: surface_format.format,
-            image_extent: extent,
-            image_usage: vk::ImageUsageFlags::COLOR_ATTACHMENT,
-            image_sharing_mode,
-            p_queue_family_indices: queue_family_indices.as_ptr(),
-            queue_family_index_count,
-            pre_transform: swapchain_support.capabilities.current_transform,
-            composite_alpha: vk::CompositeAlphaFlagsKHR::OPAQUE,
-            present_mode,
-            clipped: vk::TRUE,
-            old_swapchain: vk::SwapchainKHR::null(),
-            image_array_layers: 1,
-        };
+        let swapchain_create_info = vk::SwapchainCreateInfoKHR::builder()
+            .surface(surface_composite.surface)
+            .min_image_count(image_count)
+            .image_color_space(surface_format.color_space)
+            .image_format(surface_format.format)
+            .image_extent(extent)
+            .image_usage(vk::ImageUsageFlags::COLOR_ATTACHMENT)
+            .image_sharing_mode(image_sharing_mode)
+            .queue_family_indices(&queue_family_indices)
+            .pre_transform(swapchain_support.capabilities.current_transform)
+            .composite_alpha(vk::CompositeAlphaFlagsKHR::OPAQUE)
+            .present_mode(present_mode)
+            .clipped(true)
+            .image_array_layers(1)
+            .build();
 
         let loader = ash::extensions::khr::Swapchain::new(instance, device);
         let swapchain = unsafe {
