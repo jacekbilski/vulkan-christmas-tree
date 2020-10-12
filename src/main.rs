@@ -102,7 +102,7 @@ impl App {
             &instance,
             &device,
             physical_device,
-            // &window,
+            &window,
             &surface_composite,
             &family_indices,
         );
@@ -338,6 +338,7 @@ impl App {
         instance: &ash::Instance,
         device: &ash::Device,
         physical_device: vk::PhysicalDevice,
+        window: &winit::window::Window,
         surface_composite: &SurfaceComposite,
         queue_family: &QueueFamilyIndices,
     ) -> SwapChainComposite {
@@ -345,7 +346,7 @@ impl App {
 
         let surface_format = App::choose_swapchain_format(&swapchain_support.formats);
         let present_mode = App::choose_swapchain_present_mode(&swapchain_support.present_modes);
-        let extent = App::choose_swapchain_extent(&swapchain_support.capabilities);
+        let extent = App::choose_swapchain_extent(&swapchain_support.capabilities, window);
 
         let image_count = swapchain_support.capabilities.min_image_count + 1;
         let image_count = if swapchain_support.capabilities.max_image_count > 0 {
@@ -436,13 +437,17 @@ impl App {
         }
     }
 
-    fn choose_swapchain_extent(capabilities: &vk::SurfaceCapabilitiesKHR) -> vk::Extent2D {
+    fn choose_swapchain_extent(
+        capabilities: &vk::SurfaceCapabilitiesKHR,
+        window: &winit::window::Window,
+    ) -> vk::Extent2D {
         if capabilities.current_extent.width != u32::max_value() {
             capabilities.current_extent
         } else {
+            let window_size = window.inner_size();
             vk::Extent2D {
-                width: SCR_WIDTH,
-                height: SCR_HEIGHT,
+                width: window_size.width,
+                height: window_size.height,
             }
         }
     }
