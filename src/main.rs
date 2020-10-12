@@ -87,6 +87,7 @@ struct App {
     _swapchain_images: Vec<vk::Image>,
     _swapchain_format: vk::Format,
     _swapchain_extent: vk::Extent2D,
+    swapchain_imageviews: Vec<vk::ImageView>,
 }
 
 impl App {
@@ -102,8 +103,14 @@ impl App {
             &instance,
             &device,
             physical_device,
+            // &window,
             &surface_composite,
             &family_indices,
+        );
+        let swapchain_imageviews = App::create_image_views(
+            &device,
+            swapchain_composite.format,
+            &swapchain_composite.images,
         );
 
         let graphics_queue =
@@ -130,6 +137,7 @@ impl App {
             _swapchain_format: swapchain_composite.format,
             _swapchain_images: swapchain_composite.images,
             _swapchain_extent: swapchain_composite.extent,
+            swapchain_imageviews,
         }
     }
 
@@ -530,6 +538,41 @@ impl App {
         queue_family_indices
     }
 
+    fn create_image_views(
+        device: &ash::Device,
+        surface_format: vk::Format,
+        images: &Vec<vk::Image>,
+    ) -> Vec<vk::ImageView> {
+        let mut swapchain_imageviews = vec![];
+
+        for &image in images.iter() {
+            let components = vk::ComponentMapping::builder().build();
+            let subresource_range = vk::ImageSubresourceRange::builder()
+                .aspect_mask(vk::ImageAspectFlags::COLOR)
+                .base_mip_level(0)
+                .level_count(1)
+                .base_array_layer(0)
+                .layer_count(1)
+                .build();
+            let imageview_create_info = vk::ImageViewCreateInfo::builder()
+                .view_type(vk::ImageViewType::TYPE_2D)
+                .format(surface_format)
+                .components(components)
+                .subresource_range(subresource_range)
+                .image(image)
+                .build();
+
+            let imageview = unsafe {
+                device
+                    .create_image_view(&imageview_create_info, None)
+                    .expect("Failed to create Image View!")
+            };
+            swapchain_imageviews.push(imageview);
+        }
+
+        swapchain_imageviews
+    }
+
     fn setup_debug_utils(
         entry: &ash::Entry,
         instance: &ash::Instance,
@@ -608,6 +651,9 @@ impl App {
 impl Drop for App {
     fn drop(&mut self) {
         unsafe {
+            for &imageview in self.swapchain_imageviews.iter() {
+                self.device.destroy_image_view(imageview, None);
+            }
             self.swapchain_loader
                 .destroy_swapchain(self.swapchain, None);
             self.device.destroy_device(None);
