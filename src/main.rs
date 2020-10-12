@@ -46,6 +46,11 @@ impl QueueFamilyIndices {
     }
 }
 
+struct SurfaceComposite {
+    loader: ash::extensions::khr::Surface,
+    surface: vk::SurfaceKHR,
+}
+
 struct App {
     _entry: ash::Entry,
     instance: ash::Instance,
@@ -53,8 +58,10 @@ struct App {
     surface: vk::SurfaceKHR,
     debug_utils_loader: ash::extensions::ext::DebugUtils,
     debug_messenger: vk::DebugUtilsMessengerEXT,
+
     _physical_device: vk::PhysicalDevice,
     device: ash::Device,
+
     _graphics_queue: vk::Queue,
     _present_queue: vk::Queue,
 }
@@ -63,11 +70,11 @@ impl App {
     pub fn new(window: &Window) -> Self {
         let entry = ash::Entry::new().unwrap();
         let instance = App::create_instance(&entry);
-        let (surface_loader, surface) = App::create_surface(&entry, &instance, &window);
+        let surface_composite = App::create_surface(&entry, &instance, &window);
         let (debug_utils_loader, debug_messenger) = App::setup_debug_utils(&entry, &instance);
-        let physical_device = App::pick_physical_device(&instance, &surface_loader, surface);
+        let physical_device = App::pick_physical_device(&instance, &surface_composite);
         let (device, family_indices) =
-            App::create_logical_device(&instance, physical_device, &surface_loader, surface);
+            App::create_logical_device(&instance, physical_device, &surface_composite);
 
         let graphics_queue =
             unsafe { device.get_device_queue(family_indices.graphics_family.unwrap(), 0) };
@@ -77,8 +84,8 @@ impl App {
         App {
             _entry: entry,
             instance,
-            surface_loader,
-            surface,
+            surface_loader: surface_composite.loader,
+            surface: surface_composite.surface,
             debug_utils_loader,
             debug_messenger,
             _physical_device: physical_device,
@@ -101,7 +108,7 @@ impl App {
         entry: &ash::Entry,
         instance: &ash::Instance,
         window: &winit::window::Window,
-    ) -> (ash::extensions::khr::Surface, vk::SurfaceKHR) {
+    ) -> SurfaceComposite {
         let surface = unsafe {
             use winit::platform::unix::WindowExtUnix;
 
@@ -118,7 +125,10 @@ impl App {
         };
         let surface_loader = ash::extensions::khr::Surface::new(entry, instance);
 
-        (surface_loader, surface)
+        SurfaceComposite {
+            loader: surface_loader,
+            surface,
+        }
     }
 
     fn create_instance(entry: &ash::Entry) -> ash::Instance {
@@ -163,8 +173,7 @@ impl App {
 
     fn pick_physical_device(
         instance: &ash::Instance,
-        surface_loader: &ash::extensions::khr::Surface,
-        surface: vk::SurfaceKHR,
+        surface_composite: &SurfaceComposite,
     ) -> vk::PhysicalDevice {
         let physical_devices: Vec<vk::PhysicalDevice> = unsafe {
             instance
@@ -178,7 +187,7 @@ impl App {
         );
 
         let result = physical_devices.iter().find(|physical_device| {
-            App::is_physical_device_suitable(instance, **physical_device, surface_loader, surface)
+            App::is_physical_device_suitable(instance, **physical_device, &surface_composite)
         });
 
         match result {
@@ -190,8 +199,7 @@ impl App {
     fn is_physical_device_suitable(
         instance: &ash::Instance,
         physical_device: vk::PhysicalDevice,
-        surface_loader: &ash::extensions::khr::Surface,
-        surface: vk::SurfaceKHR,
+        surface_composite: &SurfaceComposite,
     ) -> bool {
         let device_properties = unsafe { instance.get_physical_device_properties(physical_device) };
 
@@ -224,7 +232,7 @@ impl App {
             );
         }
 
-        let indices = App::find_queue_family(instance, physical_device, surface_loader, surface);
+        let indices = App::find_queue_family(instance, physical_device, &surface_composite);
 
         return indices.is_complete();
     }
@@ -232,10 +240,9 @@ impl App {
     fn create_logical_device(
         instance: &ash::Instance,
         physical_device: vk::PhysicalDevice,
-        surface_loader: &ash::extensions::khr::Surface,
-        surface: vk::SurfaceKHR,
+        surface_composite: &SurfaceComposite,
     ) -> (ash::Device, QueueFamilyIndices) {
-        let indices = App::find_queue_family(instance, physical_device, surface_loader, surface);
+        let indices = App::find_queue_family(instance, physical_device, surface_composite);
 
         let queue_priorities: [f32; 1] = [1.0];
         let queue_create_info = vk::DeviceQueueCreateInfo::builder()
@@ -272,8 +279,7 @@ impl App {
     fn find_queue_family(
         instance: &ash::Instance,
         physical_device: vk::PhysicalDevice,
-        surface_loader: &ash::extensions::khr::Surface,
-        surface: vk::SurfaceKHR,
+        surface_composite: &SurfaceComposite,
     ) -> QueueFamilyIndices {
         let queue_families =
             unsafe { instance.get_physical_device_queue_family_properties(physical_device) };
@@ -298,8 +304,13 @@ impl App {
                 }
 
                 let is_present_support = unsafe {
-                    surface_loader
-                        .get_physical_device_surface_support(physical_device, index as u32, surface)
+                    surface_composite
+                        .loader
+                        .get_physical_device_surface_support(
+                            physical_device,
+                            index as u32,
+                            surface_composite.surface,
+                        )
                         .unwrap()
                 };
                 if is_present_support {
