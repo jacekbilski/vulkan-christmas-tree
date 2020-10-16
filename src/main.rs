@@ -3,7 +3,7 @@ use std::ffi::{CStr, CString};
 use std::os::raw::{c_char, c_void};
 
 use ash::extensions::ext::DebugUtils;
-use ash::extensions::khr::{Surface, XlibSurface};
+use ash::extensions::khr::{Surface, WaylandSurface, XlibSurface};
 use ash::version::{DeviceV1_0, EntryV1_0, InstanceV1_0};
 use ash::vk;
 use ash::vk::DebugUtilsMessengerCreateInfoEXT;
@@ -157,27 +157,31 @@ impl App {
         let surface = unsafe {
             use winit::platform::unix::WindowExtUnix;
 
-            // let wayland_surface = window.wayland_surface().unwrap();
-            // let wayland_display = window.wayland_display().unwrap();
-            // let wayland_create_info = vk::WaylandSurfaceCreateInfoKHR::builder()
-            //     .surface(wayland_surface)
-            //     .display(wayland_display)
-            //     .build();
-            // let wayland_surface_loader = WaylandSurface::new(entry, instance);
-            // wayland_surface_loader
-            //     .create_wayland_surface(&wayland_create_info, None)
-            //     .expect("Failed to create surface.");
-
-            let x11_window = window.xlib_window().unwrap();
-            let x11_display = window.xlib_display().unwrap();
-            let x11_create_info = vk::XlibSurfaceCreateInfoKHR::builder()
-                .window(x11_window)
-                .dpy(x11_display as *mut vk::Display)
-                .build();
-            let xlib_surface_loader = XlibSurface::new(entry, instance);
-            xlib_surface_loader
-                .create_xlib_surface(&x11_create_info, None)
-                .expect("Failed to create surface.")
+            if window.wayland_surface() != None {
+                println!("Using Wayland");
+                let wayland_surface = window.wayland_surface().unwrap();
+                let wayland_display = window.wayland_display().unwrap();
+                let wayland_create_info = vk::WaylandSurfaceCreateInfoKHR::builder()
+                    .surface(wayland_surface)
+                    .display(wayland_display)
+                    .build();
+                let wayland_surface_loader = WaylandSurface::new(entry, instance);
+                wayland_surface_loader
+                    .create_wayland_surface(&wayland_create_info, None)
+                    .expect("Failed to create surface.")
+            } else {
+                println!("Using X11");
+                let x11_window = window.xlib_window().unwrap();
+                let x11_display = window.xlib_display().unwrap();
+                let x11_create_info = vk::XlibSurfaceCreateInfoKHR::builder()
+                    .window(x11_window)
+                    .dpy(x11_display as *mut vk::Display)
+                    .build();
+                let xlib_surface_loader = XlibSurface::new(entry, instance);
+                xlib_surface_loader
+                    .create_xlib_surface(&x11_create_info, None)
+                    .expect("Failed to create surface.")
+            }
         };
         let surface_loader = ash::extensions::khr::Surface::new(entry, instance);
 
@@ -716,6 +720,7 @@ fn required_extension_names() -> Vec<*const c_char> {
     vec![
         Surface::name().as_ptr(),
         XlibSurface::name().as_ptr(),
+        WaylandSurface::name().as_ptr(),
         DebugUtils::name().as_ptr(),
     ]
 }
