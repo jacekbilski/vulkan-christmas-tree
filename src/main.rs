@@ -29,6 +29,13 @@ const VULKAN_API_VERSION: u32 = vk::make_version(1, 2, 154);
 const CLEAR_VALUE: vk::ClearColorValue = vk::ClearColorValue {
     float32: [0.015_7, 0., 0.360_7, 1.0],
 };
+const MAX_FRAMES_IN_FLIGHT: usize = 2;
+
+struct SyncObjects {
+    image_available_semaphores: Vec<vk::Semaphore>,
+    render_finished_semaphores: Vec<vk::Semaphore>,
+    inflight_fences: Vec<vk::Fence>,
+}
 
 struct QueueFamilyIndices {
     graphics_family: Option<u32>,
@@ -74,6 +81,8 @@ struct SwapChainSupportDetails {
 }
 
 struct App {
+    window: winit::window::Window,
+
     _entry: ash::Entry,
     instance: ash::Instance,
     surface_loader: ash::extensions::khr::Surface,
@@ -84,8 +93,8 @@ struct App {
     _physical_device: vk::PhysicalDevice,
     device: ash::Device,
 
-    _graphics_queue: vk::Queue,
-    _present_queue: vk::Queue,
+    graphics_queue: vk::Queue,
+    present_queue: vk::Queue,
 
     swapchain_loader: ash::extensions::khr::Swapchain,
     swapchain: vk::SwapchainKHR,
@@ -100,11 +109,17 @@ struct App {
     graphics_pipeline: vk::Pipeline,
 
     command_pool: vk::CommandPool,
-    _command_buffers: Vec<vk::CommandBuffer>,
+    command_buffers: Vec<vk::CommandBuffer>,
+
+    image_available_semaphores: Vec<vk::Semaphore>,
+    render_finished_semaphores: Vec<vk::Semaphore>,
+    in_flight_fences: Vec<vk::Fence>,
+    current_frame: usize,
 }
 
 impl App {
-    pub fn new(window: &Window) -> Self {
+    pub fn new(event_loop: &winit::event_loop::EventLoop<()>) -> Self {
+        let window = App::init_window(&event_loop);
         let entry = ash::Entry::new().unwrap();
         let instance = App::create_instance(&entry);
         let surface_composite = App::create_surface(&entry, &instance, &window);
@@ -147,8 +162,11 @@ impl App {
             render_pass,
             swapchain_composite.extent,
         );
+        let sync_ojbects = App::create_sync_objects(&device);
 
         App {
+            window,
+
             _entry: entry,
             instance,
             surface_loader: surface_composite.loader,
@@ -159,8 +177,8 @@ impl App {
             _physical_device: physical_device,
             device,
 
-            _graphics_queue: graphics_queue,
-            _present_queue: present_queue,
+            graphics_queue,
+            present_queue,
 
             swapchain_loader: swapchain_composite.loader,
             swapchain: swapchain_composite.swapchain,
@@ -175,7 +193,12 @@ impl App {
             graphics_pipeline,
 
             command_pool,
-            _command_buffers: command_buffers,
+            command_buffers,
+
+            image_available_semaphores: sync_ojbects.image_available_semaphores,
+            render_finished_semaphores: sync_ojbects.render_finished_semaphores,
+            in_flight_fences: sync_ojbects.inflight_fences,
+            current_frame: 0,
         }
     }
 
@@ -987,7 +1010,7 @@ impl App {
                     vk::PipelineBindPoint::GRAPHICS,
                     graphics_pipeline,
                 );
-                device.cmd_draw(command_buffer, 3, 1, 0, 0);
+                device.cmd_draw(command_buffer, 3, 1, 0, 0); // <- my entry point
 
                 device.cmd_end_render_pass(command_buffer);
 
@@ -998,6 +1021,47 @@ impl App {
         }
 
         command_buffers
+    }
+
+    fn create_sync_objects(device: &ash::Device) -> SyncObjects {
+        let mut sync_objects = SyncObjects {
+            image_available_semaphores: vec![],
+            render_finished_semaphores: vec![],
+            inflight_fences: vec![],
+        };
+
+        let semaphore_create_info = vk::SemaphoreCreateInfo {
+            ..Default::default()
+        };
+
+        let fence_create_info = vk::FenceCreateInfo {
+            flags: vk::FenceCreateFlags::SIGNALED,
+            ..Default::default()
+        };
+
+        for _ in 0..MAX_FRAMES_IN_FLIGHT {
+            unsafe {
+                let image_available_semaphore = device
+                    .create_semaphore(&semaphore_create_info, None)
+                    .expect("Failed to create Semaphore Object!");
+                let render_finished_semaphore = device
+                    .create_semaphore(&semaphore_create_info, None)
+                    .expect("Failed to create Semaphore Object!");
+                let inflight_fence = device
+                    .create_fence(&fence_create_info, None)
+                    .expect("Failed to create Fence Object!");
+
+                sync_objects
+                    .image_available_semaphores
+                    .push(image_available_semaphore);
+                sync_objects
+                    .render_finished_semaphores
+                    .push(render_finished_semaphore);
+                sync_objects.inflight_fences.push(inflight_fence);
+            }
+        }
+
+        sync_objects
     }
 
     fn setup_debug_utils(
@@ -1035,10 +1099,74 @@ impl App {
     }
 
     fn draw_frame(&mut self) {
-        // Drawing will be here
+        let wait_fences = [self.in_flight_fences[self.current_frame]];
+
+        let (image_index, _is_sub_optimal) = unsafe {
+            self.device
+                .wait_for_fences(&wait_fences, true, std::u64::MAX)
+                .expect("Failed to wait for Fence!");
+
+            self.swapchain_loader
+                .acquire_next_image(
+                    self.swapchain,
+                    std::u64::MAX,
+                    self.image_available_semaphores[self.current_frame],
+                    vk::Fence::null(),
+                )
+                .expect("Failed to acquire next image.")
+        };
+
+        let wait_semaphores = [self.image_available_semaphores[self.current_frame]];
+        let wait_stages = [vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT];
+        let signal_semaphores = [self.render_finished_semaphores[self.current_frame]];
+
+        let submit_infos = [vk::SubmitInfo {
+            wait_semaphore_count: wait_semaphores.len() as u32,
+            p_wait_semaphores: wait_semaphores.as_ptr(),
+            p_wait_dst_stage_mask: wait_stages.as_ptr(),
+            command_buffer_count: 1,
+            p_command_buffers: &self.command_buffers[image_index as usize],
+            signal_semaphore_count: signal_semaphores.len() as u32,
+            p_signal_semaphores: signal_semaphores.as_ptr(),
+            ..Default::default()
+        }];
+
+        unsafe {
+            self.device
+                .reset_fences(&wait_fences)
+                .expect("Failed to reset Fence!");
+
+            self.device
+                .queue_submit(
+                    self.graphics_queue,
+                    &submit_infos,
+                    self.in_flight_fences[self.current_frame],
+                )
+                .expect("Failed to execute queue submit.");
+        }
+
+        let swapchains = [self.swapchain];
+
+        let present_info = vk::PresentInfoKHR {
+            wait_semaphore_count: 1,
+            p_wait_semaphores: signal_semaphores.as_ptr(),
+            swapchain_count: 1,
+            p_swapchains: swapchains.as_ptr(),
+            p_image_indices: &image_index,
+            p_results: ptr::null_mut(),
+            ..Default::default()
+        };
+
+        unsafe {
+            self.swapchain_loader
+                .queue_present(self.present_queue, &present_info)
+                .expect("Failed to execute queue present.");
+        }
+
+        self.current_frame = (self.current_frame + 1) % MAX_FRAMES_IN_FLIGHT;
     }
 
-    pub fn main_loop(mut self, event_loop: EventLoop<()>, window: Window) {
+    pub fn main_loop(mut self, event_loop: EventLoop<()>) {
         event_loop.run(move |event, _, control_flow| match event {
             Event::WindowEvent {
                 event: WindowEvent::CloseRequested,
@@ -1065,10 +1193,17 @@ impl App {
                 _ => (),
             },
             Event::MainEventsCleared => {
-                window.request_redraw();
+                self.window.request_redraw();
             }
             Event::RedrawRequested(_window_id) => {
                 self.draw_frame();
+            }
+            Event::LoopDestroyed => {
+                unsafe {
+                    self.device
+                        .device_wait_idle()
+                        .expect("Failed to wait device idle!")
+                };
             }
             _ => (),
         });
@@ -1078,6 +1213,14 @@ impl App {
 impl Drop for App {
     fn drop(&mut self) {
         unsafe {
+            for i in 0..MAX_FRAMES_IN_FLIGHT {
+                self.device
+                    .destroy_semaphore(self.image_available_semaphores[i], None);
+                self.device
+                    .destroy_semaphore(self.render_finished_semaphores[i], None);
+                self.device.destroy_fence(self.in_flight_fences[i], None);
+            }
+
             self.device.destroy_command_pool(self.command_pool, None);
             for &framebuffer in self.swapchain_framebuffers.iter() {
                 self.device.destroy_framebuffer(framebuffer, None);
@@ -1102,10 +1245,9 @@ impl Drop for App {
 
 fn main() {
     let event_loop = EventLoop::new();
-    let window = App::init_window(&event_loop);
 
-    let app = App::new(&window);
-    app.main_loop(event_loop, window);
+    let app = App::new(&event_loop);
+    app.main_loop(event_loop);
 }
 
 /// the callback function used in Debug Utils.
