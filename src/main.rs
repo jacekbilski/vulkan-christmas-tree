@@ -11,7 +11,6 @@ use ash::vk;
 use ash::vk::DebugUtilsMessengerCreateInfoEXT;
 use winit::event::{ElementState, Event, KeyboardInput, VirtualKeyCode, WindowEvent};
 use winit::event_loop::{ControlFlow, EventLoop};
-use winit::window::Window;
 
 // settings
 const SCR_WIDTH: u32 = 1920;
@@ -90,17 +89,18 @@ struct App {
     debug_utils_loader: ash::extensions::ext::DebugUtils,
     debug_messenger: vk::DebugUtilsMessengerEXT,
 
-    _physical_device: vk::PhysicalDevice,
+    physical_device: vk::PhysicalDevice,
     device: ash::Device,
 
+    queue_family: QueueFamilyIndices,
     graphics_queue: vk::Queue,
     present_queue: vk::Queue,
 
     swapchain_loader: ash::extensions::khr::Swapchain,
     swapchain: vk::SwapchainKHR,
-    _swapchain_images: Vec<vk::Image>,
-    _swapchain_format: vk::Format,
-    _swapchain_extent: vk::Extent2D,
+    swapchain_images: Vec<vk::Image>,
+    swapchain_format: vk::Format,
+    swapchain_extent: vk::Extent2D,
     swapchain_imageviews: Vec<vk::ImageView>,
     swapchain_framebuffers: Vec<vk::Framebuffer>,
 
@@ -115,6 +115,8 @@ struct App {
     render_finished_semaphores: Vec<vk::Semaphore>,
     in_flight_fences: Vec<vk::Fence>,
     current_frame: usize,
+
+    is_framebuffer_resized: bool,
 }
 
 impl App {
@@ -125,19 +127,19 @@ impl App {
         let surface_composite = App::create_surface(&entry, &instance, &window);
         let (debug_utils_loader, debug_messenger) = App::setup_debug_utils(&entry, &instance);
         let physical_device = App::pick_physical_device(&instance, &surface_composite);
-        let (device, family_indices) =
+        let (device, queue_family) =
             App::create_logical_device(&instance, physical_device, &surface_composite);
         let graphics_queue =
-            unsafe { device.get_device_queue(family_indices.graphics_family.unwrap(), 0) };
+            unsafe { device.get_device_queue(queue_family.graphics_family.unwrap(), 0) };
         let present_queue =
-            unsafe { device.get_device_queue(family_indices.present_family.unwrap(), 0) };
+            unsafe { device.get_device_queue(queue_family.present_family.unwrap(), 0) };
         let swapchain_composite = App::create_swapchain(
             &instance,
             &device,
             physical_device,
             &window,
             &surface_composite,
-            &family_indices,
+            &queue_family,
         );
         let swapchain_imageviews = App::create_image_views(
             &device,
@@ -153,7 +155,7 @@ impl App {
             &swapchain_imageviews,
             &swapchain_composite.extent,
         );
-        let command_pool = App::create_command_pool(&device, &family_indices);
+        let command_pool = App::create_command_pool(&device, &queue_family);
         let command_buffers = App::create_command_buffers(
             &device,
             command_pool,
@@ -174,17 +176,18 @@ impl App {
             debug_utils_loader,
             debug_messenger,
 
-            _physical_device: physical_device,
+            physical_device,
             device,
 
+            queue_family,
             graphics_queue,
             present_queue,
 
             swapchain_loader: swapchain_composite.loader,
             swapchain: swapchain_composite.swapchain,
-            _swapchain_format: swapchain_composite.format,
-            _swapchain_images: swapchain_composite.images,
-            _swapchain_extent: swapchain_composite.extent,
+            swapchain_format: swapchain_composite.format,
+            swapchain_images: swapchain_composite.images,
+            swapchain_extent: swapchain_composite.extent,
             swapchain_imageviews,
             swapchain_framebuffers,
 
@@ -199,6 +202,8 @@ impl App {
             render_finished_semaphores: sync_ojbects.render_finished_semaphores,
             in_flight_fences: sync_ojbects.inflight_fences,
             current_frame: 0,
+
+            is_framebuffer_resized: false,
         }
     }
 
@@ -1101,19 +1106,29 @@ impl App {
     fn draw_frame(&mut self) {
         let wait_fences = [self.in_flight_fences[self.current_frame]];
 
-        let (image_index, _is_sub_optimal) = unsafe {
+        unsafe {
             self.device
                 .wait_for_fences(&wait_fences, true, std::u64::MAX)
                 .expect("Failed to wait for Fence!");
+        }
 
-            self.swapchain_loader
-                .acquire_next_image(
-                    self.swapchain,
-                    std::u64::MAX,
-                    self.image_available_semaphores[self.current_frame],
-                    vk::Fence::null(),
-                )
-                .expect("Failed to acquire next image.")
+        let (image_index, _is_sub_optimal) = unsafe {
+            let result = self.swapchain_loader.acquire_next_image(
+                self.swapchain,
+                std::u64::MAX,
+                self.image_available_semaphores[self.current_frame],
+                vk::Fence::null(),
+            );
+            match result {
+                Ok(image_index) => image_index,
+                Err(vk_result) => match vk_result {
+                    vk::Result::ERROR_OUT_OF_DATE_KHR => {
+                        self.recreate_swapchain();
+                        return;
+                    }
+                    _ => panic!("Failed to acquire Swap Chain Image!"),
+                },
+            }
         };
 
         let wait_semaphores = [self.image_available_semaphores[self.current_frame]];
@@ -1157,13 +1172,96 @@ impl App {
             ..Default::default()
         };
 
-        unsafe {
+        let result = unsafe {
             self.swapchain_loader
                 .queue_present(self.present_queue, &present_info)
-                .expect("Failed to execute queue present.");
+        };
+        let is_resized = match result {
+            Ok(_) => self.is_framebuffer_resized,
+            Err(vk_result) => match vk_result {
+                vk::Result::ERROR_OUT_OF_DATE_KHR | vk::Result::SUBOPTIMAL_KHR => true,
+                _ => panic!("Failed to execute queue present."),
+            },
+        };
+        if is_resized {
+            self.is_framebuffer_resized = false;
+            self.recreate_swapchain();
         }
 
         self.current_frame = (self.current_frame + 1) % MAX_FRAMES_IN_FLIGHT;
+    }
+
+    fn recreate_swapchain(&mut self) {
+        let surface_composite = SurfaceComposite {
+            loader: self.surface_loader.clone(),
+            surface: self.surface,
+        };
+
+        unsafe {
+            self.device
+                .device_wait_idle()
+                .expect("Failed to wait device idle!")
+        };
+        self.cleanup_swapchain();
+
+        let swapchain_composite = App::create_swapchain(
+            &self.instance,
+            &self.device,
+            self.physical_device,
+            &self.window,
+            &surface_composite,
+            &self.queue_family,
+        );
+        self.swapchain_loader = swapchain_composite.loader;
+        self.swapchain = swapchain_composite.swapchain;
+        self.swapchain_images = swapchain_composite.images;
+        self.swapchain_format = swapchain_composite.format;
+        self.swapchain_extent = swapchain_composite.extent;
+
+        self.swapchain_imageviews =
+            App::create_image_views(&self.device, self.swapchain_format, &self.swapchain_images);
+        self.render_pass = App::create_render_pass(&self.device, self.swapchain_format);
+        let (graphics_pipeline, pipeline_layout) = App::create_graphics_pipeline(
+            &self.device,
+            self.render_pass,
+            swapchain_composite.extent,
+        );
+        self.graphics_pipeline = graphics_pipeline;
+        self.pipeline_layout = pipeline_layout;
+
+        self.swapchain_framebuffers = App::create_framebuffers(
+            &self.device,
+            self.render_pass,
+            &self.swapchain_imageviews,
+            &self.swapchain_extent,
+        );
+        self.command_buffers = App::create_command_buffers(
+            &self.device,
+            self.command_pool,
+            self.graphics_pipeline,
+            &self.swapchain_framebuffers,
+            self.render_pass,
+            self.swapchain_extent,
+        );
+    }
+
+    fn cleanup_swapchain(&self) {
+        unsafe {
+            self.device
+                .free_command_buffers(self.command_pool, &self.command_buffers);
+            for &framebuffer in self.swapchain_framebuffers.iter() {
+                self.device.destroy_framebuffer(framebuffer, None);
+            }
+            self.device.destroy_pipeline(self.graphics_pipeline, None);
+            self.device
+                .destroy_pipeline_layout(self.pipeline_layout, None);
+            self.device.destroy_render_pass(self.render_pass, None);
+            for &image_view in self.swapchain_imageviews.iter() {
+                self.device.destroy_image_view(image_view, None);
+            }
+            self.swapchain_loader
+                .destroy_swapchain(self.swapchain, None);
+        }
     }
 
     pub fn main_loop(mut self, event_loop: EventLoop<()>) {
@@ -1221,19 +1319,8 @@ impl Drop for App {
                 self.device.destroy_fence(self.in_flight_fences[i], None);
             }
 
+            self.cleanup_swapchain();
             self.device.destroy_command_pool(self.command_pool, None);
-            for &framebuffer in self.swapchain_framebuffers.iter() {
-                self.device.destroy_framebuffer(framebuffer, None);
-            }
-            self.device.destroy_pipeline(self.graphics_pipeline, None);
-            self.device
-                .destroy_pipeline_layout(self.pipeline_layout, None);
-            self.device.destroy_render_pass(self.render_pass, None);
-            for &imageview in self.swapchain_imageviews.iter() {
-                self.device.destroy_image_view(imageview, None);
-            }
-            self.swapchain_loader
-                .destroy_swapchain(self.swapchain, None);
             self.device.destroy_device(None);
             self.surface_loader.destroy_surface(self.surface, None);
             self.debug_utils_loader
