@@ -2,6 +2,7 @@ use std::collections::HashSet;
 use std::ffi::{CStr, CString};
 use std::os::raw::{c_char, c_void};
 use std::path::Path;
+use std::ptr;
 
 use ash::extensions::ext::DebugUtils;
 use ash::extensions::khr::{Surface, WaylandSurface, XlibSurface};
@@ -91,6 +92,7 @@ struct App {
 
     render_pass: vk::RenderPass,
     pipeline_layout: vk::PipelineLayout,
+    graphics_pipeline: vk::Pipeline,
 }
 
 impl App {
@@ -120,7 +122,8 @@ impl App {
             &swapchain_composite.images,
         );
         let render_pass = App::create_render_pass(&device, swapchain_composite.format);
-        let pipeline_layout = App::create_graphics_pipeline(&device, swapchain_composite.extent);
+        let (graphics_pipeline, pipeline_layout) =
+            App::create_graphics_pipeline(&device, render_pass, swapchain_composite.extent);
 
         App {
             _entry: entry,
@@ -145,6 +148,7 @@ impl App {
 
             render_pass,
             pipeline_layout,
+            graphics_pipeline,
         }
     }
 
@@ -612,7 +616,7 @@ impl App {
             layout: vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
         };
 
-        let subpass = vk::SubpassDescription {
+        let subpasses = [vk::SubpassDescription {
             flags: vk::SubpassDescriptionFlags::empty(),
             pipeline_bind_point: vk::PipelineBindPoint::GRAPHICS,
             input_attachment_count: 0,
@@ -620,17 +624,28 @@ impl App {
             p_color_attachments: &color_attachment_ref,
             preserve_attachment_count: 0,
             ..Default::default()
-        };
+        }];
 
         let render_pass_attachments = [color_attachment];
+
+        let subpass_dependencies = [vk::SubpassDependency {
+            src_subpass: vk::SUBPASS_EXTERNAL,
+            dst_subpass: 0,
+            src_stage_mask: vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT,
+            dst_stage_mask: vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT,
+            src_access_mask: vk::AccessFlags::empty(),
+            dst_access_mask: vk::AccessFlags::COLOR_ATTACHMENT_WRITE,
+            dependency_flags: vk::DependencyFlags::empty(),
+        }];
 
         let renderpass_create_info = vk::RenderPassCreateInfo {
             flags: vk::RenderPassCreateFlags::empty(),
             attachment_count: render_pass_attachments.len() as u32,
             p_attachments: render_pass_attachments.as_ptr(),
-            subpass_count: 1,
-            p_subpasses: &subpass,
-            dependency_count: 0,
+            subpass_count: subpasses.len() as u32,
+            p_subpasses: subpasses.as_ptr(),
+            dependency_count: subpass_dependencies.len() as u32,
+            p_dependencies: subpass_dependencies.as_ptr(),
             ..Default::default()
         };
 
@@ -643,8 +658,9 @@ impl App {
 
     fn create_graphics_pipeline(
         device: &ash::Device,
+        render_pass: vk::RenderPass,
         swapchain_extent: vk::Extent2D,
-    ) -> vk::PipelineLayout {
+    ) -> (vk::Pipeline, vk::PipelineLayout) {
         let vert_shader_code = read_shader_code(Path::new("target/shaders/simple.vert.spv"));
         let frag_shader_code = read_shader_code(Path::new("target/shaders/simple.frag.spv"));
 
@@ -653,7 +669,7 @@ impl App {
 
         let main_function_name = CString::new("main").unwrap(); // the beginning function name in shader code.
 
-        let _shader_stages = [
+        let shader_stages = [
             vk::PipelineShaderStageCreateInfo::builder()
                 .module(vert_shader_module)
                 .name(main_function_name.as_c_str())
@@ -666,13 +682,13 @@ impl App {
                 .build(),
         ];
 
-        let _vertex_input_state_create_info = vk::PipelineVertexInputStateCreateInfo {
+        let vertex_input_state_create_info = vk::PipelineVertexInputStateCreateInfo {
             flags: vk::PipelineVertexInputStateCreateFlags::empty(),
             vertex_attribute_description_count: 0,
             vertex_binding_description_count: 0,
             ..Default::default()
         };
-        let _vertex_input_assembly_state_info = vk::PipelineInputAssemblyStateCreateInfo {
+        let vertex_input_assembly_state_info = vk::PipelineInputAssemblyStateCreateInfo {
             flags: vk::PipelineInputAssemblyStateCreateFlags::empty(),
             primitive_restart_enable: vk::FALSE,
             topology: vk::PrimitiveTopology::TRIANGLE_LIST,
@@ -693,11 +709,12 @@ impl App {
             extent: swapchain_extent,
         }];
 
-        let _viewport_state_create_info = vk::PipelineViewportStateCreateInfo::builder()
+        let viewport_state_create_info = vk::PipelineViewportStateCreateInfo::builder()
             .scissors(&scissors)
-            .viewports(&viewports);
+            .viewports(&viewports)
+            .build();
 
-        let _rasterization_statue_create_info = vk::PipelineRasterizationStateCreateInfo {
+        let rasterization_statue_create_info = vk::PipelineRasterizationStateCreateInfo {
             flags: vk::PipelineRasterizationStateCreateFlags::empty(),
             depth_clamp_enable: vk::FALSE,
             cull_mode: vk::CullModeFlags::BACK,
@@ -711,7 +728,7 @@ impl App {
             depth_bias_slope_factor: 0.0,
             ..Default::default()
         };
-        let _multisample_state_create_info = vk::PipelineMultisampleStateCreateInfo {
+        let multisample_state_create_info = vk::PipelineMultisampleStateCreateInfo {
             flags: vk::PipelineMultisampleStateCreateFlags::empty(),
             rasterization_samples: vk::SampleCountFlags::TYPE_1,
             sample_shading_enable: vk::FALSE,
@@ -731,7 +748,7 @@ impl App {
             reference: 0,
         };
 
-        let _depth_state_create_info = vk::PipelineDepthStencilStateCreateInfo {
+        let depth_state_create_info = vk::PipelineDepthStencilStateCreateInfo {
             flags: vk::PipelineDepthStencilStateCreateFlags::empty(),
             depth_test_enable: vk::FALSE,
             depth_write_enable: vk::FALSE,
@@ -756,7 +773,7 @@ impl App {
             alpha_blend_op: vk::BlendOp::ADD,
         }];
 
-        let _color_blend_state = vk::PipelineColorBlendStateCreateInfo {
+        let color_blend_state = vk::PipelineColorBlendStateCreateInfo {
             flags: vk::PipelineColorBlendStateCreateFlags::empty(),
             logic_op_enable: vk::FALSE,
             logic_op: vk::LogicOp::COPY,
@@ -789,12 +806,43 @@ impl App {
                 .expect("Failed to create pipeline layout!")
         };
 
+        let graphic_pipeline_create_infos = [vk::GraphicsPipelineCreateInfo {
+            flags: vk::PipelineCreateFlags::empty(),
+            stage_count: shader_stages.len() as u32,
+            p_stages: shader_stages.as_ptr(),
+            p_vertex_input_state: &vertex_input_state_create_info,
+            p_input_assembly_state: &vertex_input_assembly_state_info,
+            p_tessellation_state: ptr::null(),
+            p_viewport_state: &viewport_state_create_info,
+            p_rasterization_state: &rasterization_statue_create_info,
+            p_multisample_state: &multisample_state_create_info,
+            p_depth_stencil_state: &depth_state_create_info,
+            p_color_blend_state: &color_blend_state,
+            p_dynamic_state: ptr::null(),
+            layout: pipeline_layout,
+            render_pass,
+            subpass: 0,
+            base_pipeline_handle: vk::Pipeline::null(),
+            base_pipeline_index: -1,
+            ..Default::default()
+        }];
+
+        let graphics_pipelines = unsafe {
+            device
+                .create_graphics_pipelines(
+                    vk::PipelineCache::null(),
+                    &graphic_pipeline_create_infos,
+                    None,
+                )
+                .expect("Failed to create Graphics Pipeline!.")
+        };
+
         unsafe {
             device.destroy_shader_module(vert_shader_module, None);
             device.destroy_shader_module(frag_shader_module, None);
         }
 
-        pipeline_layout
+        (graphics_pipelines[0], pipeline_layout)
     }
 
     fn create_shader_module(device: &ash::Device, code: Vec<u8>) -> vk::ShaderModule {
@@ -890,6 +938,7 @@ impl App {
 impl Drop for App {
     fn drop(&mut self) {
         unsafe {
+            self.device.destroy_pipeline(self.graphics_pipeline, None);
             self.device
                 .destroy_pipeline_layout(self.pipeline_layout, None);
             self.device.destroy_render_pass(self.render_pass, None);
