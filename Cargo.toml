@@ -9,3 +9,6 @@ edition = "2018"
 [dependencies]
 ash = "0.31.0"
 winit = "0.23.0"
+
+[build-dependencies]
+shaderc = "0.6.2"
