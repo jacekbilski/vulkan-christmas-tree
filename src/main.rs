@@ -3,11 +3,13 @@ use std::ffi::{CStr, CString};
 use std::os::raw::{c_char, c_void};
 use std::path::Path;
 use std::ptr;
+use std::time::Instant;
 
 use ash::extensions::ext::DebugUtils;
 use ash::extensions::khr::{Surface, WaylandSurface, XlibSurface};
 use ash::version::{DeviceV1_0, EntryV1_0, InstanceV1_0};
 use ash::vk;
+use cgmath::{Deg, Matrix4, Point3, SquareMatrix, Vector3};
 use memoffset::offset_of;
 use winit::event::{ElementState, Event, KeyboardInput, VirtualKeyCode, WindowEvent};
 use winit::event_loop::{ControlFlow, EventLoop};
@@ -97,8 +99,8 @@ impl Vertex {
     fn get_attribute_descriptions() -> [vk::VertexInputAttributeDescription; 2] {
         [
             vk::VertexInputAttributeDescription {
-                location: 0,
                 binding: 0,
+                location: 0,
                 format: vk::Format::R32G32_SFLOAT, // aka vec2
                 offset: offset_of!(Self, pos) as u32,
             },
@@ -132,6 +134,14 @@ const VERTICES_DATA: [Vertex; 4] = [
 ];
 const INDICES_DATA: [u32; 6] = [0, 1, 2, 2, 3, 0];
 
+#[repr(C)]
+#[derive(Clone, Debug, Copy)]
+struct UniformBufferObject {
+    model: Matrix4<f32>,
+    view: Matrix4<f32>,
+    proj: Matrix4<f32>,
+}
+
 struct App {
     window: winit::window::Window,
 
@@ -158,8 +168,16 @@ struct App {
     swapchain_framebuffers: Vec<vk::Framebuffer>,
 
     render_pass: vk::RenderPass,
+    ubo_layout: vk::DescriptorSetLayout,
     pipeline_layout: vk::PipelineLayout,
     graphics_pipeline: vk::Pipeline,
+
+    uniform_transform: UniformBufferObject,
+    uniform_buffers: Vec<vk::Buffer>,
+    uniform_buffers_memory: Vec<vk::DeviceMemory>,
+
+    descriptor_pool: vk::DescriptorPool,
+    descriptor_sets: Vec<vk::DescriptorSet>,
 
     vertex_buffer: vk::Buffer,
     vertex_buffer_memory: vk::DeviceMemory,
@@ -185,6 +203,8 @@ impl App {
         let surface_composite = App::create_surface(&entry, &instance, &window);
         let (debug_utils_loader, debug_messenger) = App::setup_debug_utils(&entry, &instance);
         let physical_device = App::pick_physical_device(&instance, &surface_composite);
+        let physical_device_memory_properties =
+            unsafe { instance.get_physical_device_memory_properties(physical_device) };
         let (device, queue_family) =
             App::create_logical_device(&instance, physical_device, &surface_composite);
         let graphics_queue =
@@ -207,8 +227,13 @@ impl App {
             &swapchain_composite.images,
         );
         let render_pass = App::create_render_pass(&device, swapchain_composite.format);
-        let (graphics_pipeline, pipeline_layout) =
-            App::create_graphics_pipeline(&device, render_pass, swapchain_composite.extent);
+        let ubo_layout = App::create_descriptor_set_layout(&device);
+        let (graphics_pipeline, pipeline_layout) = App::create_graphics_pipeline(
+            &device,
+            render_pass,
+            swapchain_composite.extent,
+            ubo_layout,
+        );
         let swapchain_framebuffers = App::create_framebuffers(
             &device,
             render_pass,
@@ -216,19 +241,33 @@ impl App {
             &swapchain_composite.extent,
         );
         let command_pool = App::create_command_pool(&device, &queue_family);
-        let (vertex_buffer, vertex_buffer_memory) = App::create_vertex_buffer(
-            &instance,
+        let (uniform_buffers, uniform_buffers_memory) = App::create_uniform_buffers(
             &device,
-            physical_device,
+            &physical_device_memory_properties,
+            swapchain_composite.images.len(),
+        );
+        let descriptor_pool =
+            App::create_descriptor_pool(&device, swapchain_composite.images.len());
+        let descriptor_sets = App::create_descriptor_sets(
+            &device,
+            descriptor_pool,
+            ubo_layout,
+            &uniform_buffers,
+            swapchain_composite.images.len(),
+        );
+        let (vertex_buffer, vertex_buffer_memory) = App::create_vertex_buffer(
+            &device,
+            &physical_device_memory_properties,
             command_pool,
             transfer_queue,
+            &VERTICES_DATA,
         );
         let (index_buffer, index_buffer_memory) = App::create_index_buffer(
-            &instance,
             &device,
-            physical_device,
+            &physical_device_memory_properties,
             command_pool,
-            graphics_queue,
+            transfer_queue,
+            &INDICES_DATA,
         );
         let command_buffers = App::create_command_buffers(
             &device,
@@ -239,6 +278,8 @@ impl App {
             swapchain_composite.extent,
             vertex_buffer,
             index_buffer,
+            pipeline_layout,
+            &descriptor_sets,
         );
         let sync_ojbects = App::create_sync_objects(&device);
 
@@ -268,8 +309,30 @@ impl App {
             swapchain_framebuffers,
 
             render_pass,
+            ubo_layout,
             pipeline_layout,
             graphics_pipeline,
+
+            uniform_transform: UniformBufferObject {
+                model: Matrix4::<f32>::identity(),
+                view: Matrix4::look_at(
+                    Point3::new(2.0, 2.0, 2.0),
+                    Point3::new(0.0, 0.0, 0.0),
+                    Vector3::new(0.0, 0.0, 1.0),
+                ),
+                proj: cgmath::perspective(
+                    Deg(45.0),
+                    swapchain_composite.extent.width as f32
+                        / swapchain_composite.extent.height as f32,
+                    0.1,
+                    10.0,
+                ),
+            },
+            uniform_buffers,
+            uniform_buffers_memory,
+
+            descriptor_pool,
+            descriptor_sets,
 
             vertex_buffer,
             vertex_buffer_memory,
@@ -792,10 +855,33 @@ impl App {
         }
     }
 
+    fn create_descriptor_set_layout(device: &ash::Device) -> vk::DescriptorSetLayout {
+        let ubo_layout_bindings = [vk::DescriptorSetLayoutBinding {
+            binding: 0,
+            descriptor_type: vk::DescriptorType::UNIFORM_BUFFER,
+            descriptor_count: 1,
+            stage_flags: vk::ShaderStageFlags::VERTEX,
+            ..Default::default()
+        }];
+
+        let ubo_layout_create_info = vk::DescriptorSetLayoutCreateInfo {
+            binding_count: ubo_layout_bindings.len() as u32,
+            p_bindings: ubo_layout_bindings.as_ptr(),
+            ..Default::default()
+        };
+
+        unsafe {
+            device
+                .create_descriptor_set_layout(&ubo_layout_create_info, None)
+                .expect("Failed to create Descriptor Set Layout!")
+        }
+    }
+
     fn create_graphics_pipeline(
         device: &ash::Device,
         render_pass: vk::RenderPass,
         swapchain_extent: vk::Extent2D,
+        ubo_set_layout: vk::DescriptorSetLayout,
     ) -> (vk::Pipeline, vk::PipelineLayout) {
         let vert_shader_code = read_shader_code(Path::new("target/shaders/simple.vert.spv"));
         let frag_shader_code = read_shader_code(Path::new("target/shaders/simple.frag.spv"));
@@ -855,7 +941,7 @@ impl App {
             .viewports(&viewports)
             .build();
 
-        let rasterization_statue_create_info = vk::PipelineRasterizationStateCreateInfo {
+        let rasterization_state_create_info = vk::PipelineRasterizationStateCreateInfo {
             flags: vk::PipelineRasterizationStateCreateFlags::empty(),
             depth_clamp_enable: vk::FALSE,
             cull_mode: vk::CullModeFlags::BACK,
@@ -924,9 +1010,12 @@ impl App {
             ..Default::default()
         };
 
+        let set_layouts = [ubo_set_layout];
+
         let pipeline_layout_create_info = vk::PipelineLayoutCreateInfo {
             flags: vk::PipelineLayoutCreateFlags::empty(),
-            set_layout_count: 0,
+            set_layout_count: set_layouts.len() as u32,
+            p_set_layouts: set_layouts.as_ptr(),
             push_constant_range_count: 0,
             ..Default::default()
         };
@@ -945,7 +1034,7 @@ impl App {
             p_input_assembly_state: &vertex_input_assembly_state_info,
             p_tessellation_state: ptr::null(),
             p_viewport_state: &viewport_state_create_info,
-            p_rasterization_state: &rasterization_statue_create_info,
+            p_rasterization_state: &rasterization_state_create_info,
             p_multisample_state: &multisample_state_create_info,
             p_depth_stencil_state: &depth_state_create_info,
             p_color_blend_state: &color_blend_state,
@@ -1042,23 +1131,148 @@ impl App {
         }
     }
 
-    fn create_vertex_buffer(
-        instance: &ash::Instance,
+    fn create_uniform_buffers(
         device: &ash::Device,
-        physical_device: vk::PhysicalDevice,
+        device_memory_properties: &vk::PhysicalDeviceMemoryProperties,
+        swapchain_image_count: usize,
+    ) -> (Vec<vk::Buffer>, Vec<vk::DeviceMemory>) {
+        let buffer_size = std::mem::size_of::<UniformBufferObject>();
+
+        let mut uniform_buffers = vec![];
+        let mut uniform_buffers_memory = vec![];
+
+        for _ in 0..swapchain_image_count {
+            let (uniform_buffer, uniform_buffer_memory) = App::create_buffer(
+                device,
+                buffer_size as u64,
+                vk::BufferUsageFlags::UNIFORM_BUFFER,
+                vk::MemoryPropertyFlags::HOST_VISIBLE | vk::MemoryPropertyFlags::HOST_COHERENT,
+                device_memory_properties,
+            );
+            uniform_buffers.push(uniform_buffer);
+            uniform_buffers_memory.push(uniform_buffer_memory);
+        }
+
+        (uniform_buffers, uniform_buffers_memory)
+    }
+
+    fn create_descriptor_pool(
+        device: &ash::Device,
+        swapchain_images_size: usize,
+    ) -> vk::DescriptorPool {
+        let pool_sizes = [vk::DescriptorPoolSize {
+            ty: vk::DescriptorType::UNIFORM_BUFFER,
+            descriptor_count: swapchain_images_size as u32,
+        }];
+
+        let descriptor_pool_create_info = vk::DescriptorPoolCreateInfo {
+            max_sets: swapchain_images_size as u32,
+            pool_size_count: pool_sizes.len() as u32,
+            p_pool_sizes: pool_sizes.as_ptr(),
+            ..Default::default()
+        };
+
+        unsafe {
+            device
+                .create_descriptor_pool(&descriptor_pool_create_info, None)
+                .expect("Failed to create Descriptor Pool!")
+        }
+    }
+
+    fn create_descriptor_sets(
+        device: &ash::Device,
+        descriptor_pool: vk::DescriptorPool,
+        descriptor_set_layout: vk::DescriptorSetLayout,
+        uniforms_buffers: &Vec<vk::Buffer>,
+        swapchain_images_size: usize,
+    ) -> Vec<vk::DescriptorSet> {
+        let mut layouts: Vec<vk::DescriptorSetLayout> = vec![];
+        for _ in 0..swapchain_images_size {
+            layouts.push(descriptor_set_layout);
+        }
+
+        let descriptor_set_allocate_info = vk::DescriptorSetAllocateInfo {
+            descriptor_pool,
+            descriptor_set_count: swapchain_images_size as u32,
+            p_set_layouts: layouts.as_ptr(),
+            ..Default::default()
+        };
+
+        let descriptor_sets = unsafe {
+            device
+                .allocate_descriptor_sets(&descriptor_set_allocate_info)
+                .expect("Failed to allocate descriptor sets!")
+        };
+
+        for (i, &descritptor_set) in descriptor_sets.iter().enumerate() {
+            let descriptor_buffer_info = [vk::DescriptorBufferInfo {
+                buffer: uniforms_buffers[i],
+                offset: 0,
+                range: std::mem::size_of::<UniformBufferObject>() as u64,
+            }];
+
+            let descriptor_write_sets = [vk::WriteDescriptorSet {
+                dst_set: descritptor_set,
+                dst_binding: 0,
+                dst_array_element: 0,
+                descriptor_count: 1,
+                descriptor_type: vk::DescriptorType::UNIFORM_BUFFER,
+                p_image_info: ptr::null(),
+                p_buffer_info: descriptor_buffer_info.as_ptr(),
+                p_texel_buffer_view: ptr::null(),
+                ..Default::default()
+            }];
+
+            unsafe {
+                device.update_descriptor_sets(&descriptor_write_sets, &[]);
+            }
+        }
+
+        descriptor_sets
+    }
+
+    fn update_uniform_buffer(&mut self, current_image: usize, delta_time: f32) {
+        println!("update_uniform_buffer, delta_time: {}", delta_time);
+        self.uniform_transform.model =
+            Matrix4::from_axis_angle(Vector3::new(0.0, 0.0, 1.0), Deg(90.0) * delta_time)
+                * self.uniform_transform.model;
+
+        let ubos = [self.uniform_transform.clone()];
+
+        let buffer_size = (std::mem::size_of::<UniformBufferObject>() * ubos.len()) as u64;
+
+        unsafe {
+            let data_ptr =
+                self.device
+                    .map_memory(
+                        self.uniform_buffers_memory[current_image],
+                        0,
+                        buffer_size,
+                        vk::MemoryMapFlags::empty(),
+                    )
+                    .expect("Failed to Map Memory") as *mut UniformBufferObject;
+
+            data_ptr.copy_from_nonoverlapping(ubos.as_ptr(), ubos.len());
+
+            self.device
+                .unmap_memory(self.uniform_buffers_memory[current_image]);
+        }
+    }
+
+    fn create_vertex_buffer<T>(
+        device: &ash::Device,
+        physical_device_memory_properties: &vk::PhysicalDeviceMemoryProperties,
         command_pool: vk::CommandPool,
         submit_queue: vk::Queue,
+        data: &[T],
     ) -> (vk::Buffer, vk::DeviceMemory) {
-        let buffer_size = std::mem::size_of_val(&VERTICES_DATA) as vk::DeviceSize;
-        let device_memory_properties =
-            unsafe { instance.get_physical_device_memory_properties(physical_device) };
-
+        let buffer_size = std::mem::size_of_val(data) as vk::DeviceSize;
         let (staging_buffer, staging_buffer_memory) = App::create_buffer(
             device,
             buffer_size,
             vk::BufferUsageFlags::TRANSFER_SRC,
             vk::MemoryPropertyFlags::HOST_VISIBLE | vk::MemoryPropertyFlags::HOST_COHERENT,
-            &device_memory_properties,
+            &physical_device_memory_properties,
         );
 
         unsafe {
@@ -1069,9 +1283,9 @@ impl App {
                     buffer_size,
                     vk::MemoryMapFlags::empty(),
                 )
-                .expect("Failed to Map Memory") as *mut Vertex;
+                .expect("Failed to Map Memory") as *mut T;
 
-            data_ptr.copy_from_nonoverlapping(VERTICES_DATA.as_ptr(), VERTICES_DATA.len());
+            data_ptr.copy_from_nonoverlapping(data.as_ptr(), data.len());
 
             device.unmap_memory(staging_buffer_memory);
         }
@@ -1081,7 +1295,7 @@ impl App {
             buffer_size,
             vk::BufferUsageFlags::TRANSFER_DST | vk::BufferUsageFlags::VERTEX_BUFFER,
             vk::MemoryPropertyFlags::DEVICE_LOCAL,
-            &device_memory_properties,
+            &physical_device_memory_properties,
         );
 
         App::copy_buffer(
@@ -1234,22 +1448,19 @@ impl App {
     }
 
     fn create_index_buffer(
-        instance: &ash::Instance,
         device: &ash::Device,
-        physical_device: vk::PhysicalDevice,
+        physical_device_memory_properties: &vk::PhysicalDeviceMemoryProperties,
         command_pool: vk::CommandPool,
         submit_queue: vk::Queue,
+        data: &[u32],
     ) -> (vk::Buffer, vk::DeviceMemory) {
-        let buffer_size = std::mem::size_of_val(&INDICES_DATA) as vk::DeviceSize;
-        let device_memory_properties =
-            unsafe { instance.get_physical_device_memory_properties(physical_device) };
-
+        let buffer_size = std::mem::size_of_val(data) as vk::DeviceSize;
         let (staging_buffer, staging_buffer_memory) = App::create_buffer(
             device,
             buffer_size,
             vk::BufferUsageFlags::TRANSFER_SRC,
             vk::MemoryPropertyFlags::HOST_VISIBLE | vk::MemoryPropertyFlags::HOST_COHERENT,
-            &device_memory_properties,
+            &physical_device_memory_properties,
         );
 
         unsafe {
@@ -1262,7 +1473,7 @@ impl App {
                 )
                 .expect("Failed to Map Memory") as *mut u32;
 
-            data_ptr.copy_from_nonoverlapping(INDICES_DATA.as_ptr(), INDICES_DATA.len());
+            data_ptr.copy_from_nonoverlapping(data.as_ptr(), data.len());
 
             device.unmap_memory(staging_buffer_memory);
         }
@@ -1272,7 +1483,7 @@ impl App {
             buffer_size,
             vk::BufferUsageFlags::TRANSFER_DST | vk::BufferUsageFlags::INDEX_BUFFER,
             vk::MemoryPropertyFlags::DEVICE_LOCAL,
-            &device_memory_properties,
+            &physical_device_memory_properties,
         );
 
         App::copy_buffer(
@@ -1301,6 +1512,8 @@ impl App {
         surface_extent: vk::Extent2D,
         vertex_buffer: vk::Buffer,
         index_buffer: vk::Buffer,
+        pipeline_layout: vk::PipelineLayout,
+        descriptor_sets: &Vec<vk::DescriptorSet>,
     ) -> Vec<vk::CommandBuffer> {
         let command_buffer_allocate_info = vk::CommandBufferAllocateInfo {
             command_buffer_count: framebuffers.len() as u32,
@@ -1356,6 +1569,7 @@ impl App {
 
                 let vertex_buffers = [vertex_buffer];
                 let offsets = [0_u64];
+                let descriptor_sets_to_bind = [descriptor_sets[i]];
 
                 device.cmd_bind_vertex_buffers(command_buffer, 0, &vertex_buffers, &offsets);
                 device.cmd_bind_index_buffer(
@@ -1363,6 +1577,14 @@ impl App {
                     index_buffer,
                     0,
                     vk::IndexType::UINT32,
+                );
+                device.cmd_bind_descriptor_sets(
+                    command_buffer,
+                    vk::PipelineBindPoint::GRAPHICS,
+                    pipeline_layout,
+                    0,
+                    &descriptor_sets_to_bind,
+                    &[],
                 );
 
                 device.cmd_draw_indexed(command_buffer, INDICES_DATA.len() as u32, 1, 0, 0, 0);
@@ -1453,7 +1675,7 @@ impl App {
             .build()
     }
 
-    fn draw_frame(&mut self) {
+    fn draw_frame(&mut self, delta_time: f32) {
         let wait_fences = [self.in_flight_fences[self.current_frame]];
 
         unsafe {
@@ -1480,6 +1702,8 @@ impl App {
                 },
             }
         };
+
+        self.update_uniform_buffer(image_index as usize, delta_time);
 
         let wait_semaphores = [self.image_available_semaphores[self.current_frame]];
         let wait_stages = [vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT];
@@ -1575,6 +1799,7 @@ impl App {
             &self.device,
             self.render_pass,
             swapchain_composite.extent,
+            self.ubo_layout,
         );
         self.graphics_pipeline = graphics_pipeline;
         self.pipeline_layout = pipeline_layout;
@@ -1594,6 +1819,8 @@ impl App {
             self.swapchain_extent,
             self.vertex_buffer,
             self.index_buffer,
+            self.pipeline_layout,
+            &self.descriptor_sets,
         );
     }
 
@@ -1616,12 +1843,22 @@ impl App {
         }
     }
 
+    fn wait_device_idle(&self) {
+        unsafe {
+            self.device
+                .device_wait_idle()
+                .expect("Failed to wait device idle!")
+        };
+    }
+
     pub fn main_loop(mut self, event_loop: EventLoop<()>) {
+        let mut ticker = Instant::now();
         event_loop.run(move |event, _, control_flow| match event {
             Event::WindowEvent {
                 event: WindowEvent::CloseRequested,
                 ..
             } => {
+                self.wait_device_idle();
                 *control_flow = ControlFlow::Exit;
             }
             Event::WindowEvent {
@@ -1638,22 +1875,28 @@ impl App {
                 ..
             } => match virtual_code {
                 VirtualKeyCode::Escape => {
+                    self.wait_device_idle();
                     *control_flow = ControlFlow::Exit;
                 }
                 _ => (),
             },
+            Event::WindowEvent {
+                event: WindowEvent::Resized(_new_size),
+                ..
+            } => {
+                self.wait_device_idle();
+                self.is_framebuffer_resized = true;
+            }
             Event::MainEventsCleared => {
                 self.window.request_redraw();
             }
             Event::RedrawRequested(_window_id) => {
-                self.draw_frame();
+                let delta = ticker.elapsed().subsec_micros();
+                self.draw_frame(delta as f32 / 1000_000.0_f32);
+                ticker = Instant::now();
             }
             Event::LoopDestroyed => {
-                unsafe {
-                    self.device
-                        .device_wait_idle()
-                        .expect("Failed to wait device idle!")
-                };
+                self.wait_device_idle();
             }
             _ => (),
         });
@@ -1678,6 +1921,18 @@ impl Drop for App {
 
             self.device.destroy_buffer(self.vertex_buffer, None);
             self.device.free_memory(self.vertex_buffer_memory, None);
+
+            self.device
+                .destroy_descriptor_pool(self.descriptor_pool, None);
+
+            self.device
+                .destroy_descriptor_set_layout(self.ubo_layout, None);
+
+            for i in 0..self.uniform_buffers.len() {
+                self.device.destroy_buffer(self.uniform_buffers[i], None);
+                self.device
+                    .free_memory(self.uniform_buffers_memory[i], None);
+            }
 
             self.device.destroy_command_pool(self.command_pool, None);
             self.device.destroy_device(None);
