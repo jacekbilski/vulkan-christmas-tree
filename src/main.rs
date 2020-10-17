@@ -89,6 +89,7 @@ struct App {
     _swapchain_extent: vk::Extent2D,
     swapchain_imageviews: Vec<vk::ImageView>,
 
+    render_pass: vk::RenderPass,
     pipeline_layout: vk::PipelineLayout,
 }
 
@@ -101,6 +102,10 @@ impl App {
         let physical_device = App::pick_physical_device(&instance, &surface_composite);
         let (device, family_indices) =
             App::create_logical_device(&instance, physical_device, &surface_composite);
+        let graphics_queue =
+            unsafe { device.get_device_queue(family_indices.graphics_family.unwrap(), 0) };
+        let present_queue =
+            unsafe { device.get_device_queue(family_indices.present_family.unwrap(), 0) };
         let swapchain_composite = App::create_swapchain(
             &instance,
             &device,
@@ -114,12 +119,8 @@ impl App {
             swapchain_composite.format,
             &swapchain_composite.images,
         );
+        let render_pass = App::create_render_pass(&device, swapchain_composite.format);
         let pipeline_layout = App::create_graphics_pipeline(&device, swapchain_composite.extent);
-
-        let graphics_queue =
-            unsafe { device.get_device_queue(family_indices.graphics_family.unwrap(), 0) };
-        let present_queue =
-            unsafe { device.get_device_queue(family_indices.present_family.unwrap(), 0) };
 
         App {
             _entry: entry,
@@ -142,6 +143,7 @@ impl App {
             _swapchain_extent: swapchain_composite.extent,
             swapchain_imageviews,
 
+            render_pass,
             pipeline_layout,
         }
     }
@@ -592,6 +594,53 @@ impl App {
         swapchain_imageviews
     }
 
+    fn create_render_pass(device: &ash::Device, surface_format: vk::Format) -> vk::RenderPass {
+        let color_attachment = vk::AttachmentDescription {
+            flags: vk::AttachmentDescriptionFlags::empty(),
+            format: surface_format,
+            samples: vk::SampleCountFlags::TYPE_1,
+            load_op: vk::AttachmentLoadOp::CLEAR,
+            store_op: vk::AttachmentStoreOp::STORE,
+            stencil_load_op: vk::AttachmentLoadOp::DONT_CARE,
+            stencil_store_op: vk::AttachmentStoreOp::DONT_CARE,
+            initial_layout: vk::ImageLayout::UNDEFINED,
+            final_layout: vk::ImageLayout::PRESENT_SRC_KHR,
+        };
+
+        let color_attachment_ref = vk::AttachmentReference {
+            attachment: 0,
+            layout: vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
+        };
+
+        let subpass = vk::SubpassDescription {
+            flags: vk::SubpassDescriptionFlags::empty(),
+            pipeline_bind_point: vk::PipelineBindPoint::GRAPHICS,
+            input_attachment_count: 0,
+            color_attachment_count: 1,
+            p_color_attachments: &color_attachment_ref,
+            preserve_attachment_count: 0,
+            ..Default::default()
+        };
+
+        let render_pass_attachments = [color_attachment];
+
+        let renderpass_create_info = vk::RenderPassCreateInfo {
+            flags: vk::RenderPassCreateFlags::empty(),
+            attachment_count: render_pass_attachments.len() as u32,
+            p_attachments: render_pass_attachments.as_ptr(),
+            subpass_count: 1,
+            p_subpasses: &subpass,
+            dependency_count: 0,
+            ..Default::default()
+        };
+
+        unsafe {
+            device
+                .create_render_pass(&renderpass_create_info, None)
+                .expect("Failed to create render pass!")
+        }
+    }
+
     fn create_graphics_pipeline(
         device: &ash::Device,
         swapchain_extent: vk::Extent2D,
@@ -843,6 +892,7 @@ impl Drop for App {
         unsafe {
             self.device
                 .destroy_pipeline_layout(self.pipeline_layout, None);
+            self.device.destroy_render_pass(self.render_pass, None);
             for &imageview in self.swapchain_imageviews.iter() {
                 self.device.destroy_image_view(imageview, None);
             }
