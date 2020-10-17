@@ -89,6 +89,7 @@ struct App {
     _swapchain_format: vk::Format,
     _swapchain_extent: vk::Extent2D,
     swapchain_imageviews: Vec<vk::ImageView>,
+    swapchain_framebuffers: Vec<vk::Framebuffer>,
 
     render_pass: vk::RenderPass,
     pipeline_layout: vk::PipelineLayout,
@@ -124,6 +125,12 @@ impl App {
         let render_pass = App::create_render_pass(&device, swapchain_composite.format);
         let (graphics_pipeline, pipeline_layout) =
             App::create_graphics_pipeline(&device, render_pass, swapchain_composite.extent);
+        let swapchain_framebuffers = App::create_framebuffers(
+            &device,
+            render_pass,
+            &swapchain_imageviews,
+            &swapchain_composite.extent,
+        );
 
         App {
             _entry: entry,
@@ -145,6 +152,7 @@ impl App {
             _swapchain_images: swapchain_composite.images,
             _swapchain_extent: swapchain_composite.extent,
             swapchain_imageviews,
+            swapchain_framebuffers,
 
             render_pass,
             pipeline_layout,
@@ -783,16 +791,6 @@ impl App {
             ..Default::default()
         };
 
-        //                leaving the dynamic statue unconfigurated right now
-        //                let dynamic_state = [vk::DynamicState::VIEWPORT, vk::DynamicState::SCISSOR];
-        //                let dynamic_state_info = vk::PipelineDynamicStateCreateInfo {
-        //                    s_type: vk::StructureType::PIPELINE_DYNAMIC_STATE_CREATE_INFO,
-        //                    p_next: ptr::null(),
-        //                    flags: vk::PipelineDynamicStateCreateFlags::empty(),
-        //                    dynamic_state_count: dynamic_state.len() as u32,
-        //                    p_dynamic_states: dynamic_state.as_ptr(),
-        //                };
-
         let pipeline_layout_create_info = vk::PipelineLayoutCreateInfo {
             flags: vk::PipelineLayoutCreateFlags::empty(),
             set_layout_count: 0,
@@ -858,6 +856,40 @@ impl App {
                 .create_shader_module(&shader_module_create_info, None)
                 .expect("Failed to create Shader Module!")
         }
+    }
+
+    fn create_framebuffers(
+        device: &ash::Device,
+        render_pass: vk::RenderPass,
+        image_views: &Vec<vk::ImageView>,
+        swapchain_extent: &vk::Extent2D,
+    ) -> Vec<vk::Framebuffer> {
+        let mut framebuffers = vec![];
+
+        for &image_view in image_views.iter() {
+            let attachments = [image_view];
+
+            let framebuffer_create_info = vk::FramebufferCreateInfo {
+                flags: vk::FramebufferCreateFlags::empty(),
+                render_pass,
+                attachment_count: attachments.len() as u32,
+                p_attachments: attachments.as_ptr(),
+                width: swapchain_extent.width,
+                height: swapchain_extent.height,
+                layers: 1,
+                ..Default::default()
+            };
+
+            let framebuffer = unsafe {
+                device
+                    .create_framebuffer(&framebuffer_create_info, None)
+                    .expect("Failed to create Framebuffer!")
+            };
+
+            framebuffers.push(framebuffer);
+        }
+
+        framebuffers
     }
 
     fn setup_debug_utils(
@@ -938,6 +970,9 @@ impl App {
 impl Drop for App {
     fn drop(&mut self) {
         unsafe {
+            for &framebuffer in self.swapchain_framebuffers.iter() {
+                self.device.destroy_framebuffer(framebuffer, None);
+            }
             self.device.destroy_pipeline(self.graphics_pipeline, None);
             self.device
                 .destroy_pipeline_layout(self.pipeline_layout, None);
