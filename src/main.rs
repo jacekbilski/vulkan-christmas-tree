@@ -1,7 +1,6 @@
 use std::collections::HashSet;
 use std::ffi::{CStr, CString};
 use std::os::raw::{c_char, c_void};
-use std::path::Path;
 use std::ptr;
 use std::time::Instant;
 
@@ -13,6 +12,10 @@ use cgmath::{Deg, Matrix4, Point3, SquareMatrix, Vector3};
 use memoffset::offset_of;
 use winit::event::{ElementState, Event, KeyboardInput, VirtualKeyCode, WindowEvent};
 use winit::event_loop::{ControlFlow, EventLoop};
+
+use fs::read_shader_code;
+
+mod fs;
 
 // settings
 const SCR_WIDTH: u32 = 1920;
@@ -883,8 +886,8 @@ impl App {
         swapchain_extent: vk::Extent2D,
         ubo_set_layout: vk::DescriptorSetLayout,
     ) -> (vk::Pipeline, vk::PipelineLayout) {
-        let vert_shader_code = read_shader_code(Path::new("target/shaders/simple.vert.spv"));
-        let frag_shader_code = read_shader_code(Path::new("target/shaders/simple.frag.spv"));
+        let vert_shader_code = read_shader_code("simple.vert.spv");
+        let frag_shader_code = read_shader_code("simple.frag.spv");
 
         let vert_shader_module = App::create_shader_module(device, vert_shader_code);
         let frag_shader_module = App::create_shader_module(device, frag_shader_code);
@@ -1987,15 +1990,4 @@ fn required_extension_names() -> Vec<*const c_char> {
         WaylandSurface::name().as_ptr(),
         DebugUtils::name().as_ptr(),
     ]
-}
-
-fn read_shader_code(shader_path: &Path) -> Vec<u8> {
-    use std::fs::File;
-    use std::io::Read;
-
-    let spv_file =
-        File::open(shader_path).expect(&format!("Failed to find spv file at {:?}", shader_path));
-    let bytes_code: Vec<u8> = spv_file.bytes().filter_map(|byte| byte.ok()).collect();
-
-    bytes_code
 }
