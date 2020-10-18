@@ -316,8 +316,8 @@ impl App {
             uniform_transform: UniformBufferObject {
                 model: Matrix4::<f32>::identity(),
                 view: Matrix4::look_at(
-                    Point3::new(2.0, 2.0, 2.0),
-                    Point3::new(0.0, 0.0, 0.0),
+                    Point3::new(1.1, 1.1, 1.1),
+                    Point3::new(0.0, 0.0, -0.2),
                     Vector3::new(0.0, 0.0, 1.0),
                 ),
                 proj: cgmath::perspective(
@@ -1232,9 +1232,8 @@ impl App {
     }
 
     fn update_uniform_buffer(&mut self, current_image: usize, delta_time: f32) {
-        println!("update_uniform_buffer, delta_time: {}", delta_time);
         self.uniform_transform.model =
-            Matrix4::from_axis_angle(Vector3::new(0.0, 0.0, 1.0), Deg(90.0) * delta_time)
+            Matrix4::from_axis_angle(Vector3::new(0.0, 0.0, 1.0), Deg(90.0) * 5.0 * delta_time)
                 * self.uniform_transform.model;
 
         let ubos = [self.uniform_transform.clone()];
