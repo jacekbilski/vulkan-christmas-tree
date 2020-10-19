@@ -13,9 +13,7 @@ use memoffset::offset_of;
 use winit::event::{ElementState, Event, KeyboardInput, VirtualKeyCode, WindowEvent};
 use winit::event_loop::{ControlFlow, EventLoop};
 
-use fs::read_shader_code;
-
-mod fs;
+use crate::fs::read_shader_code;
 
 // settings
 const SCR_WIDTH: u32 = 1920;
@@ -145,7 +143,7 @@ struct UniformBufferObject {
     proj: Matrix4<f32>,
 }
 
-struct App {
+pub struct Vulkan {
     window: winit::window::Window,
 
     _entry: ash::Entry,
@@ -198,25 +196,25 @@ struct App {
     is_framebuffer_resized: bool,
 }
 
-impl App {
+impl Vulkan {
     pub fn new(event_loop: &winit::event_loop::EventLoop<()>) -> Self {
-        let window = App::init_window(&event_loop);
+        let window = Vulkan::init_window(&event_loop);
         let entry = ash::Entry::new().unwrap();
-        let instance = App::create_instance(&entry);
-        let surface_composite = App::create_surface(&entry, &instance, &window);
-        let (debug_utils_loader, debug_messenger) = App::setup_debug_utils(&entry, &instance);
-        let physical_device = App::pick_physical_device(&instance, &surface_composite);
+        let instance = Vulkan::create_instance(&entry);
+        let surface_composite = Vulkan::create_surface(&entry, &instance, &window);
+        let (debug_utils_loader, debug_messenger) = Vulkan::setup_debug_utils(&entry, &instance);
+        let physical_device = Vulkan::pick_physical_device(&instance, &surface_composite);
         let physical_device_memory_properties =
             unsafe { instance.get_physical_device_memory_properties(physical_device) };
         let (device, queue_family) =
-            App::create_logical_device(&instance, physical_device, &surface_composite);
+            Vulkan::create_logical_device(&instance, physical_device, &surface_composite);
         let graphics_queue =
             unsafe { device.get_device_queue(queue_family.graphics_family.unwrap(), 0) };
         let present_queue =
             unsafe { device.get_device_queue(queue_family.present_family.unwrap(), 0) };
         let transfer_queue =
             unsafe { device.get_device_queue(queue_family.transfer_family.unwrap(), 0) };
-        let swapchain_composite = App::create_swapchain(
+        let swapchain_composite = Vulkan::create_swapchain(
             &instance,
             &device,
             physical_device,
@@ -224,55 +222,55 @@ impl App {
             &surface_composite,
             &queue_family,
         );
-        let swapchain_imageviews = App::create_image_views(
+        let swapchain_imageviews = Vulkan::create_image_views(
             &device,
             swapchain_composite.format,
             &swapchain_composite.images,
         );
-        let render_pass = App::create_render_pass(&device, swapchain_composite.format);
-        let ubo_layout = App::create_descriptor_set_layout(&device);
-        let (graphics_pipeline, pipeline_layout) = App::create_graphics_pipeline(
+        let render_pass = Vulkan::create_render_pass(&device, swapchain_composite.format);
+        let ubo_layout = Vulkan::create_descriptor_set_layout(&device);
+        let (graphics_pipeline, pipeline_layout) = Vulkan::create_graphics_pipeline(
             &device,
             render_pass,
             swapchain_composite.extent,
             ubo_layout,
         );
-        let swapchain_framebuffers = App::create_framebuffers(
+        let swapchain_framebuffers = Vulkan::create_framebuffers(
             &device,
             render_pass,
             &swapchain_imageviews,
             &swapchain_composite.extent,
         );
-        let command_pool = App::create_command_pool(&device, &queue_family);
-        let (uniform_buffers, uniform_buffers_memory) = App::create_uniform_buffers(
+        let command_pool = Vulkan::create_command_pool(&device, &queue_family);
+        let (uniform_buffers, uniform_buffers_memory) = Vulkan::create_uniform_buffers(
             &device,
             &physical_device_memory_properties,
             swapchain_composite.images.len(),
         );
         let descriptor_pool =
-            App::create_descriptor_pool(&device, swapchain_composite.images.len());
-        let descriptor_sets = App::create_descriptor_sets(
+            Vulkan::create_descriptor_pool(&device, swapchain_composite.images.len());
+        let descriptor_sets = Vulkan::create_descriptor_sets(
             &device,
             descriptor_pool,
             ubo_layout,
             &uniform_buffers,
             swapchain_composite.images.len(),
         );
-        let (vertex_buffer, vertex_buffer_memory) = App::create_vertex_buffer(
+        let (vertex_buffer, vertex_buffer_memory) = Vulkan::create_vertex_buffer(
             &device,
             &physical_device_memory_properties,
             command_pool,
             transfer_queue,
             &VERTICES_DATA,
         );
-        let (index_buffer, index_buffer_memory) = App::create_index_buffer(
+        let (index_buffer, index_buffer_memory) = Vulkan::create_index_buffer(
             &device,
             &physical_device_memory_properties,
             command_pool,
             transfer_queue,
             &INDICES_DATA,
         );
-        let command_buffers = App::create_command_buffers(
+        let command_buffers = Vulkan::create_command_buffers(
             &device,
             command_pool,
             graphics_pipeline,
@@ -284,9 +282,9 @@ impl App {
             pipeline_layout,
             &descriptor_sets,
         );
-        let sync_ojbects = App::create_sync_objects(&device);
+        let sync_ojbects = Vulkan::create_sync_objects(&device);
 
-        App {
+        Vulkan {
             window,
 
             _entry: entry,
@@ -427,7 +425,7 @@ impl App {
 
         let extension_names: Vec<*const c_char> = required_extension_names();
 
-        let mut messenger_ci = App::build_messenger_create_info();
+        let mut messenger_ci = Vulkan::build_messenger_create_info();
 
         let create_info = vk::InstanceCreateInfo::builder()
             .application_info(&app_info)
@@ -456,7 +454,7 @@ impl App {
         };
 
         let result = physical_devices.iter().find(|physical_device| {
-            App::is_physical_device_suitable(instance, **physical_device, &surface_composite)
+            Vulkan::is_physical_device_suitable(instance, **physical_device, &surface_composite)
         });
 
         match result {
@@ -470,14 +468,15 @@ impl App {
         physical_device: vk::PhysicalDevice,
         surface_composite: &SurfaceComposite,
     ) -> bool {
-        let indices = App::find_queue_family(instance, physical_device, &surface_composite);
+        let indices = Vulkan::find_queue_family(instance, physical_device, &surface_composite);
         let is_queue_family_supported = indices.is_complete();
 
         let is_device_extension_supported =
-            App::check_device_extension_support(instance, physical_device);
+            Vulkan::check_device_extension_support(instance, physical_device);
 
         let is_swapchain_supported = if is_device_extension_supported {
-            let swapchain_support = App::find_swapchain_support(physical_device, surface_composite);
+            let swapchain_support =
+                Vulkan::find_swapchain_support(physical_device, surface_composite);
             !swapchain_support.formats.is_empty() && !swapchain_support.present_modes.is_empty()
         } else {
             false
@@ -560,11 +559,11 @@ impl App {
         surface_composite: &SurfaceComposite,
         queue_family: &QueueFamilyIndices,
     ) -> SwapChainComposite {
-        let swapchain_support = App::find_swapchain_support(physical_device, surface_composite);
+        let swapchain_support = Vulkan::find_swapchain_support(physical_device, surface_composite);
 
-        let surface_format = App::choose_swapchain_format(&swapchain_support.formats);
-        let present_mode = App::choose_swapchain_present_mode(&swapchain_support.present_modes);
-        let extent = App::choose_swapchain_extent(&swapchain_support.capabilities, window);
+        let surface_format = Vulkan::choose_swapchain_format(&swapchain_support.formats);
+        let present_mode = Vulkan::choose_swapchain_present_mode(&swapchain_support.present_modes);
+        let extent = Vulkan::choose_swapchain_extent(&swapchain_support.capabilities, window);
 
         let image_count = swapchain_support.capabilities.min_image_count + 1;
         let image_count = if swapchain_support.capabilities.max_image_count > 0 {
@@ -675,7 +674,7 @@ impl App {
         physical_device: vk::PhysicalDevice,
         surface_composite: &SurfaceComposite,
     ) -> (ash::Device, QueueFamilyIndices) {
-        let indices = App::find_queue_family(instance, physical_device, surface_composite);
+        let indices = Vulkan::find_queue_family(instance, physical_device, surface_composite);
 
         let queue_priorities: [f32; 1] = [1.0];
         let queue_create_info = vk::DeviceQueueCreateInfo::builder()
@@ -889,8 +888,8 @@ impl App {
         let vert_shader_code = read_shader_code("simple.vert.spv");
         let frag_shader_code = read_shader_code("simple.frag.spv");
 
-        let vert_shader_module = App::create_shader_module(device, vert_shader_code);
-        let frag_shader_module = App::create_shader_module(device, frag_shader_code);
+        let vert_shader_module = Vulkan::create_shader_module(device, vert_shader_code);
+        let frag_shader_module = Vulkan::create_shader_module(device, frag_shader_code);
 
         let main_function_name = CString::new("main").unwrap(); // the beginning function name in shader code.
 
@@ -1145,7 +1144,7 @@ impl App {
         let mut uniform_buffers_memory = vec![];
 
         for _ in 0..swapchain_image_count {
-            let (uniform_buffer, uniform_buffer_memory) = App::create_buffer(
+            let (uniform_buffer, uniform_buffer_memory) = Vulkan::create_buffer(
                 device,
                 buffer_size as u64,
                 vk::BufferUsageFlags::UNIFORM_BUFFER,
@@ -1269,7 +1268,7 @@ impl App {
         data: &[T],
     ) -> (vk::Buffer, vk::DeviceMemory) {
         let buffer_size = std::mem::size_of_val(data) as vk::DeviceSize;
-        let (staging_buffer, staging_buffer_memory) = App::create_buffer(
+        let (staging_buffer, staging_buffer_memory) = Vulkan::create_buffer(
             device,
             buffer_size,
             vk::BufferUsageFlags::TRANSFER_SRC,
@@ -1292,7 +1291,7 @@ impl App {
             device.unmap_memory(staging_buffer_memory);
         }
 
-        let (vertex_buffer, vertex_buffer_memory) = App::create_buffer(
+        let (vertex_buffer, vertex_buffer_memory) = Vulkan::create_buffer(
             device,
             buffer_size,
             vk::BufferUsageFlags::TRANSFER_DST | vk::BufferUsageFlags::VERTEX_BUFFER,
@@ -1300,7 +1299,7 @@ impl App {
             &physical_device_memory_properties,
         );
 
-        App::copy_buffer(
+        Vulkan::copy_buffer(
             device,
             submit_queue,
             command_pool,
@@ -1339,7 +1338,7 @@ impl App {
         };
 
         let mem_requirements = unsafe { device.get_buffer_memory_requirements(buffer) };
-        let memory_type = App::find_memory_type(
+        let memory_type = Vulkan::find_memory_type(
             mem_requirements.memory_type_bits,
             required_memory_properties,
             device_memory_properties,
@@ -1457,7 +1456,7 @@ impl App {
         data: &[u32],
     ) -> (vk::Buffer, vk::DeviceMemory) {
         let buffer_size = std::mem::size_of_val(data) as vk::DeviceSize;
-        let (staging_buffer, staging_buffer_memory) = App::create_buffer(
+        let (staging_buffer, staging_buffer_memory) = Vulkan::create_buffer(
             device,
             buffer_size,
             vk::BufferUsageFlags::TRANSFER_SRC,
@@ -1480,7 +1479,7 @@ impl App {
             device.unmap_memory(staging_buffer_memory);
         }
 
-        let (index_buffer, index_buffer_memory) = App::create_buffer(
+        let (index_buffer, index_buffer_memory) = Vulkan::create_buffer(
             device,
             buffer_size,
             vk::BufferUsageFlags::TRANSFER_DST | vk::BufferUsageFlags::INDEX_BUFFER,
@@ -1488,7 +1487,7 @@ impl App {
             &physical_device_memory_properties,
         );
 
-        App::copy_buffer(
+        Vulkan::copy_buffer(
             device,
             submit_queue,
             command_pool,
@@ -1649,7 +1648,7 @@ impl App {
     ) -> (ash::extensions::ext::DebugUtils, vk::DebugUtilsMessengerEXT) {
         let debug_utils_loader = ash::extensions::ext::DebugUtils::new(entry, instance);
 
-        let messenger_ci = App::build_messenger_create_info();
+        let messenger_ci = Vulkan::build_messenger_create_info();
 
         let utils_messenger = unsafe {
             debug_utils_loader
@@ -1780,7 +1779,7 @@ impl App {
         };
         self.cleanup_swapchain();
 
-        let swapchain_composite = App::create_swapchain(
+        let swapchain_composite = Vulkan::create_swapchain(
             &self.instance,
             &self.device,
             self.physical_device,
@@ -1795,9 +1794,9 @@ impl App {
         self.swapchain_extent = swapchain_composite.extent;
 
         self.swapchain_imageviews =
-            App::create_image_views(&self.device, self.swapchain_format, &self.swapchain_images);
-        self.render_pass = App::create_render_pass(&self.device, self.swapchain_format);
-        let (graphics_pipeline, pipeline_layout) = App::create_graphics_pipeline(
+            Vulkan::create_image_views(&self.device, self.swapchain_format, &self.swapchain_images);
+        self.render_pass = Vulkan::create_render_pass(&self.device, self.swapchain_format);
+        let (graphics_pipeline, pipeline_layout) = Vulkan::create_graphics_pipeline(
             &self.device,
             self.render_pass,
             swapchain_composite.extent,
@@ -1806,13 +1805,13 @@ impl App {
         self.graphics_pipeline = graphics_pipeline;
         self.pipeline_layout = pipeline_layout;
 
-        self.swapchain_framebuffers = App::create_framebuffers(
+        self.swapchain_framebuffers = Vulkan::create_framebuffers(
             &self.device,
             self.render_pass,
             &self.swapchain_imageviews,
             &self.swapchain_extent,
         );
-        self.command_buffers = App::create_command_buffers(
+        self.command_buffers = Vulkan::create_command_buffers(
             &self.device,
             self.command_pool,
             self.graphics_pipeline,
@@ -1905,7 +1904,7 @@ impl App {
     }
 }
 
-impl Drop for App {
+impl Drop for Vulkan {
     fn drop(&mut self) {
         unsafe {
             for i in 0..MAX_FRAMES_IN_FLIGHT {
@@ -1944,13 +1943,6 @@ impl Drop for App {
             self.instance.destroy_instance(None);
         }
     }
-}
-
-fn main() {
-    let event_loop = EventLoop::new();
-
-    let app = App::new(&event_loop);
-    app.main_loop(event_loop);
 }
 
 /// the callback function used in Debug Utils.
