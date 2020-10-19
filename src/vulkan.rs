@@ -15,9 +15,6 @@ use winit::event_loop::{ControlFlow, EventLoop};
 
 use crate::fs::read_shader_code;
 
-const VALIDATION_LAYER_NAME: &'static str = "VK_LAYER_KHRONOS_validation";
-const DEVICE_EXTENSIONS: [&'static str; 1] = ["VK_KHR_swapchain"];
-
 const APPLICATION_VERSION: u32 = vk::make_version(0, 1, 0);
 const ENGINE_VERSION: u32 = vk::make_version(0, 1, 0);
 const VULKAN_API_VERSION: u32 = vk::make_version(1, 2, 154);
@@ -362,10 +359,11 @@ impl Vulkan {
                 println!("Using Wayland");
                 let wayland_surface = window.wayland_surface().unwrap();
                 let wayland_display = window.wayland_display().unwrap();
-                let wayland_create_info = vk::WaylandSurfaceCreateInfoKHR::builder()
-                    .surface(wayland_surface)
-                    .display(wayland_display)
-                    .build();
+                let wayland_create_info = vk::WaylandSurfaceCreateInfoKHR {
+                    surface: wayland_surface,
+                    display: wayland_display,
+                    ..Default::default()
+                };
                 let wayland_surface_loader = WaylandSurface::new(entry, instance);
                 wayland_surface_loader
                     .create_wayland_surface(&wayland_create_info, None)
@@ -374,10 +372,11 @@ impl Vulkan {
                 println!("Using X11");
                 let x11_window = window.xlib_window().unwrap();
                 let x11_display = window.xlib_display().unwrap();
-                let x11_create_info = vk::XlibSurfaceCreateInfoKHR::builder()
-                    .window(x11_window)
-                    .dpy(x11_display as *mut vk::Display)
-                    .build();
+                let x11_create_info = vk::XlibSurfaceCreateInfoKHR {
+                    window: x11_window,
+                    dpy: x11_display as *mut vk::Display,
+                    ..Default::default()
+                };
                 let xlib_surface_loader = XlibSurface::new(entry, instance);
                 xlib_surface_loader
                     .create_xlib_surface(&x11_create_info, None)
@@ -395,33 +394,45 @@ impl Vulkan {
     fn create_instance(entry: &ash::Entry, application_name: &str) -> ash::Instance {
         let app_name = CString::new(application_name).unwrap();
         let engine_name = CString::new("Vulkan Engine").unwrap();
-        let app_info = vk::ApplicationInfo::builder()
-            .application_name(app_name.as_c_str())
-            .application_version(APPLICATION_VERSION)
-            .engine_name(engine_name.as_c_str())
-            .engine_version(ENGINE_VERSION)
-            .api_version(VULKAN_API_VERSION)
-            .build();
+        let app_info = vk::ApplicationInfo {
+            p_application_name: app_name.as_ptr(),
+            application_version: APPLICATION_VERSION,
+            p_engine_name: engine_name.as_ptr(),
+            engine_version: ENGINE_VERSION,
+            api_version: VULKAN_API_VERSION,
+            ..Default::default()
+        };
 
-        let enable_layer_raw_names: Vec<CString> = required_layer_names()
+        let enabled_layer_raw_names: Vec<CString> = required_layer_names()
+            .iter()
+            .map(|name| CString::new(*name).unwrap())
+            .collect();
+        let enabled_layer_names: Vec<*const c_char> = enabled_layer_raw_names
+            .iter()
+            .map(|name| name.as_ptr())
+            .collect();
+
+        let enabled_extension_raw_names: Vec<CString> = required_extension_names()
             .iter()
             .map(|layer_name| CString::new(*layer_name).unwrap())
             .collect();
-        let enable_layer_names: Vec<*const i8> = enable_layer_raw_names
+        let enabled_extension_names: Vec<*const c_char> = enabled_extension_raw_names
             .iter()
             .map(|layer_name| layer_name.as_ptr())
             .collect();
 
-        let extension_names: Vec<*const c_char> = required_extension_names();
+        let debug_utils_messenger_ci = Vulkan::build_messenger_create_info();
 
-        let mut messenger_ci = Vulkan::build_messenger_create_info();
-
-        let create_info = vk::InstanceCreateInfo::builder()
-            .application_info(&app_info)
-            .push_next(&mut messenger_ci)
-            .enabled_layer_names(&enable_layer_names)
-            .enabled_extension_names(&extension_names)
-            .build();
+        let create_info = vk::InstanceCreateInfo {
+            p_application_info: &app_info,
+            p_next: &debug_utils_messenger_ci as *const vk::DebugUtilsMessengerCreateInfoEXT
+                as *const c_void,
+            enabled_layer_count: enabled_layer_names.len() as u32,
+            pp_enabled_layer_names: enabled_layer_names.as_ptr(),
+            enabled_extension_count: enabled_extension_names.len() as u32,
+            pp_enabled_extension_names: enabled_extension_names.as_ptr(),
+            ..Default::default()
+        };
 
         let instance: ash::Instance = unsafe {
             entry
@@ -497,7 +508,7 @@ impl Vulkan {
         }
 
         let mut required_extensions = HashSet::new();
-        for extension in DEVICE_EXTENSIONS.iter() {
+        for extension in required_device_extensions().iter() {
             required_extensions.insert(extension.to_string());
         }
 
@@ -574,21 +585,23 @@ impl Vulkan {
                 (vk::SharingMode::EXCLUSIVE, vec![])
             };
 
-        let swapchain_create_info = vk::SwapchainCreateInfoKHR::builder()
-            .surface(surface_composite.surface)
-            .min_image_count(image_count)
-            .image_color_space(surface_format.color_space)
-            .image_format(surface_format.format)
-            .image_extent(extent)
-            .image_usage(vk::ImageUsageFlags::COLOR_ATTACHMENT)
-            .image_sharing_mode(image_sharing_mode)
-            .queue_family_indices(&queue_family_indices)
-            .pre_transform(swapchain_support.capabilities.current_transform)
-            .composite_alpha(vk::CompositeAlphaFlagsKHR::OPAQUE)
-            .present_mode(present_mode)
-            .clipped(true)
-            .image_array_layers(1)
-            .build();
+        let swapchain_create_info = vk::SwapchainCreateInfoKHR {
+            surface: surface_composite.surface,
+            min_image_count: image_count,
+            image_color_space: surface_format.color_space,
+            image_format: surface_format.format,
+            image_extent: extent,
+            image_usage: vk::ImageUsageFlags::COLOR_ATTACHMENT,
+            image_sharing_mode,
+            queue_family_index_count: queue_family_indices.len() as u32,
+            p_queue_family_indices: queue_family_indices.as_ptr(),
+            pre_transform: swapchain_support.capabilities.current_transform,
+            composite_alpha: vk::CompositeAlphaFlagsKHR::OPAQUE,
+            present_mode,
+            clipped: vk::TRUE,
+            image_array_layers: 1,
+            ..Default::default()
+        };
 
         let loader = ash::extensions::khr::Swapchain::new(instance, device);
         let swapchain = unsafe {
@@ -666,31 +679,44 @@ impl Vulkan {
         let indices = Vulkan::find_queue_family(instance, physical_device, surface_composite);
 
         let queue_priorities: [f32; 1] = [1.0];
-        let queue_create_info = vk::DeviceQueueCreateInfo::builder()
-            .queue_family_index(indices.graphics_family.unwrap())
-            .queue_priorities(&queue_priorities)
-            .build();
+        let queue_create_infos = [vk::DeviceQueueCreateInfo {
+            queue_family_index: indices.graphics_family.unwrap(),
+            queue_count: queue_priorities.len() as u32,
+            p_queue_priorities: queue_priorities.as_ptr(),
+            ..Default::default()
+        }];
 
-        let physical_device_features = vk::PhysicalDeviceFeatures::builder().build();
+        let physical_device_features = vk::PhysicalDeviceFeatures {
+            ..Default::default()
+        };
 
-        let enable_layer_raw_names: Vec<CString> = required_layer_names()
+        let enabled_layer_raw_names: Vec<CString> = required_layer_names()
             .iter()
-            .map(|layer_name| CString::new(*layer_name).unwrap())
+            .map(|name| CString::new(*name).unwrap())
             .collect();
-        let enable_layer_names: Vec<*const i8> = enable_layer_raw_names
+        let enabled_layer_names: Vec<*const c_char> = enabled_layer_raw_names
             .iter()
-            .map(|layer_name| layer_name.as_ptr())
+            .map(|name| name.as_ptr())
             .collect();
-        let enable_extension_names = [
-            ash::extensions::khr::Swapchain::name().as_ptr(), // currently just enable the Swapchain extension.
-        ];
+        let enabled_extension_raw_names: Vec<CString> = required_device_extensions()
+            .iter()
+            .map(|name| CString::new(*name).unwrap())
+            .collect();
+        let enabled_extension_names: Vec<*const c_char> = enabled_extension_raw_names
+            .iter()
+            .map(|name| name.as_ptr())
+            .collect();
 
-        let device_create_info = vk::DeviceCreateInfo::builder()
-            .queue_create_infos(&[queue_create_info])
-            .enabled_layer_names(&enable_layer_names)
-            .enabled_features(&physical_device_features)
-            .enabled_extension_names(&enable_extension_names)
-            .build();
+        let device_create_info = vk::DeviceCreateInfo {
+            queue_create_info_count: queue_create_infos.len() as u32,
+            p_queue_create_infos: queue_create_infos.as_ptr(),
+            enabled_layer_count: enabled_layer_names.len() as u32,
+            pp_enabled_layer_names: enabled_layer_names.as_ptr(),
+            p_enabled_features: &physical_device_features,
+            enabled_extension_count: enabled_extension_names.len() as u32,
+            pp_enabled_extension_names: enabled_extension_names.as_ptr(),
+            ..Default::default()
+        };
 
         let device: ash::Device = unsafe {
             instance
@@ -761,21 +787,25 @@ impl Vulkan {
         let mut swapchain_imageviews = vec![];
 
         for &image in images.iter() {
-            let components = vk::ComponentMapping::builder().build();
-            let subresource_range = vk::ImageSubresourceRange::builder()
-                .aspect_mask(vk::ImageAspectFlags::COLOR)
-                .base_mip_level(0)
-                .level_count(1)
-                .base_array_layer(0)
-                .layer_count(1)
-                .build();
-            let imageview_create_info = vk::ImageViewCreateInfo::builder()
-                .view_type(vk::ImageViewType::TYPE_2D)
-                .format(surface_format)
-                .components(components)
-                .subresource_range(subresource_range)
-                .image(image)
-                .build();
+            let components = vk::ComponentMapping {
+                ..Default::default()
+            };
+            let subresource_range = vk::ImageSubresourceRange {
+                aspect_mask: vk::ImageAspectFlags::COLOR,
+                base_mip_level: 0,
+                level_count: 1,
+                base_array_layer: 0,
+                layer_count: 1,
+                ..Default::default()
+            };
+            let imageview_create_info = vk::ImageViewCreateInfo {
+                view_type: vk::ImageViewType::TYPE_2D,
+                format: surface_format,
+                components,
+                subresource_range,
+                image,
+                ..Default::default()
+            };
 
             let imageview = unsafe {
                 device
@@ -883,16 +913,18 @@ impl Vulkan {
         let main_function_name = CString::new("main").unwrap(); // the beginning function name in shader code.
 
         let shader_stages = [
-            vk::PipelineShaderStageCreateInfo::builder()
-                .module(vert_shader_module)
-                .name(main_function_name.as_c_str())
-                .stage(vk::ShaderStageFlags::VERTEX)
-                .build(),
-            vk::PipelineShaderStageCreateInfo::builder()
-                .module(frag_shader_module)
-                .name(main_function_name.as_c_str())
-                .stage(vk::ShaderStageFlags::FRAGMENT)
-                .build(),
+            vk::PipelineShaderStageCreateInfo {
+                module: vert_shader_module,
+                p_name: main_function_name.as_ptr(),
+                stage: vk::ShaderStageFlags::VERTEX,
+                ..Default::default()
+            },
+            vk::PipelineShaderStageCreateInfo {
+                module: frag_shader_module,
+                p_name: main_function_name.as_ptr(),
+                stage: vk::ShaderStageFlags::FRAGMENT,
+                ..Default::default()
+            },
         ];
 
         let binding_description = Vertex::get_binding_descriptions();
@@ -927,10 +959,13 @@ impl Vulkan {
             extent: swapchain_extent,
         }];
 
-        let viewport_state_create_info = vk::PipelineViewportStateCreateInfo::builder()
-            .scissors(&scissors)
-            .viewports(&viewports)
-            .build();
+        let viewport_state_create_info = vk::PipelineViewportStateCreateInfo {
+            scissor_count: scissors.len() as u32,
+            p_scissors: scissors.as_ptr(),
+            viewport_count: viewports.len() as u32,
+            p_viewports: viewports.as_ptr(),
+            ..Default::default()
+        };
 
         let rasterization_state_create_info = vk::PipelineRasterizationStateCreateInfo {
             flags: vk::PipelineRasterizationStateCreateFlags::empty(),
@@ -1654,20 +1689,17 @@ impl Vulkan {
     }
 
     fn build_messenger_create_info() -> vk::DebugUtilsMessengerCreateInfoEXT {
-        vk::DebugUtilsMessengerCreateInfoEXT::builder()
-            .message_severity(
-                vk::DebugUtilsMessageSeverityFlagsEXT::WARNING |
-                    // vk::DebugUtilsMessageSeverityFlagsEXT::VERBOSE |
-                    // vk::DebugUtilsMessageSeverityFlagsEXT::INFO |
-                    vk::DebugUtilsMessageSeverityFlagsEXT::ERROR,
-            )
-            .message_type(
-                vk::DebugUtilsMessageTypeFlagsEXT::GENERAL
-                    | vk::DebugUtilsMessageTypeFlagsEXT::PERFORMANCE
-                    | vk::DebugUtilsMessageTypeFlagsEXT::VALIDATION,
-            )
-            .pfn_user_callback(Some(vulkan_debug_utils_callback))
-            .build()
+        vk::DebugUtilsMessengerCreateInfoEXT {
+            message_severity: vk::DebugUtilsMessageSeverityFlagsEXT::WARNING
+                // | vk::DebugUtilsMessageSeverityFlagsEXT::VERBOSE
+                // | vk::DebugUtilsMessageSeverityFlagsEXT::INFO
+                | vk::DebugUtilsMessageSeverityFlagsEXT::ERROR,
+            message_type: vk::DebugUtilsMessageTypeFlagsEXT::GENERAL
+                | vk::DebugUtilsMessageTypeFlagsEXT::PERFORMANCE
+                | vk::DebugUtilsMessageTypeFlagsEXT::VALIDATION,
+            pfn_user_callback: Some(vulkan_debug_utils_callback),
+            ..Default::default()
+        }
     }
 
     fn draw_frame(&mut self, delta_time: f32) {
@@ -1967,14 +1999,18 @@ unsafe extern "system" fn vulkan_debug_utils_callback(
 }
 
 fn required_layer_names() -> Vec<&'static str> {
-    vec![VALIDATION_LAYER_NAME]
+    vec!["VK_LAYER_KHRONOS_validation"]
 }
 
-fn required_extension_names() -> Vec<*const c_char> {
+fn required_extension_names() -> Vec<&'static str> {
     vec![
-        Surface::name().as_ptr(),
-        XlibSurface::name().as_ptr(),
-        WaylandSurface::name().as_ptr(),
-        DebugUtils::name().as_ptr(),
+        Surface::name().to_str().unwrap(),
+        XlibSurface::name().to_str().unwrap(),
+        WaylandSurface::name().to_str().unwrap(),
+        DebugUtils::name().to_str().unwrap(),
     ]
+}
+
+fn required_device_extensions() -> Vec<&'static str> {
+    vec![ash::extensions::khr::Swapchain::name().to_str().unwrap()]
 }
