@@ -15,22 +15,13 @@ use winit::event_loop::{ControlFlow, EventLoop};
 
 use crate::fs::read_shader_code;
 
-// settings
-const SCR_WIDTH: u32 = 1920;
-const SCR_HEIGHT: u32 = 1080;
-
 const VALIDATION_LAYER_NAME: &'static str = "VK_LAYER_KHRONOS_validation";
 const DEVICE_EXTENSIONS: [&'static str; 1] = ["VK_KHR_swapchain"];
-
-const WINDOW_TITLE: &'static str = "Vulkan Christmas Tree";
 
 const APPLICATION_VERSION: u32 = vk::make_version(0, 1, 0);
 const ENGINE_VERSION: u32 = vk::make_version(0, 1, 0);
 const VULKAN_API_VERSION: u32 = vk::make_version(1, 2, 154);
 
-const CLEAR_VALUE: vk::ClearColorValue = vk::ClearColorValue {
-    float32: [0.015_7, 0., 0.360_7, 1.0],
-};
 const MAX_FRAMES_IN_FLIGHT: usize = 2;
 
 struct SyncObjects {
@@ -145,6 +136,7 @@ struct UniformBufferObject {
 
 pub struct Vulkan {
     window: winit::window::Window,
+    clear_value: [f32; 4],
 
     _entry: ash::Entry,
     instance: ash::Instance,
@@ -197,10 +189,13 @@ pub struct Vulkan {
 }
 
 impl Vulkan {
-    pub fn new(event_loop: &winit::event_loop::EventLoop<()>) -> Self {
-        let window = Vulkan::init_window(&event_loop);
+    pub fn new(
+        window: winit::window::Window,
+        application_name: &str,
+        clear_value: [f32; 4],
+    ) -> Self {
         let entry = ash::Entry::new().unwrap();
-        let instance = Vulkan::create_instance(&entry);
+        let instance = Vulkan::create_instance(&entry, application_name);
         let surface_composite = Vulkan::create_surface(&entry, &instance, &window);
         let (debug_utils_loader, debug_messenger) = Vulkan::setup_debug_utils(&entry, &instance);
         let physical_device = Vulkan::pick_physical_device(&instance, &surface_composite);
@@ -281,11 +276,13 @@ impl Vulkan {
             index_buffer,
             pipeline_layout,
             &descriptor_sets,
+            clear_value,
         );
         let sync_ojbects = Vulkan::create_sync_objects(&device);
 
         Vulkan {
             window,
+            clear_value,
 
             _entry: entry,
             instance,
@@ -352,14 +349,6 @@ impl Vulkan {
         }
     }
 
-    fn init_window(event_loop: &EventLoop<()>) -> winit::window::Window {
-        winit::window::WindowBuilder::new()
-            .with_title(WINDOW_TITLE)
-            .with_inner_size(winit::dpi::PhysicalSize::new(SCR_WIDTH, SCR_HEIGHT))
-            .build(event_loop)
-            .expect("Failed to create window.")
-    }
-
     #[cfg(all(unix, not(target_os = "android"), not(target_os = "macos")))]
     fn create_surface(
         entry: &ash::Entry,
@@ -403,8 +392,8 @@ impl Vulkan {
         }
     }
 
-    fn create_instance(entry: &ash::Entry) -> ash::Instance {
-        let app_name = CString::new(WINDOW_TITLE).unwrap();
+    fn create_instance(entry: &ash::Entry, application_name: &str) -> ash::Instance {
+        let app_name = CString::new(application_name).unwrap();
         let engine_name = CString::new("Vulkan Engine").unwrap();
         let app_info = vk::ApplicationInfo::builder()
             .application_name(app_name.as_c_str())
@@ -1515,6 +1504,7 @@ impl Vulkan {
         index_buffer: vk::Buffer,
         pipeline_layout: vk::PipelineLayout,
         descriptor_sets: &Vec<vk::DescriptorSet>,
+        clear_value: [f32; 4],
     ) -> Vec<vk::CommandBuffer> {
         let command_buffer_allocate_info = vk::CommandBufferAllocateInfo {
             command_buffer_count: framebuffers.len() as u32,
@@ -1542,7 +1532,11 @@ impl Vulkan {
                     .expect("Failed to begin recording Command Buffer at beginning!");
             }
 
-            let clear_values = [vk::ClearValue { color: CLEAR_VALUE }];
+            let clear_values = [vk::ClearValue {
+                color: vk::ClearColorValue {
+                    float32: clear_value,
+                },
+            }];
 
             let render_pass_begin_info = vk::RenderPassBeginInfo {
                 render_pass,
@@ -1822,6 +1816,7 @@ impl Vulkan {
             self.index_buffer,
             self.pipeline_layout,
             &self.descriptor_sets,
+            self.clear_value,
         );
     }
 
