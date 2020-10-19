@@ -2,7 +2,6 @@ use std::collections::HashSet;
 use std::ffi::{CStr, CString};
 use std::os::raw::{c_char, c_void};
 use std::ptr;
-use std::time::Instant;
 
 use ash::extensions::ext::DebugUtils;
 use ash::extensions::khr::{Surface, WaylandSurface, XlibSurface};
@@ -10,8 +9,6 @@ use ash::version::{DeviceV1_0, EntryV1_0, InstanceV1_0};
 use ash::vk;
 use cgmath::{Deg, Matrix4, Point3, SquareMatrix, Vector3};
 use memoffset::offset_of;
-use winit::event::{ElementState, Event, KeyboardInput, VirtualKeyCode, WindowEvent};
-use winit::event_loop::{ControlFlow, EventLoop};
 
 use crate::fs::read_shader_code;
 
@@ -132,7 +129,6 @@ struct UniformBufferObject {
 }
 
 pub struct Vulkan {
-    window: winit::window::Window,
     clear_value: [f32; 4],
 
     _entry: ash::Entry,
@@ -183,11 +179,13 @@ pub struct Vulkan {
     current_frame: usize,
 
     is_framebuffer_resized: bool,
+    window_width: u32,
+    window_height: u32,
 }
 
 impl Vulkan {
     pub fn new(
-        window: winit::window::Window,
+        window: &winit::window::Window,
         application_name: &str,
         clear_value: [f32; 4],
     ) -> Self {
@@ -206,13 +204,16 @@ impl Vulkan {
             unsafe { device.get_device_queue(queue_family.present_family.unwrap(), 0) };
         let transfer_queue =
             unsafe { device.get_device_queue(queue_family.transfer_family.unwrap(), 0) };
+        let window_width = window.inner_size().width;
+        let window_height = window.inner_size().height;
         let swapchain_composite = Vulkan::create_swapchain(
             &instance,
             &device,
             physical_device,
-            &window,
             &surface_composite,
             &queue_family,
+            window_width,
+            window_height,
         );
         let swapchain_imageviews = Vulkan::create_image_views(
             &device,
@@ -278,7 +279,6 @@ impl Vulkan {
         let sync_ojbects = Vulkan::create_sync_objects(&device);
 
         Vulkan {
-            window,
             clear_value,
 
             _entry: entry,
@@ -343,6 +343,8 @@ impl Vulkan {
             current_frame: 0,
 
             is_framebuffer_resized: false,
+            window_width,
+            window_height,
         }
     }
 
@@ -555,15 +557,20 @@ impl Vulkan {
         instance: &ash::Instance,
         device: &ash::Device,
         physical_device: vk::PhysicalDevice,
-        window: &winit::window::Window,
         surface_composite: &SurfaceComposite,
         queue_family: &QueueFamilyIndices,
+        window_width: u32,
+        window_height: u32,
     ) -> SwapChainComposite {
         let swapchain_support = Vulkan::find_swapchain_support(physical_device, surface_composite);
 
         let surface_format = Vulkan::choose_swapchain_format(&swapchain_support.formats);
         let present_mode = Vulkan::choose_swapchain_present_mode(&swapchain_support.present_modes);
-        let extent = Vulkan::choose_swapchain_extent(&swapchain_support.capabilities, window);
+        let extent = Vulkan::choose_swapchain_extent(
+            &swapchain_support.capabilities,
+            window_width,
+            window_height,
+        );
 
         let image_count = swapchain_support.capabilities.min_image_count + 1;
         let image_count = if swapchain_support.capabilities.max_image_count > 0 {
@@ -658,15 +665,15 @@ impl Vulkan {
 
     fn choose_swapchain_extent(
         capabilities: &vk::SurfaceCapabilitiesKHR,
-        window: &winit::window::Window,
+        window_width: u32,
+        window_height: u32,
     ) -> vk::Extent2D {
         if capabilities.current_extent.width != u32::max_value() {
             capabilities.current_extent
         } else {
-            let window_size = window.inner_size();
             vk::Extent2D {
-                width: window_size.width,
-                height: window_size.height,
+                width: window_width,
+                height: window_height,
             }
         }
     }
@@ -1702,7 +1709,7 @@ impl Vulkan {
         }
     }
 
-    fn draw_frame(&mut self, delta_time: f32) {
+    pub fn draw_frame(&mut self, delta_time: f32) {
         let wait_fences = [self.in_flight_fences[self.current_frame]];
 
         unsafe {
@@ -1809,9 +1816,10 @@ impl Vulkan {
             &self.instance,
             &self.device,
             self.physical_device,
-            &self.window,
             &surface_composite,
             &self.queue_family,
+            self.window_width,
+            self.window_height,
         );
         self.swapchain_loader = swapchain_composite.loader;
         self.swapchain = swapchain_composite.swapchain;
@@ -1871,7 +1879,7 @@ impl Vulkan {
         }
     }
 
-    fn wait_device_idle(&self) {
+    pub fn wait_device_idle(&self) {
         unsafe {
             self.device
                 .device_wait_idle()
@@ -1879,55 +1887,10 @@ impl Vulkan {
         };
     }
 
-    pub fn main_loop(mut self, event_loop: EventLoop<()>) {
-        let mut ticker = Instant::now();
-        event_loop.run(move |event, _, control_flow| match event {
-            Event::WindowEvent {
-                event: WindowEvent::CloseRequested,
-                ..
-            } => {
-                self.wait_device_idle();
-                *control_flow = ControlFlow::Exit;
-            }
-            Event::WindowEvent {
-                event:
-                    WindowEvent::KeyboardInput {
-                        input:
-                            KeyboardInput {
-                                virtual_keycode: Some(virtual_code),
-                                state: ElementState::Pressed,
-                                ..
-                            },
-                        ..
-                    },
-                ..
-            } => match virtual_code {
-                VirtualKeyCode::Escape => {
-                    self.wait_device_idle();
-                    *control_flow = ControlFlow::Exit;
-                }
-                _ => (),
-            },
-            Event::WindowEvent {
-                event: WindowEvent::Resized(_new_size),
-                ..
-            } => {
-                self.wait_device_idle();
-                self.is_framebuffer_resized = true;
-            }
-            Event::MainEventsCleared => {
-                self.window.request_redraw();
-            }
-            Event::RedrawRequested(_window_id) => {
-                let delta = ticker.elapsed().subsec_micros();
-                self.draw_frame(delta as f32 / 1000_000.0_f32);
-                ticker = Instant::now();
-            }
-            Event::LoopDestroyed => {
-                self.wait_device_idle();
-            }
-            _ => (),
-        });
+    pub fn framebuffer_resized(&mut self, window_width: u32, window_height: u32) {
+        self.is_framebuffer_resized = true;
+        self.window_width = window_width;
+        self.window_height = window_height;
     }
 }
 
