@@ -11,6 +11,7 @@ use cgmath::{Deg, Matrix4, Point3, SquareMatrix, Vector3};
 use memoffset::offset_of;
 
 use crate::fs::read_shader_code;
+use crate::mesh::Mesh;
 
 const APPLICATION_VERSION: u32 = vk::make_version(0, 1, 0);
 const ENGINE_VERSION: u32 = vk::make_version(0, 1, 0);
@@ -69,9 +70,9 @@ struct SwapChainSupportDetails {
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
-struct Vertex {
-    pos: [f32; 2],
-    color: [f32; 3],
+pub struct Vertex {
+    pub pos: [f32; 2],
+    pub color: [f32; 3],
 }
 impl Vertex {
     fn get_binding_descriptions() -> [vk::VertexInputBindingDescription; 1] {
@@ -106,27 +107,8 @@ struct VulkanMesh {
     vertex_buffer_memory: vk::DeviceMemory,
     index_buffer: vk::Buffer,
     index_buffer_memory: vk::DeviceMemory,
+    indices_no: u32,
 }
-
-const VERTICES_DATA: [Vertex; 4] = [
-    Vertex {
-        pos: [-0.5, -0.5],
-        color: [1.0, 0.0, 0.0],
-    },
-    Vertex {
-        pos: [0.5, -0.5],
-        color: [0.0, 1.0, 0.0],
-    },
-    Vertex {
-        pos: [0.5, 0.5],
-        color: [0.0, 0.0, 1.0],
-    },
-    Vertex {
-        pos: [-0.5, 0.5],
-        color: [1.0, 1.0, 1.0],
-    },
-];
-const INDICES_DATA: [u32; 6] = [0, 1, 2, 2, 3, 0];
 
 #[repr(C)]
 #[derive(Clone, Debug, Copy)]
@@ -193,6 +175,7 @@ impl Vulkan {
         window: &winit::window::Window,
         application_name: &str,
         clear_value: [f32; 4],
+        mesh: Mesh,
     ) -> Self {
         let entry = ash::Entry::new().unwrap();
         let instance = Vulkan::create_instance(&entry, application_name);
@@ -259,20 +242,22 @@ impl Vulkan {
             &physical_device_memory_properties,
             command_pool,
             transfer_queue,
-            &VERTICES_DATA,
+            &mesh.vertices,
         );
         let (index_buffer, index_buffer_memory) = Vulkan::create_index_buffer(
             &device,
             &physical_device_memory_properties,
             command_pool,
             transfer_queue,
-            &INDICES_DATA,
+            &mesh.indices,
         );
+        let indices_no = mesh.indices.len() as u32;
         let mesh = VulkanMesh {
             vertex_buffer,
             vertex_buffer_memory,
             index_buffer,
             index_buffer_memory,
+            indices_no,
         };
         let command_buffers = Vulkan::create_command_buffers(
             &device,
@@ -1630,7 +1615,7 @@ impl Vulkan {
                     &[],
                 );
 
-                device.cmd_draw_indexed(command_buffer, INDICES_DATA.len() as u32, 1, 0, 0, 0);
+                device.cmd_draw_indexed(command_buffer, mesh.indices_no, 1, 0, 0, 0);
 
                 device.cmd_end_render_pass(command_buffer);
 
