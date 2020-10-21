@@ -100,6 +100,14 @@ impl Vertex {
     }
 }
 
+#[derive(Clone, Copy)]
+struct VulkanMesh {
+    vertex_buffer: vk::Buffer,
+    vertex_buffer_memory: vk::DeviceMemory,
+    index_buffer: vk::Buffer,
+    index_buffer_memory: vk::DeviceMemory,
+}
+
 const VERTICES_DATA: [Vertex; 4] = [
     Vertex {
         pos: [-0.5, -0.5],
@@ -165,10 +173,7 @@ pub struct Vulkan {
     descriptor_pool: vk::DescriptorPool,
     descriptor_sets: Vec<vk::DescriptorSet>,
 
-    vertex_buffer: vk::Buffer,
-    vertex_buffer_memory: vk::DeviceMemory,
-    index_buffer: vk::Buffer,
-    index_buffer_memory: vk::DeviceMemory,
+    mesh: VulkanMesh,
 
     command_pool: vk::CommandPool,
     command_buffers: Vec<vk::CommandBuffer>,
@@ -263,6 +268,12 @@ impl Vulkan {
             transfer_queue,
             &INDICES_DATA,
         );
+        let mesh = VulkanMesh {
+            vertex_buffer,
+            vertex_buffer_memory,
+            index_buffer,
+            index_buffer_memory,
+        };
         let command_buffers = Vulkan::create_command_buffers(
             &device,
             command_pool,
@@ -270,8 +281,7 @@ impl Vulkan {
             &swapchain_framebuffers,
             render_pass,
             swapchain_composite.extent,
-            vertex_buffer,
-            index_buffer,
+            mesh,
             pipeline_layout,
             &descriptor_sets,
             clear_value,
@@ -329,10 +339,7 @@ impl Vulkan {
             descriptor_pool,
             descriptor_sets,
 
-            vertex_buffer,
-            vertex_buffer_memory,
-            index_buffer,
-            index_buffer_memory,
+            mesh,
 
             command_pool,
             command_buffers,
@@ -1542,8 +1549,7 @@ impl Vulkan {
         framebuffers: &Vec<vk::Framebuffer>,
         render_pass: vk::RenderPass,
         surface_extent: vk::Extent2D,
-        vertex_buffer: vk::Buffer,
-        index_buffer: vk::Buffer,
+        mesh: VulkanMesh,
         pipeline_layout: vk::PipelineLayout,
         descriptor_sets: &Vec<vk::DescriptorSet>,
         clear_value: [f32; 4],
@@ -1604,14 +1610,14 @@ impl Vulkan {
                     graphics_pipeline,
                 );
 
-                let vertex_buffers = [vertex_buffer];
+                let vertex_buffers = [mesh.vertex_buffer];
                 let offsets = [0_u64];
                 let descriptor_sets_to_bind = [descriptor_sets[i]];
 
                 device.cmd_bind_vertex_buffers(command_buffer, 0, &vertex_buffers, &offsets);
                 device.cmd_bind_index_buffer(
                     command_buffer,
-                    index_buffer,
+                    mesh.index_buffer,
                     0,
                     vk::IndexType::UINT32,
                 );
@@ -1852,8 +1858,7 @@ impl Vulkan {
             &self.swapchain_framebuffers,
             self.render_pass,
             self.swapchain_extent,
-            self.vertex_buffer,
-            self.index_buffer,
+            self.mesh,
             self.pipeline_layout,
             &self.descriptor_sets,
             self.clear_value,
@@ -1907,11 +1912,12 @@ impl Drop for Vulkan {
 
             self.cleanup_swapchain();
 
-            self.device.destroy_buffer(self.index_buffer, None);
-            self.device.free_memory(self.index_buffer_memory, None);
+            self.device.destroy_buffer(self.mesh.index_buffer, None);
+            self.device.free_memory(self.mesh.index_buffer_memory, None);
 
-            self.device.destroy_buffer(self.vertex_buffer, None);
-            self.device.free_memory(self.vertex_buffer_memory, None);
+            self.device.destroy_buffer(self.mesh.vertex_buffer, None);
+            self.device
+                .free_memory(self.mesh.vertex_buffer_memory, None);
 
             self.device
                 .destroy_descriptor_pool(self.descriptor_pool, None);
