@@ -28,23 +28,23 @@ const CLEAR_VALUE: [f32; 4] = [0.015_7, 0., 0.360_7, 1.0];
 
 const VERTICES_DATA: [Vertex; 4] = [
     Vertex {
-        pos: [-0.5, -0.5],
+        pos: [-0.5, 0.0, -0.5],
         color: [1.0, 0.0, 0.0],
     },
     Vertex {
-        pos: [0.5, -0.5],
+        pos: [0.5, 0.0, -0.5],
         color: [0.0, 1.0, 0.0],
     },
     Vertex {
-        pos: [0.5, 0.5],
+        pos: [0.5, 0.0, 0.5],
         color: [0.0, 0.0, 1.0],
     },
     Vertex {
-        pos: [-0.5, 0.5],
+        pos: [-0.5, 0.0, 0.5],
         color: [1.0, 1.0, 1.0],
     },
 ];
-const INDICES_DATA: [u32; 6] = [0, 1, 2, 2, 3, 0];
+const INDICES_DATA: [u32; 6] = [0, 2, 1, 3, 2, 0];
 
 fn main() {
     let event_loop = EventLoop::new();
@@ -55,7 +55,7 @@ fn main() {
     };
     let vulkan = Vulkan::new(&window, APPLICATION_NAME, CLEAR_VALUE, mesh);
     let camera_position: SphericalPoint3<f32> = SphericalPoint3::from(Point3::new(1.1, 1.1, 1.1));
-    let look_at = Point3::new(0.0, 0.0, -0.2);
+    let look_at = Point3::new(0.0, -0.1, 0.0);
     let camera = Camera::new(
         camera_position,
         look_at,
@@ -75,7 +75,7 @@ fn init_window(event_loop: &EventLoop<()>) -> winit::window::Window {
 fn main_loop(
     mut vulkan: vulkan::Vulkan,
     window: winit::window::Window,
-    camera: Camera,
+    mut camera: Camera,
     event_loop: EventLoop<()>,
 ) {
     let mut ticker = Instant::now();
@@ -118,8 +118,8 @@ fn main_loop(
             window.request_redraw();
         }
         Event::RedrawRequested(_window_id) => {
-            let _delta = ticker.elapsed().subsec_micros();
-            // vulkan.draw_frame(delta as f32 / 1000_000.0_f32);
+            let delta = ticker.elapsed().subsec_micros() as f32;
+            camera.rotate_horizontally(delta / 100_000.0, &mut vulkan);
             vulkan.draw_frame();
             ticker = Instant::now();
         }
