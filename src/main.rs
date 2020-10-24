@@ -5,9 +5,7 @@ use winit::event_loop::{ControlFlow, EventLoop};
 
 use vulkan::Vulkan;
 
-use crate::mesh::Mesh;
 use crate::scene::Scene;
-use crate::vulkan::Vertex;
 
 mod vulkan;
 
@@ -24,36 +22,11 @@ const APPLICATION_NAME: &'static str = "Vulkan Christmas Tree";
 
 const CLEAR_VALUE: [f32; 4] = [0.015_7, 0., 0.360_7, 1.0];
 
-const VERTICES_DATA: [Vertex; 4] = [
-    Vertex {
-        pos: [-0.5, 0.0, -0.5],
-        color: [1.0, 0.0, 0.0],
-    },
-    Vertex {
-        pos: [0.5, 0.0, -0.5],
-        color: [0.0, 1.0, 0.0],
-    },
-    Vertex {
-        pos: [0.5, 0.0, 0.5],
-        color: [0.0, 0.0, 1.0],
-    },
-    Vertex {
-        pos: [-0.5, 0.0, 0.5],
-        color: [1.0, 1.0, 1.0],
-    },
-];
-const INDICES_DATA: [u32; 6] = [0, 2, 1, 3, 2, 0];
-
 fn main() {
     let event_loop = EventLoop::new();
     let window = init_window(&event_loop);
-    let mesh = Mesh {
-        vertices: Vec::from(VERTICES_DATA),
-        indices: Vec::from(INDICES_DATA),
-    };
     let mut vulkan = Vulkan::new(&window, APPLICATION_NAME, CLEAR_VALUE);
     let scene = Scene::setup(&mut vulkan, &window);
-    vulkan.set_meshes(&vec![mesh]);
     main_loop(vulkan, window, scene, event_loop);
 }
 

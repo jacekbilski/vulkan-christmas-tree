@@ -1,10 +1,31 @@
 use cgmath::Point3;
 
 use crate::coords::SphericalPoint3;
+use crate::mesh::Mesh;
 use crate::scene::camera::Camera;
-use crate::vulkan::Vulkan;
+use crate::vulkan::{Vertex, Vulkan};
 
 pub mod camera;
+
+const VERTICES_DATA: [Vertex; 4] = [
+    Vertex {
+        pos: [-0.5, 0.0, -0.5],
+        color: [1.0, 0.0, 0.0],
+    },
+    Vertex {
+        pos: [0.5, 0.0, -0.5],
+        color: [0.0, 1.0, 0.0],
+    },
+    Vertex {
+        pos: [0.5, 0.0, 0.5],
+        color: [0.0, 0.0, 1.0],
+    },
+    Vertex {
+        pos: [-0.5, 0.0, 0.5],
+        color: [1.0, 1.0, 1.0],
+    },
+];
+const INDICES_DATA: [u32; 6] = [0, 2, 1, 3, 2, 0];
 
 pub struct Scene {
     pub camera: Camera,
@@ -21,6 +42,12 @@ impl Scene {
             [window.inner_size().width, window.inner_size().height],
         );
         vulkan.update_camera(&camera);
+
+        let mesh = Mesh {
+            vertices: Vec::from(VERTICES_DATA),
+            indices: Vec::from(INDICES_DATA),
+        };
+        vulkan.set_meshes(&vec![mesh]);
         Self { camera }
     }
 
