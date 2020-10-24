@@ -20,12 +20,10 @@ const SCR_HEIGHT: u32 = 1080;
 
 const APPLICATION_NAME: &'static str = "Vulkan Christmas Tree";
 
-const CLEAR_VALUE: [f32; 4] = [0.015_7, 0., 0.360_7, 1.0];
-
 fn main() {
     let event_loop = EventLoop::new();
     let window = init_window(&event_loop);
-    let mut vulkan = Vulkan::new(&window, APPLICATION_NAME, CLEAR_VALUE);
+    let mut vulkan = Vulkan::new(&window, APPLICATION_NAME);
     let scene = Scene::setup(&mut vulkan, &window);
     main_loop(vulkan, window, scene, event_loop);
 }

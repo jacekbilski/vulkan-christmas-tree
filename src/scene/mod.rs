@@ -7,6 +7,8 @@ use crate::vulkan::{Vertex, Vulkan};
 
 pub mod camera;
 
+const CLEAR_VALUE: [f32; 4] = [0.015_7, 0., 0.360_7, 1.0];
+
 const VERTICES_DATA: [Vertex; 4] = [
     Vertex {
         pos: [-0.5, 0.0, -0.5],
@@ -33,6 +35,8 @@ pub struct Scene {
 
 impl Scene {
     pub fn setup(vulkan: &mut Vulkan, window: &winit::window::Window) -> Self {
+        vulkan.set_clear_value(CLEAR_VALUE);
+
         let camera_position: SphericalPoint3<f32> =
             SphericalPoint3::from(Point3::new(1.1, 1.1, 1.1));
         let look_at = Point3::new(0.0, -0.1, 0.0);
@@ -48,6 +52,7 @@ impl Scene {
             indices: Vec::from(INDICES_DATA),
         };
         vulkan.set_meshes(&vec![mesh]);
+
         Self { camera }
     }
 

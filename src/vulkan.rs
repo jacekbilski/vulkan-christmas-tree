@@ -181,11 +181,7 @@ pub struct Vulkan {
 }
 
 impl Vulkan {
-    pub fn new(
-        window: &winit::window::Window,
-        application_name: &str,
-        clear_value: [f32; 4],
-    ) -> Self {
+    pub fn new(window: &winit::window::Window, application_name: &str) -> Self {
         let entry = ash::Entry::new().unwrap();
         let instance = Vulkan::create_instance(&entry, application_name);
         let surface_composite = Vulkan::create_surface(&entry, &instance, &window);
@@ -249,7 +245,7 @@ impl Vulkan {
         let sync_ojbects = Vulkan::create_sync_objects(&device);
 
         Vulkan {
-            clear_value,
+            clear_value: [0.0, 0.0, 0.0, 0.0],
 
             _entry: entry,
             instance,
@@ -343,6 +339,10 @@ impl Vulkan {
         );
         self.meshes = vulkan_meshes;
         self.command_buffers = command_buffers;
+    }
+
+    pub fn set_clear_value(&mut self, clear_value: [f32; 4]) {
+        self.clear_value = clear_value;
     }
 
     #[cfg(all(unix, not(target_os = "android"), not(target_os = "macos")))]
