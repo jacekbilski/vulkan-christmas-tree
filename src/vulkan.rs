@@ -163,7 +163,7 @@ pub struct Vulkan {
     descriptor_pool: vk::DescriptorPool,
     descriptor_sets: Vec<vk::DescriptorSet>,
 
-    mesh: VulkanMesh,
+    meshes: Vec<VulkanMesh>,
 
     command_pool: vk::CommandPool,
     command_buffers: Vec<vk::CommandBuffer>,
@@ -260,13 +260,13 @@ impl Vulkan {
             &mesh.indices,
         );
         let indices_no = mesh.indices.len() as u32;
-        let mesh = VulkanMesh {
+        let meshes = vec![VulkanMesh {
             vertex_buffer,
             vertex_buffer_memory,
             index_buffer,
             index_buffer_memory,
             indices_no,
-        };
+        }];
         let command_buffers = Vulkan::create_command_buffers(
             &device,
             command_pool,
@@ -274,7 +274,7 @@ impl Vulkan {
             &swapchain_framebuffers,
             render_pass,
             swapchain_composite.extent,
-            mesh,
+            &meshes,
             pipeline_layout,
             &descriptor_sets,
             clear_value,
@@ -317,7 +317,7 @@ impl Vulkan {
             descriptor_pool,
             descriptor_sets,
 
-            mesh,
+            meshes,
 
             command_pool,
             command_buffers,
@@ -1526,7 +1526,7 @@ impl Vulkan {
         framebuffers: &Vec<vk::Framebuffer>,
         render_pass: vk::RenderPass,
         surface_extent: vk::Extent2D,
-        mesh: VulkanMesh,
+        meshes: &Vec<VulkanMesh>,
         pipeline_layout: vk::PipelineLayout,
         descriptor_sets: &Vec<vk::DescriptorSet>,
         clear_value: [f32; 4],
@@ -1587,17 +1587,7 @@ impl Vulkan {
                     graphics_pipeline,
                 );
 
-                let vertex_buffers = [mesh.vertex_buffer];
-                let offsets = [0_u64];
                 let descriptor_sets_to_bind = [descriptor_sets[i]];
-
-                device.cmd_bind_vertex_buffers(command_buffer, 0, &vertex_buffers, &offsets);
-                device.cmd_bind_index_buffer(
-                    command_buffer,
-                    mesh.index_buffer,
-                    0,
-                    vk::IndexType::UINT32,
-                );
                 device.cmd_bind_descriptor_sets(
                     command_buffer,
                     vk::PipelineBindPoint::GRAPHICS,
@@ -1607,7 +1597,19 @@ impl Vulkan {
                     &[],
                 );
 
-                device.cmd_draw_indexed(command_buffer, mesh.indices_no, 1, 0, 0, 0);
+                for mesh in meshes.iter() {
+                    let vertex_buffers = [mesh.vertex_buffer];
+                    let offsets = [0_u64];
+
+                    device.cmd_bind_vertex_buffers(command_buffer, 0, &vertex_buffers, &offsets);
+                    device.cmd_bind_index_buffer(
+                        command_buffer,
+                        mesh.index_buffer,
+                        0,
+                        vk::IndexType::UINT32,
+                    );
+                    device.cmd_draw_indexed(command_buffer, mesh.indices_no, 1, 0, 0, 0);
+                }
 
                 device.cmd_end_render_pass(command_buffer);
 
@@ -1833,7 +1835,7 @@ impl Vulkan {
             &self.swapchain_framebuffers,
             self.render_pass,
             self.swapchain_extent,
-            self.mesh,
+            &self.meshes,
             self.pipeline_layout,
             &self.descriptor_sets,
             self.clear_value,
@@ -1887,13 +1889,12 @@ impl Drop for Vulkan {
 
             self.cleanup_swapchain();
 
-            self.device.destroy_buffer(self.mesh.index_buffer, None);
-            self.device.free_memory(self.mesh.index_buffer_memory, None);
-
-            self.device.destroy_buffer(self.mesh.vertex_buffer, None);
-            self.device
-                .free_memory(self.mesh.vertex_buffer_memory, None);
-
+            for mesh in self.meshes.iter() {
+                self.device.destroy_buffer(mesh.index_buffer, None);
+                self.device.free_memory(mesh.index_buffer_memory, None);
+                self.device.destroy_buffer(mesh.vertex_buffer, None);
+                self.device.free_memory(mesh.vertex_buffer_memory, None);
+            }
             self.device
                 .destroy_descriptor_pool(self.descriptor_pool, None);
 
