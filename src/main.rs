@@ -51,8 +51,9 @@ fn main() {
         vertices: Vec::from(VERTICES_DATA),
         indices: Vec::from(INDICES_DATA),
     };
-    let mut vulkan = Vulkan::new(&window, APPLICATION_NAME, CLEAR_VALUE, mesh);
+    let mut vulkan = Vulkan::new(&window, APPLICATION_NAME, CLEAR_VALUE);
     let scene = Scene::setup(&mut vulkan, &window);
+    vulkan.set_meshes(&vec![mesh]);
     main_loop(vulkan, window, scene, event_loop);
 }
 

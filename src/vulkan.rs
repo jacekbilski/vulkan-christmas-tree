@@ -138,11 +138,13 @@ pub struct Vulkan {
     debug_messenger: vk::DebugUtilsMessengerEXT,
 
     physical_device: vk::PhysicalDevice,
+    physical_device_memory_properties: vk::PhysicalDeviceMemoryProperties,
     device: ash::Device,
 
     queue_family: QueueFamilyIndices,
     graphics_queue: vk::Queue,
     present_queue: vk::Queue,
+    transfer_queue: vk::Queue,
 
     swapchain_loader: ash::extensions::khr::Swapchain,
     swapchain: vk::SwapchainKHR,
@@ -183,7 +185,6 @@ impl Vulkan {
         window: &winit::window::Window,
         application_name: &str,
         clear_value: [f32; 4],
-        mesh: Mesh,
     ) -> Self {
         let entry = ash::Entry::new().unwrap();
         let instance = Vulkan::create_instance(&entry, application_name);
@@ -245,40 +246,6 @@ impl Vulkan {
             &uniform_buffers,
             swapchain_composite.images.len(),
         );
-        let (vertex_buffer, vertex_buffer_memory) = Vulkan::create_vertex_buffer(
-            &device,
-            &physical_device_memory_properties,
-            command_pool,
-            transfer_queue,
-            &mesh.vertices,
-        );
-        let (index_buffer, index_buffer_memory) = Vulkan::create_index_buffer(
-            &device,
-            &physical_device_memory_properties,
-            command_pool,
-            transfer_queue,
-            &mesh.indices,
-        );
-        let indices_no = mesh.indices.len() as u32;
-        let meshes = vec![VulkanMesh {
-            vertex_buffer,
-            vertex_buffer_memory,
-            index_buffer,
-            index_buffer_memory,
-            indices_no,
-        }];
-        let command_buffers = Vulkan::create_command_buffers(
-            &device,
-            command_pool,
-            graphics_pipeline,
-            &swapchain_framebuffers,
-            render_pass,
-            swapchain_composite.extent,
-            &meshes,
-            pipeline_layout,
-            &descriptor_sets,
-            clear_value,
-        );
         let sync_ojbects = Vulkan::create_sync_objects(&device);
 
         Vulkan {
@@ -292,11 +259,13 @@ impl Vulkan {
             debug_messenger,
 
             physical_device,
+            physical_device_memory_properties,
             device,
 
             queue_family,
             graphics_queue,
             present_queue,
+            transfer_queue,
 
             swapchain_loader: swapchain_composite.loader,
             swapchain: swapchain_composite.swapchain,
@@ -317,10 +286,10 @@ impl Vulkan {
             descriptor_pool,
             descriptor_sets,
 
-            meshes,
+            meshes: vec![],
 
             command_pool,
-            command_buffers,
+            command_buffers: vec![],
 
             image_available_semaphores: sync_ojbects.image_available_semaphores,
             render_finished_semaphores: sync_ojbects.render_finished_semaphores,
@@ -331,6 +300,49 @@ impl Vulkan {
             window_width,
             window_height,
         }
+    }
+
+    pub fn set_meshes(&mut self, meshes: &Vec<Mesh>) {
+        let mut vulkan_meshes: Vec<VulkanMesh> = vec![];
+
+        for mesh in meshes.iter() {
+            let (vertex_buffer, vertex_buffer_memory) = Vulkan::create_vertex_buffer(
+                &self.device,
+                &self.physical_device_memory_properties,
+                self.command_pool,
+                self.transfer_queue,
+                &mesh.vertices,
+            );
+            let (index_buffer, index_buffer_memory) = Vulkan::create_index_buffer(
+                &self.device,
+                &self.physical_device_memory_properties,
+                self.command_pool,
+                self.transfer_queue,
+                &mesh.indices,
+            );
+            let indices_no = mesh.indices.len() as u32;
+            vulkan_meshes.push(VulkanMesh {
+                vertex_buffer,
+                vertex_buffer_memory,
+                index_buffer,
+                index_buffer_memory,
+                indices_no,
+            });
+        }
+        let command_buffers = Vulkan::create_command_buffers(
+            &self.device,
+            self.command_pool,
+            self.graphics_pipeline,
+            &self.swapchain_framebuffers,
+            self.render_pass,
+            self.swapchain_extent,
+            &vulkan_meshes,
+            self.pipeline_layout,
+            &self.descriptor_sets,
+            self.clear_value,
+        );
+        self.meshes = vulkan_meshes;
+        self.command_buffers = command_buffers;
     }
 
     #[cfg(all(unix, not(target_os = "android"), not(target_os = "macos")))]
