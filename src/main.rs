@@ -1,17 +1,22 @@
 use std::time::Instant;
 
+use cgmath::Point3;
 use winit::event::{ElementState, Event, KeyboardInput, VirtualKeyCode, WindowEvent};
 use winit::event_loop::{ControlFlow, EventLoop};
 
 use vulkan::Vulkan;
 
+use crate::coords::SphericalPoint3;
 use crate::mesh::Mesh;
+use crate::scene::camera::Camera;
 use crate::vulkan::Vertex;
 
 mod vulkan;
 
+mod coords;
 mod fs;
 mod mesh;
+mod scene;
 
 // settings
 const SCR_WIDTH: u32 = 1920;
@@ -49,7 +54,14 @@ fn main() {
         indices: Vec::from(INDICES_DATA),
     };
     let vulkan = Vulkan::new(&window, APPLICATION_NAME, CLEAR_VALUE, mesh);
-    main_loop(vulkan, window, event_loop);
+    let camera_position: SphericalPoint3<f32> = SphericalPoint3::from(Point3::new(1.1, 1.1, 1.1));
+    let look_at = Point3::new(0.0, 0.0, -0.2);
+    let camera = Camera::new(
+        camera_position,
+        look_at,
+        [window.inner_size().width, window.inner_size().height],
+    );
+    main_loop(vulkan, window, camera, event_loop);
 }
 
 fn init_window(event_loop: &EventLoop<()>) -> winit::window::Window {
@@ -60,8 +72,14 @@ fn init_window(event_loop: &EventLoop<()>) -> winit::window::Window {
         .expect("Failed to create window.")
 }
 
-fn main_loop(mut vulkan: vulkan::Vulkan, window: winit::window::Window, event_loop: EventLoop<()>) {
+fn main_loop(
+    mut vulkan: vulkan::Vulkan,
+    window: winit::window::Window,
+    camera: Camera,
+    event_loop: EventLoop<()>,
+) {
     let mut ticker = Instant::now();
+    vulkan.update_camera(&camera);
     event_loop.run(move |event, _, control_flow| match event {
         Event::WindowEvent {
             event: WindowEvent::CloseRequested,
@@ -100,8 +118,9 @@ fn main_loop(mut vulkan: vulkan::Vulkan, window: winit::window::Window, event_lo
             window.request_redraw();
         }
         Event::RedrawRequested(_window_id) => {
-            let delta = ticker.elapsed().subsec_micros();
-            vulkan.draw_frame(delta as f32 / 1000_000.0_f32);
+            let _delta = ticker.elapsed().subsec_micros();
+            // vulkan.draw_frame(delta as f32 / 1000_000.0_f32);
+            vulkan.draw_frame();
             ticker = Instant::now();
         }
         Event::LoopDestroyed => {

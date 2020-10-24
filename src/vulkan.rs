@@ -7,11 +7,12 @@ use ash::extensions::ext::DebugUtils;
 use ash::extensions::khr::{Surface, WaylandSurface, XlibSurface};
 use ash::version::{DeviceV1_0, EntryV1_0, InstanceV1_0};
 use ash::vk;
-use cgmath::{Deg, Matrix4, Point3, SquareMatrix, Vector3};
+use cgmath::Matrix4;
 use memoffset::offset_of;
 
 use crate::fs::read_shader_code;
 use crate::mesh::Mesh;
+use crate::scene::camera::Camera;
 
 const APPLICATION_VERSION: u32 = vk::make_version(0, 1, 0);
 const ENGINE_VERSION: u32 = vk::make_version(0, 1, 0);
@@ -112,10 +113,18 @@ struct VulkanMesh {
 
 #[repr(C)]
 #[derive(Clone, Debug, Copy)]
-struct UniformBufferObject {
-    model: Matrix4<f32>,
+struct CameraUBO {
     view: Matrix4<f32>,
     proj: Matrix4<f32>,
+}
+
+impl From<&Camera> for CameraUBO {
+    fn from(camera: &Camera) -> Self {
+        CameraUBO {
+            view: camera.view,
+            proj: camera.projection,
+        }
+    }
 }
 
 pub struct Vulkan {
@@ -148,7 +157,6 @@ pub struct Vulkan {
     pipeline_layout: vk::PipelineLayout,
     graphics_pipeline: vk::Pipeline,
 
-    uniform_transform: UniformBufferObject,
     uniform_buffers: Vec<vk::Buffer>,
     uniform_buffers_memory: Vec<vk::DeviceMemory>,
 
@@ -303,21 +311,6 @@ impl Vulkan {
             pipeline_layout,
             graphics_pipeline,
 
-            uniform_transform: UniformBufferObject {
-                model: Matrix4::<f32>::identity(),
-                view: Matrix4::look_at(
-                    Point3::new(1.1, 1.1, 1.1),
-                    Point3::new(0.0, 0.0, -0.2),
-                    Vector3::new(0.0, 0.0, 1.0),
-                ),
-                proj: cgmath::perspective(
-                    Deg(45.0),
-                    swapchain_composite.extent.width as f32
-                        / swapchain_composite.extent.height as f32,
-                    0.1,
-                    10.0,
-                ),
-            },
             uniform_buffers,
             uniform_buffers_memory,
 
@@ -1161,7 +1154,7 @@ impl Vulkan {
         device_memory_properties: &vk::PhysicalDeviceMemoryProperties,
         swapchain_image_count: usize,
     ) -> (Vec<vk::Buffer>, Vec<vk::DeviceMemory>) {
-        let buffer_size = std::mem::size_of::<UniformBufferObject>();
+        let buffer_size = std::mem::size_of::<CameraUBO>();
 
         let mut uniform_buffers = vec![];
         let mut uniform_buffers_memory = vec![];
@@ -1233,7 +1226,7 @@ impl Vulkan {
             let descriptor_buffer_info = [vk::DescriptorBufferInfo {
                 buffer: uniforms_buffers[i],
                 offset: 0,
-                range: std::mem::size_of::<UniformBufferObject>() as u64,
+                range: std::mem::size_of::<CameraUBO>() as u64,
             }];
 
             let descriptor_write_sets = [vk::WriteDescriptorSet {
@@ -1256,30 +1249,29 @@ impl Vulkan {
         descriptor_sets
     }
 
-    fn update_uniform_buffer(&mut self, current_image: usize, delta_time: f32) {
-        self.uniform_transform.model =
-            Matrix4::from_axis_angle(Vector3::new(0.0, 0.0, 1.0), Deg(90.0) * 5.0 * delta_time)
-                * self.uniform_transform.model;
+    pub fn update_camera(&mut self, camera: &Camera) {
+        let ubo: CameraUBO = CameraUBO::from(camera);
+        let ubos = [ubo];
 
-        let ubos = [self.uniform_transform.clone()];
+        let buffer_size = (std::mem::size_of::<CameraUBO>() * ubos.len()) as u64;
 
-        let buffer_size = (std::mem::size_of::<UniformBufferObject>() * ubos.len()) as u64;
+        for current_image in 0..self.swapchain_images.len() {
+            unsafe {
+                let data_ptr =
+                    self.device
+                        .map_memory(
+                            self.uniform_buffers_memory[current_image],
+                            0,
+                            buffer_size,
+                            vk::MemoryMapFlags::empty(),
+                        )
+                        .expect("Failed to Map Memory") as *mut CameraUBO;
 
-        unsafe {
-            let data_ptr =
+                data_ptr.copy_from_nonoverlapping(ubos.as_ptr(), ubos.len());
+
                 self.device
-                    .map_memory(
-                        self.uniform_buffers_memory[current_image],
-                        0,
-                        buffer_size,
-                        vk::MemoryMapFlags::empty(),
-                    )
-                    .expect("Failed to Map Memory") as *mut UniformBufferObject;
-
-            data_ptr.copy_from_nonoverlapping(ubos.as_ptr(), ubos.len());
-
-            self.device
-                .unmap_memory(self.uniform_buffers_memory[current_image]);
+                    .unmap_memory(self.uniform_buffers_memory[current_image]);
+            }
         }
     }
 
@@ -1700,7 +1692,7 @@ impl Vulkan {
         }
     }
 
-    pub fn draw_frame(&mut self, delta_time: f32) {
+    pub fn draw_frame(&mut self) {
         let wait_fences = [self.in_flight_fences[self.current_frame]];
 
         unsafe {
@@ -1727,8 +1719,6 @@ impl Vulkan {
                 },
             }
         };
-
-        self.update_uniform_buffer(image_index as usize, delta_time);
 
         let wait_semaphores = [self.image_available_semaphores[self.current_frame]];
         let wait_stages = [vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT];
