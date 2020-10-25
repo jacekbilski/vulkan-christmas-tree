@@ -1,7 +1,7 @@
-use cgmath::Point3;
+use cgmath::{Matrix4, Point3, SquareMatrix};
 
 use crate::coords::SphericalPoint3;
-use crate::mesh::{InstanceData, Mesh};
+use crate::mesh::{Color, InstanceData, Mesh};
 use crate::scene::camera::Camera;
 use crate::vulkan::{Vertex, Vulkan};
 
@@ -12,19 +12,15 @@ const CLEAR_VALUE: [f32; 4] = [0.015_7, 0., 0.360_7, 1.0];
 const VERTICES_DATA: [Vertex; 4] = [
     Vertex {
         pos: [-0.5, 0.0, -0.5],
-        color: [1.0, 0.0, 0.0],
     },
     Vertex {
         pos: [0.5, 0.0, -0.5],
-        color: [0.0, 1.0, 0.0],
     },
     Vertex {
         pos: [0.5, 0.0, 0.5],
-        color: [0.0, 0.0, 1.0],
     },
     Vertex {
         pos: [-0.5, 0.0, 0.5],
-        color: [1.0, 1.0, 1.0],
     },
 ];
 const INDICES_DATA: [u32; 6] = [0, 2, 1, 3, 2, 0];
@@ -47,10 +43,16 @@ impl Scene {
         );
         vulkan.update_camera(&camera);
 
+        let color = Color {
+            color: [1.0, 1.0, 1.0],
+        };
         let mesh = Mesh {
             vertices: Vec::from(VERTICES_DATA),
             indices: Vec::from(INDICES_DATA),
-            instances: vec![InstanceData::default()],
+            instances: vec![InstanceData {
+                color,
+                model: Matrix4::identity(),
+            }],
         };
         vulkan.set_meshes(&vec![mesh]);
 

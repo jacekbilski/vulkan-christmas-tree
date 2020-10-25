@@ -12,6 +12,7 @@ pub struct Mesh {
 
 #[repr(C)]
 pub struct InstanceData {
+    pub color: Color,
     pub model: Matrix4<f32>,
 }
 impl InstanceData {
@@ -23,9 +24,15 @@ impl InstanceData {
         }]
     }
 
-    pub fn get_attribute_descriptions() -> [vk::VertexInputAttributeDescription; 4] {
-        let quarter = (std::mem::size_of::<Self>() / 4) as u32;
+    pub fn get_attribute_descriptions() -> [vk::VertexInputAttributeDescription; 5] {
+        let quarter = (std::mem::size_of::<Matrix4<f32>>() / 4) as u32;
         [
+            vk::VertexInputAttributeDescription {
+                binding: 1,
+                location: 1,
+                format: vk::Format::R32G32B32_SFLOAT, // aka vec3
+                offset: offset_of!(Self, color) as u32,
+            },
             // need four because I'm sending a 4x4 matrix
             vk::VertexInputAttributeDescription {
                 binding: 1,
@@ -58,7 +65,20 @@ impl InstanceData {
 impl Default for InstanceData {
     fn default() -> Self {
         Self {
+            color: Color::default(),
             model: Matrix4::identity(),
+        }
+    }
+}
+
+pub struct Color {
+    pub color: [f32; 3],
+}
+
+impl Default for Color {
+    fn default() -> Self {
+        Self {
+            color: [0.0, 0.0, 0.0],
         }
     }
 }
