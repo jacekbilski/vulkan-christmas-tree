@@ -1,7 +1,7 @@
 use cgmath::Point3;
 
 use crate::coords::SphericalPoint3;
-use crate::mesh::Mesh;
+use crate::mesh::{InstanceData, Mesh};
 use crate::scene::camera::Camera;
 use crate::vulkan::{Vertex, Vulkan};
 
@@ -50,6 +50,7 @@ impl Scene {
         let mesh = Mesh {
             vertices: Vec::from(VERTICES_DATA),
             indices: Vec::from(INDICES_DATA),
+            instances: vec![InstanceData::default()],
         };
         vulkan.set_meshes(&vec![mesh]);
 

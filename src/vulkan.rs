@@ -11,7 +11,7 @@ use cgmath::Matrix4;
 use memoffset::offset_of;
 
 use crate::fs::read_shader_code;
-use crate::mesh::Mesh;
+use crate::mesh::{InstanceData, Mesh};
 use crate::scene::camera::Camera;
 
 const APPLICATION_VERSION: u32 = vk::make_version(0, 1, 0);
@@ -109,6 +109,9 @@ struct VulkanMesh {
     index_buffer: vk::Buffer,
     index_buffer_memory: vk::DeviceMemory,
     indices_no: u32,
+    instance_buffer: vk::Buffer,
+    instance_buffer_memory: vk::DeviceMemory,
+    instances_no: u32,
 }
 
 #[repr(C)]
@@ -317,12 +320,23 @@ impl Vulkan {
                 &mesh.indices,
             );
             let indices_no = mesh.indices.len() as u32;
+            let (instance_buffer, instance_buffer_memory) = Vulkan::create_vertex_buffer(
+                &self.device,
+                &self.physical_device_memory_properties,
+                self.command_pool,
+                self.transfer_queue,
+                &mesh.instances,
+            );
+            let instances_no = mesh.instances.len() as u32;
             vulkan_meshes.push(VulkanMesh {
                 vertex_buffer,
                 vertex_buffer_memory,
                 index_buffer,
                 index_buffer_memory,
                 indices_no,
+                instance_buffer,
+                instance_buffer_memory,
+                instances_no,
             });
         }
         let command_buffers = Vulkan::create_command_buffers(
@@ -931,8 +945,20 @@ impl Vulkan {
             },
         ];
 
-        let binding_description = Vertex::get_binding_descriptions();
-        let attribute_description = Vertex::get_attribute_descriptions();
+        let mut binding_description: Vec<vk::VertexInputBindingDescription> = vec![];
+        for &bd in Vertex::get_binding_descriptions().iter() {
+            binding_description.push(bd);
+        }
+        for &bd in InstanceData::get_binding_descriptions().iter() {
+            binding_description.push(bd);
+        }
+        let mut attribute_description: Vec<vk::VertexInputAttributeDescription> = vec![];
+        for &ad in Vertex::get_attribute_descriptions().iter() {
+            attribute_description.push(ad);
+        }
+        for &ad in InstanceData::get_attribute_descriptions().iter() {
+            attribute_description.push(ad);
+        }
 
         let vertex_input_state_create_info = vk::PipelineVertexInputStateCreateInfo {
             flags: vk::PipelineVertexInputStateCreateFlags::empty(),
@@ -1610,8 +1636,8 @@ impl Vulkan {
                 );
 
                 for mesh in meshes.iter() {
-                    let vertex_buffers = [mesh.vertex_buffer];
-                    let offsets = [0_u64];
+                    let vertex_buffers = [mesh.vertex_buffer, mesh.instance_buffer];
+                    let offsets = [0_u64, 0_u64];
 
                     device.cmd_bind_vertex_buffers(command_buffer, 0, &vertex_buffers, &offsets);
                     device.cmd_bind_index_buffer(
@@ -1620,7 +1646,14 @@ impl Vulkan {
                         0,
                         vk::IndexType::UINT32,
                     );
-                    device.cmd_draw_indexed(command_buffer, mesh.indices_no, 1, 0, 0, 0);
+                    device.cmd_draw_indexed(
+                        command_buffer,
+                        mesh.indices_no,
+                        mesh.instances_no,
+                        0,
+                        0,
+                        0,
+                    );
                 }
 
                 device.cmd_end_render_pass(command_buffer);
@@ -1902,6 +1935,8 @@ impl Drop for Vulkan {
             self.cleanup_swapchain();
 
             for mesh in self.meshes.iter() {
+                self.device.destroy_buffer(mesh.instance_buffer, None);
+                self.device.free_memory(mesh.instance_buffer_memory, None);
                 self.device.destroy_buffer(mesh.index_buffer, None);
                 self.device.free_memory(mesh.index_buffer_memory, None);
                 self.device.destroy_buffer(mesh.vertex_buffer, None);
