@@ -1,23 +1,23 @@
 use cgmath::{Matrix4, SquareMatrix};
 
 use crate::mesh::{Color, InstanceData, Mesh};
-use crate::vulkan::Vertex;
+use crate::vulkan::{Vertex, VertexIndexType};
 
 const VERTICES_DATA: [Vertex; 4] = [
     Vertex {
-        pos: [-0.5, 0.0, -0.5],
+        pos: [-10., 5., -10.],
     },
     Vertex {
-        pos: [0.5, 0.0, -0.5],
+        pos: [-10., 5., 10.],
     },
     Vertex {
-        pos: [0.5, 0.0, 0.5],
+        pos: [10., 5., -10.],
     },
     Vertex {
-        pos: [-0.5, 0.0, 0.5],
+        pos: [10., 5., 10.],
     },
 ];
-const INDICES_DATA: [u32; 6] = [0, 2, 1, 3, 2, 0];
+const INDICES_DATA: [VertexIndexType; 6] = [0, 2, 1, 1, 2, 3];
 
 pub fn create_mesh() -> Mesh {
     let color = Color {

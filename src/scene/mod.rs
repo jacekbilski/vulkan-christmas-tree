@@ -5,6 +5,7 @@ use crate::mesh::Mesh;
 use crate::scene::camera::Camera;
 use crate::vulkan::Vulkan;
 
+mod baubles;
 pub mod camera;
 mod ground;
 
@@ -24,9 +25,8 @@ impl Scene {
     }
 
     fn setup_camera(vulkan: &mut Vulkan, window: &winit::window::Window) -> Camera {
-        let camera_position: SphericalPoint3<f32> =
-            SphericalPoint3::from(Point3::new(1.1, 1.1, 1.1));
-        let look_at = Point3::new(0.0, -0.1, 0.0);
+        let camera_position: SphericalPoint3<f32> = SphericalPoint3::new(18., 1.7, 0.9);
+        let look_at: Point3<f32> = Point3::new(0., 1., 0.);
         let camera = Camera::new(
             camera_position,
             look_at,
@@ -39,6 +39,7 @@ impl Scene {
     fn setup_meshes(vulkan: &mut Vulkan) {
         let mut meshes: Vec<Mesh> = Vec::new();
         meshes.push(ground::create_mesh());
+        meshes.push(baubles::create_mesh());
         vulkan.set_meshes(&meshes);
     }
 

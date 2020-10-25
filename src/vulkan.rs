@@ -69,6 +69,8 @@ struct SwapChainSupportDetails {
     present_modes: Vec<vk::PresentModeKHR>,
 }
 
+pub(crate) type VertexIndexType = u32;
+
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
 pub struct Vertex {

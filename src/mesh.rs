@@ -71,6 +71,7 @@ impl Default for InstanceData {
     }
 }
 
+#[derive(Copy, Clone)]
 pub struct Color {
     pub color: [f32; 3],
 }

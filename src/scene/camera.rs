@@ -30,7 +30,7 @@ impl Camera {
     }
 
     fn view(position: SphericalPoint3<f32>, look_at: Point3<f32>) -> Matrix4<f32> {
-        Matrix4::look_at(position.into(), look_at, vec3(0.0, -1.0, 0.0))
+        Matrix4::look_at(position.into(), look_at, vec3(0.0, 1.0, 0.0))
     }
 
     pub fn rotate_horizontally(&mut self, angle: f32, vulkan: &mut Vulkan) {
