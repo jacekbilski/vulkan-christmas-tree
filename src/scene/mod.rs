@@ -46,4 +46,8 @@ impl Scene {
     pub fn rotate_camera_horizontally(&mut self, angle: f32, vulkan: &mut Vulkan) {
         self.camera.rotate_horizontally(angle, vulkan);
     }
+
+    pub fn rotate_camera_vertically(&mut self, angle: f32, vulkan: &mut Vulkan) {
+        self.camera.rotate_vertically(angle, vulkan);
+    }
 }

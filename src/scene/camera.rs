@@ -38,4 +38,10 @@ impl Camera {
         self.view = Camera::view(self.position, self.look_at);
         vulkan.update_camera(&self);
     }
+
+    pub fn rotate_vertically(&mut self, angle: f32, vulkan: &mut Vulkan) {
+        self.position.theta += angle;
+        self.view = Camera::view(self.position, self.look_at);
+        vulkan.update_camera(&self);
+    }
 }

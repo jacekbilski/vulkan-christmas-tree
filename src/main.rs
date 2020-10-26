@@ -1,3 +1,4 @@
+use std::f32::consts::FRAC_PI_8;
 use std::time::Instant;
 
 use winit::event::{ElementState, Event, KeyboardInput, VirtualKeyCode, WindowEvent};
@@ -43,6 +44,7 @@ fn main_loop(
     event_loop: EventLoop<()>,
 ) {
     let mut ticker = Instant::now();
+    let mut rotate = true;
     event_loop.run(move |event, _, control_flow| match event {
         Event::WindowEvent {
             event: WindowEvent::CloseRequested,
@@ -68,6 +70,29 @@ fn main_loop(
                 vulkan.wait_device_idle();
                 *control_flow = ControlFlow::Exit;
             }
+            VirtualKeyCode::Up => {
+                rotate = false;
+                let angle_change = FRAC_PI_8 / 4.;
+                scene.rotate_camera_vertically(angle_change, &mut vulkan);
+            }
+            VirtualKeyCode::Down => {
+                rotate = false;
+                let angle_change = FRAC_PI_8 / 4.;
+                scene.rotate_camera_vertically(-angle_change, &mut vulkan);
+            }
+            VirtualKeyCode::Left => {
+                rotate = false;
+                let angle_change = FRAC_PI_8 / 4.;
+                scene.rotate_camera_horizontally(angle_change, &mut vulkan);
+            }
+            VirtualKeyCode::Right => {
+                rotate = false;
+                let angle_change = FRAC_PI_8 / 4.;
+                scene.rotate_camera_horizontally(-angle_change, &mut vulkan);
+            }
+            VirtualKeyCode::R => {
+                rotate = !rotate;
+            }
             _ => (),
         },
         Event::WindowEvent {
@@ -81,8 +106,10 @@ fn main_loop(
             window.request_redraw();
         }
         Event::RedrawRequested(_window_id) => {
-            let delta = ticker.elapsed().subsec_micros() as f32;
-            scene.rotate_camera_horizontally(delta / 100_000.0, &mut vulkan);
+            if rotate {
+                let delta = ticker.elapsed().subsec_micros() as f32;
+                scene.rotate_camera_horizontally(delta / 100_000.0, &mut vulkan);
+            }
             vulkan.draw_frame();
             ticker = Instant::now();
         }
