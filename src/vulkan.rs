@@ -7,7 +7,7 @@ use ash::extensions::ext::DebugUtils;
 use ash::extensions::khr::{Surface, WaylandSurface, XlibSurface};
 use ash::version::{DeviceV1_0, EntryV1_0, InstanceV1_0};
 use ash::vk;
-use cgmath::Matrix4;
+use cgmath::{Matrix4, Point3};
 use memoffset::offset_of;
 
 use crate::fs::read_shader_code;
@@ -127,6 +127,8 @@ struct VulkanMesh {
 #[repr(C)]
 #[derive(Clone, Debug, Copy)]
 struct CameraUBO {
+    position: Point3<f32>,
+    alignment_fix: f32, // see https://vulkan-tutorial.com/en/Uniform_buffers/Descriptor_pool_and_sets#page_Alignment-requirements
     view: Matrix4<f32>,
     proj: Matrix4<f32>,
 }
@@ -134,6 +136,8 @@ struct CameraUBO {
 impl From<&Camera> for CameraUBO {
     fn from(camera: &Camera) -> Self {
         CameraUBO {
+            position: camera.position.into(),
+            alignment_fix: 0.0,
             view: camera.view,
             proj: camera.projection,
         }
