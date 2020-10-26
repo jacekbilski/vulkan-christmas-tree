@@ -75,6 +75,7 @@ pub(crate) type VertexIndexType = u32;
 #[derive(Debug, Clone, Copy)]
 pub struct Vertex {
     pub pos: [f32; 3],
+    pub norm: [f32; 3],
 }
 impl Vertex {
     fn get_binding_descriptions() -> [vk::VertexInputBindingDescription; 1] {
@@ -85,13 +86,21 @@ impl Vertex {
         }]
     }
 
-    fn get_attribute_descriptions() -> [vk::VertexInputAttributeDescription; 1] {
-        [vk::VertexInputAttributeDescription {
-            binding: 0,
-            location: 0,
-            format: vk::Format::R32G32B32_SFLOAT, // aka vec3
-            offset: offset_of!(Self, pos) as u32,
-        }]
+    fn get_attribute_descriptions() -> [vk::VertexInputAttributeDescription; 2] {
+        [
+            vk::VertexInputAttributeDescription {
+                binding: 0,
+                location: 0,
+                format: vk::Format::R32G32B32_SFLOAT, // aka vec3
+                offset: offset_of!(Self, pos) as u32,
+            },
+            vk::VertexInputAttributeDescription {
+                binding: 0,
+                location: 1,
+                format: vk::Format::R32G32B32_SFLOAT, // aka vec3
+                offset: offset_of!(Self, norm) as u32,
+            },
+        ]
     }
 }
 

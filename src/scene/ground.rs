@@ -6,15 +6,19 @@ use crate::vulkan::{Vertex, VertexIndexType};
 const VERTICES_DATA: [Vertex; 4] = [
     Vertex {
         pos: [-10., 5., -10.],
+        norm: [0., -1., 0.],
     },
     Vertex {
         pos: [-10., 5., 10.],
+        norm: [0., -1., 0.],
     },
     Vertex {
         pos: [10., 5., -10.],
+        norm: [0., -1., 0.],
     },
     Vertex {
         pos: [10., 5., 10.],
+        norm: [0., -1., 0.],
     },
 ];
 const INDICES_DATA: [VertexIndexType; 6] = [0, 2, 1, 1, 2, 3];

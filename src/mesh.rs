@@ -30,50 +30,50 @@ impl InstanceData {
         [
             vk::VertexInputAttributeDescription {
                 binding: 1,
-                location: 1,
+                location: 2,
                 format: vk::Format::R32G32B32_SFLOAT, // aka vec3
                 offset: offset_of!(Self, color) as u32 + 0 * color_part,
             },
             vk::VertexInputAttributeDescription {
                 binding: 1,
-                location: 2,
+                location: 3,
                 format: vk::Format::R32G32B32_SFLOAT, // aka vec3
                 offset: offset_of!(Self, color) as u32 + 1 * color_part,
             },
             vk::VertexInputAttributeDescription {
                 binding: 1,
-                location: 3,
+                location: 4,
                 format: vk::Format::R32G32B32_SFLOAT, // aka vec3
                 offset: offset_of!(Self, color) as u32 + 2 * color_part,
             },
             vk::VertexInputAttributeDescription {
                 binding: 1,
-                location: 4,
+                location: 5,
                 format: vk::Format::R32_SFLOAT, // aka float
                 offset: offset_of!(Self, color) as u32 + 3 * color_part,
             },
             // need four because I'm sending a 4x4 matrix
             vk::VertexInputAttributeDescription {
                 binding: 1,
-                location: 5,
+                location: 6,
                 format: vk::Format::R32G32B32A32_SFLOAT, // aka vec4
                 offset: offset_of!(Self, model) as u32 + 0 * matrix_quarter,
             },
             vk::VertexInputAttributeDescription {
                 binding: 1,
-                location: 6,
+                location: 7,
                 format: vk::Format::R32G32B32A32_SFLOAT, // aka vec4
                 offset: offset_of!(Self, model) as u32 + 1 * matrix_quarter,
             },
             vk::VertexInputAttributeDescription {
                 binding: 1,
-                location: 7,
+                location: 8,
                 format: vk::Format::R32G32B32A32_SFLOAT, // aka vec4
                 offset: offset_of!(Self, model) as u32 + 2 * matrix_quarter,
             },
             vk::VertexInputAttributeDescription {
                 binding: 1,
-                location: 8,
+                location: 9,
                 format: vk::Format::R32G32B32A32_SFLOAT, // aka vec4
                 offset: offset_of!(Self, model) as u32 + 3 * matrix_quarter,
             },

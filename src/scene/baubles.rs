@@ -1,6 +1,6 @@
 use std::f32::consts::{FRAC_PI_2, FRAC_PI_4, FRAC_PI_6, FRAC_PI_8, PI};
 
-use cgmath::{EuclideanSpace, Matrix4, Point3};
+use cgmath::{vec3, EuclideanSpace, Matrix4, Point3};
 
 use crate::coords::CylindricalPoint3;
 use crate::mesh::{Color, InstanceData, Mesh};
@@ -201,7 +201,7 @@ fn gen_vertices() -> Vec<Vertex> {
 
     vertices.push(Vertex {
         pos: Point3::new(0., RADIUS, 0.).into(),
-        // normal: vec3(0., 1., 0.).into(),
+        norm: vec3(0., 1., 0.).into(),
     });
 
     for layer in 1..PRECISION {
@@ -217,14 +217,14 @@ fn gen_vertices() -> Vec<Vertex> {
 
             vertices.push(Vertex {
                 pos: vertex.into(),
-                // normal: vec3(h_angle.sin(), v_angle.cos(), h_angle.cos()).into(),
+                norm: vec3(h_angle.sin(), v_angle.cos(), h_angle.cos()).into(),
             });
         }
     }
 
     vertices.push(Vertex {
         pos: Point3::new(0., -RADIUS, 0.).into(),
-        // normal: vec3(0., -1., 0.).into(),
+        norm: vec3(0., -1., 0.).into(),
     });
 
     vertices
