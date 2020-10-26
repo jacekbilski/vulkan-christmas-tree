@@ -13,6 +13,7 @@ use memoffset::offset_of;
 use crate::fs::read_shader_code;
 use crate::mesh::{InstanceData, Mesh};
 use crate::scene::camera::Camera;
+use crate::scene::lights::{Light, Lights};
 
 const APPLICATION_VERSION: u32 = vk::make_version(0, 1, 0);
 const ENGINE_VERSION: u32 = vk::make_version(0, 1, 0);
@@ -20,6 +21,7 @@ const VULKAN_API_VERSION: u32 = vk::make_version(1, 2, 154);
 
 const MAX_FRAMES_IN_FLIGHT: usize = 2;
 const CAMERA_UBO_INDEX: usize = 0;
+const LIGHTS_UBO_INDEX: usize = 1;
 
 struct SyncObjects {
     image_available_semaphores: Vec<vk::Semaphore>,
@@ -134,6 +136,22 @@ impl From<&Camera> for CameraUBO {
         CameraUBO {
             view: camera.view,
             proj: camera.projection,
+        }
+    }
+}
+
+#[repr(C)]
+#[derive(Debug, Clone, Copy)]
+struct LightsUBO {
+    count: u32,
+    lights: [Light; 2], // hardcoded "2"
+}
+
+impl From<&Lights> for LightsUBO {
+    fn from(lights: &Lights) -> Self {
+        LightsUBO {
+            count: lights.lights.len() as u32,
+            lights: [lights.lights[0], lights.lights[1]],
         }
     }
 }
@@ -946,13 +964,22 @@ impl Vulkan {
     }
 
     fn create_descriptor_set_layout(device: &ash::Device) -> vk::DescriptorSetLayout {
-        let ubo_layout_bindings = [vk::DescriptorSetLayoutBinding {
-            binding: 0,
-            descriptor_type: vk::DescriptorType::UNIFORM_BUFFER,
-            descriptor_count: 1,
-            stage_flags: vk::ShaderStageFlags::VERTEX,
-            ..Default::default()
-        }];
+        let ubo_layout_bindings = [
+            vk::DescriptorSetLayoutBinding {
+                binding: CAMERA_UBO_INDEX as u32,
+                descriptor_type: vk::DescriptorType::UNIFORM_BUFFER,
+                descriptor_count: 1,
+                stage_flags: vk::ShaderStageFlags::VERTEX | vk::ShaderStageFlags::FRAGMENT,
+                ..Default::default()
+            },
+            vk::DescriptorSetLayoutBinding {
+                binding: LIGHTS_UBO_INDEX as u32,
+                descriptor_type: vk::DescriptorType::UNIFORM_BUFFER,
+                descriptor_count: 1,
+                stage_flags: vk::ShaderStageFlags::FRAGMENT,
+                ..Default::default()
+            },
+        ];
 
         let ubo_layout_create_info = vk::DescriptorSetLayoutCreateInfo {
             binding_count: ubo_layout_bindings.len() as u32,
@@ -1416,27 +1443,52 @@ impl Vulkan {
     ) -> Vec<UniformBuffer> {
         let mut uniform_buffers = vec![];
 
-        let buffer_size = std::mem::size_of::<CameraUBO>();
+        {
+            let buffer_size = std::mem::size_of::<CameraUBO>();
 
-        let mut buffers = vec![];
-        let mut buffers_memory = vec![];
+            let mut buffers = vec![];
+            let mut buffers_memory = vec![];
 
-        for _ in 0..swapchain_image_count {
-            let (uniform_buffer, uniform_buffer_memory) = Vulkan::create_buffer(
-                device,
-                buffer_size as u64,
-                vk::BufferUsageFlags::UNIFORM_BUFFER,
-                vk::MemoryPropertyFlags::HOST_VISIBLE | vk::MemoryPropertyFlags::HOST_COHERENT,
-                device_memory_properties,
-            );
-            buffers.push(uniform_buffer);
-            buffers_memory.push(uniform_buffer_memory);
+            for _ in 0..swapchain_image_count {
+                let (uniform_buffer, uniform_buffer_memory) = Vulkan::create_buffer(
+                    device,
+                    buffer_size as u64,
+                    vk::BufferUsageFlags::UNIFORM_BUFFER,
+                    vk::MemoryPropertyFlags::HOST_VISIBLE | vk::MemoryPropertyFlags::HOST_COHERENT,
+                    device_memory_properties,
+                );
+                buffers.push(uniform_buffer);
+                buffers_memory.push(uniform_buffer_memory);
+            }
+
+            uniform_buffers.push(UniformBuffer {
+                buffers,
+                buffers_memory,
+            });
         }
+        {
+            let buffer_size = std::mem::size_of::<LightsUBO>();
 
-        uniform_buffers.push(UniformBuffer {
-            buffers,
-            buffers_memory,
-        });
+            let mut buffers = vec![];
+            let mut buffers_memory = vec![];
+
+            for _ in 0..swapchain_image_count {
+                let (uniform_buffer, uniform_buffer_memory) = Vulkan::create_buffer(
+                    device,
+                    buffer_size as u64,
+                    vk::BufferUsageFlags::UNIFORM_BUFFER,
+                    vk::MemoryPropertyFlags::HOST_VISIBLE | vk::MemoryPropertyFlags::HOST_COHERENT,
+                    device_memory_properties,
+                );
+                buffers.push(uniform_buffer);
+                buffers_memory.push(uniform_buffer_memory);
+            }
+
+            uniform_buffers.push(UniformBuffer {
+                buffers,
+                buffers_memory,
+            });
+        }
         uniform_buffers
     }
 
@@ -1444,10 +1496,18 @@ impl Vulkan {
         device: &ash::Device,
         swapchain_images_size: usize,
     ) -> vk::DescriptorPool {
-        let pool_sizes = [vk::DescriptorPoolSize {
-            ty: vk::DescriptorType::UNIFORM_BUFFER,
-            descriptor_count: swapchain_images_size as u32,
-        }];
+        let pool_sizes = [
+            vk::DescriptorPoolSize {
+                // CameraUBO
+                ty: vk::DescriptorType::UNIFORM_BUFFER,
+                descriptor_count: swapchain_images_size as u32,
+            },
+            vk::DescriptorPoolSize {
+                // LightsUBO
+                ty: vk::DescriptorType::UNIFORM_BUFFER,
+                descriptor_count: swapchain_images_size as u32,
+            },
+        ];
 
         let descriptor_pool_create_info = vk::DescriptorPoolCreateInfo {
             max_sets: swapchain_images_size as u32,
@@ -1499,7 +1559,7 @@ impl Vulkan {
                 dst_set: descritptor_set,
                 dst_binding: 0,
                 dst_array_element: 0,
-                descriptor_count: 1,
+                descriptor_count: descriptor_buffer_info.len() as u32,
                 descriptor_type: vk::DescriptorType::UNIFORM_BUFFER,
                 p_image_info: ptr::null(),
                 p_buffer_info: descriptor_buffer_info.as_ptr(),
@@ -1537,6 +1597,33 @@ impl Vulkan {
 
                 self.device.unmap_memory(
                     self.uniform_buffers[CAMERA_UBO_INDEX].buffers_memory[current_image],
+                );
+            }
+        }
+    }
+
+    pub fn update_lights(&mut self, lights: &Lights) {
+        let ubo: LightsUBO = LightsUBO::from(lights);
+        let ubos = [ubo];
+
+        let buffer_size = (std::mem::size_of::<LightsUBO>() * ubos.len()) as u64;
+
+        for current_image in 0..self.swapchain_images.len() {
+            unsafe {
+                let data_ptr =
+                    self.device
+                        .map_memory(
+                            self.uniform_buffers[LIGHTS_UBO_INDEX].buffers_memory[current_image],
+                            1,
+                            buffer_size,
+                            vk::MemoryMapFlags::empty(),
+                        )
+                        .expect("Failed to Map Memory") as *mut LightsUBO;
+
+                data_ptr.copy_from_nonoverlapping(ubos.as_ptr(), ubos.len());
+
+                self.device.unmap_memory(
+                    self.uniform_buffers[LIGHTS_UBO_INDEX].buffers_memory[current_image],
                 );
             }
         }

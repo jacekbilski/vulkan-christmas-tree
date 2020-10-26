@@ -3,11 +3,13 @@ use cgmath::Point3;
 use crate::coords::SphericalPoint3;
 use crate::mesh::Mesh;
 use crate::scene::camera::Camera;
+use crate::scene::lights::Lights;
 use crate::vulkan::Vulkan;
 
 mod baubles;
 pub mod camera;
 mod ground;
+pub mod lights;
 
 const CLEAR_VALUE: [f32; 4] = [0.015_7, 0., 0.360_7, 1.0];
 
@@ -19,6 +21,7 @@ impl Scene {
     pub fn setup(vulkan: &mut Vulkan, window: &winit::window::Window) -> Self {
         vulkan.set_clear_value(CLEAR_VALUE);
         let camera = Scene::setup_camera(vulkan, window);
+        Scene::setup_lights(vulkan);
         Scene::setup_meshes(vulkan);
 
         Self { camera }
@@ -34,6 +37,23 @@ impl Scene {
         );
         vulkan.update_camera(&camera);
         camera
+    }
+
+    fn setup_lights(vulkan: &mut Vulkan) {
+        let mut lights = Lights::setup();
+        lights.add(
+            Point3::new(10., -100., 10.),
+            [0.3, 0.3, 0.3],
+            [0.2, 0.2, 0.2],
+            [0., 0., 0.],
+        );
+        lights.add(
+            Point3::new(5., -6., 2.),
+            [0.2, 0.2, 0.2],
+            [2., 2., 2.],
+            [0.5, 0.5, 0.5],
+        );
+        vulkan.update_lights(&lights);
     }
 
     fn setup_meshes(vulkan: &mut Vulkan) {
