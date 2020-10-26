@@ -7,8 +7,11 @@ layout(set = 0, binding = 0) uniform UniformBufferObject {
 } ubo;
 
 layout (location = 0) in vec3 inPosition;
-layout (location = 1) in vec3 inColor;
-layout (location = 2) in mat4 instanceModel;
+layout (location = 1) in vec3 ambient;
+layout (location = 2) in vec3 diffuse;
+layout (location = 3) in vec3 specular;
+layout (location = 4) in float shininess;
+layout (location = 5) in mat4 instanceModel;
 
 out gl_PerVertex {
     vec4 gl_Position;
@@ -18,5 +21,5 @@ layout(location = 0) out vec3 fragColor;
 
 void main() {
     gl_Position = ubo.proj * ubo.view * instanceModel * vec4(inPosition, 1.0);
-    fragColor = inColor;
+    fragColor = diffuse;
 }

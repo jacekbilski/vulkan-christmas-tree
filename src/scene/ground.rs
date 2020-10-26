@@ -21,7 +21,10 @@ const INDICES_DATA: [VertexIndexType; 6] = [0, 2, 1, 1, 2, 3];
 
 pub fn create_mesh() -> Mesh {
     let color = Color {
-        color: [1.0, 1.0, 1.0],
+        ambient: [1.0, 1.0, 1.0],
+        diffuse: [0.623960, 0.686685, 0.693872],
+        specular: [0.5, 0.5, 0.5],
+        shininess: 225.0,
     };
     Mesh {
         vertices: Vec::from(VERTICES_DATA),
