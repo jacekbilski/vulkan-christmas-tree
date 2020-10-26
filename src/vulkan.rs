@@ -104,6 +104,11 @@ impl Vertex {
     }
 }
 
+struct UniformBuffer {
+    buffers: Vec<vk::Buffer>,              // one per swapchain_image_count
+    buffers_memory: Vec<vk::DeviceMemory>, // one per swapchain_image_count
+}
+
 #[derive(Clone, Copy)]
 struct VulkanMesh {
     vertex_buffer: vk::Buffer,
@@ -168,8 +173,7 @@ pub struct Vulkan {
     depth_image_view: vk::ImageView,
     depth_image_memory: vk::DeviceMemory,
 
-    uniform_buffers: Vec<vk::Buffer>,
-    uniform_buffers_memory: Vec<vk::DeviceMemory>,
+    uniform_buffers: UniformBuffer,
 
     descriptor_pool: vk::DescriptorPool,
     descriptor_sets: Vec<vk::DescriptorSet>,
@@ -250,7 +254,7 @@ impl Vulkan {
             &swapchain_composite.extent,
         );
         let command_pool = Vulkan::create_command_pool(&device, &queue_family);
-        let (uniform_buffers, uniform_buffers_memory) = Vulkan::create_uniform_buffers(
+        let uniform_buffers = Vulkan::create_uniform_buffers(
             &device,
             &physical_device_memory_properties,
             swapchain_composite.images.len(),
@@ -303,7 +307,6 @@ impl Vulkan {
             depth_image_memory,
 
             uniform_buffers,
-            uniform_buffers_memory,
 
             descriptor_pool,
             descriptor_sets,
@@ -1409,7 +1412,7 @@ impl Vulkan {
         device: &ash::Device,
         device_memory_properties: &vk::PhysicalDeviceMemoryProperties,
         swapchain_image_count: usize,
-    ) -> (Vec<vk::Buffer>, Vec<vk::DeviceMemory>) {
+    ) -> UniformBuffer {
         let buffer_size = std::mem::size_of::<CameraUBO>();
 
         let mut uniform_buffers = vec![];
@@ -1427,7 +1430,10 @@ impl Vulkan {
             uniform_buffers_memory.push(uniform_buffer_memory);
         }
 
-        (uniform_buffers, uniform_buffers_memory)
+        UniformBuffer {
+            buffers: uniform_buffers,
+            buffers_memory: uniform_buffers_memory,
+        }
     }
 
     fn create_descriptor_pool(
@@ -1457,7 +1463,7 @@ impl Vulkan {
         device: &ash::Device,
         descriptor_pool: vk::DescriptorPool,
         descriptor_set_layout: vk::DescriptorSetLayout,
-        uniforms_buffers: &Vec<vk::Buffer>,
+        uniforms_buffers: &UniformBuffer,
         swapchain_images_size: usize,
     ) -> Vec<vk::DescriptorSet> {
         let mut layouts: Vec<vk::DescriptorSetLayout> = vec![];
@@ -1480,7 +1486,7 @@ impl Vulkan {
 
         for (i, &descritptor_set) in descriptor_sets.iter().enumerate() {
             let descriptor_buffer_info = [vk::DescriptorBufferInfo {
-                buffer: uniforms_buffers[i],
+                buffer: uniforms_buffers.buffers[i],
                 offset: 0,
                 range: std::mem::size_of::<CameraUBO>() as u64,
             }];
@@ -1516,7 +1522,7 @@ impl Vulkan {
                 let data_ptr =
                     self.device
                         .map_memory(
-                            self.uniform_buffers_memory[current_image],
+                            self.uniform_buffers.buffers_memory[current_image],
                             0,
                             buffer_size,
                             vk::MemoryMapFlags::empty(),
@@ -1526,7 +1532,7 @@ impl Vulkan {
                 data_ptr.copy_from_nonoverlapping(ubos.as_ptr(), ubos.len());
 
                 self.device
-                    .unmap_memory(self.uniform_buffers_memory[current_image]);
+                    .unmap_memory(self.uniform_buffers.buffers_memory[current_image]);
             }
         }
     }
@@ -2195,10 +2201,11 @@ impl Drop for Vulkan {
             self.device
                 .destroy_descriptor_set_layout(self.ubo_layout, None);
 
-            for i in 0..self.uniform_buffers.len() {
-                self.device.destroy_buffer(self.uniform_buffers[i], None);
+            for i in 0..self.uniform_buffers.buffers.len() {
                 self.device
-                    .free_memory(self.uniform_buffers_memory[i], None);
+                    .destroy_buffer(self.uniform_buffers.buffers[i], None);
+                self.device
+                    .free_memory(self.uniform_buffers.buffers_memory[i], None);
             }
 
             self.device.destroy_command_pool(self.command_pool, None);
