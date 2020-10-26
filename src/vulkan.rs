@@ -145,17 +145,47 @@ impl From<&Camera> for CameraUBO {
 }
 
 #[repr(C)]
-#[derive(Debug, Clone, Copy)]
+struct LightUBO {
+    position: [f32; 3],
+    alignment_fix_1: f32,
+    ambient: [f32; 3],
+    alignment_fix_2: f32,
+    diffuse: [f32; 3],
+    alignment_fix_3: f32,
+    specular: [f32; 3],
+    alignment_fix_4: f32,
+}
+impl From<Light> for LightUBO {
+    fn from(light: Light) -> Self {
+        LightUBO {
+            position: light.position,
+            ambient: light.ambient,
+            diffuse: light.diffuse,
+            specular: light.specular,
+            alignment_fix_1: 0.0,
+            alignment_fix_2: 0.0,
+            alignment_fix_3: 0.0,
+            alignment_fix_4: 0.0,
+        }
+    }
+}
+
+#[repr(C)]
 struct LightsUBO {
     count: u32,
-    lights: [Light; 2], // hardcoded "2"
+    alignment_fix_1: [f32; 3],
+    lights: [LightUBO; 2], // hardcoded "2"
 }
 
 impl From<&Lights> for LightsUBO {
     fn from(lights: &Lights) -> Self {
         LightsUBO {
             count: lights.lights.len() as u32,
-            lights: [lights.lights[0], lights.lights[1]],
+            alignment_fix_1: [0., 0., 0.],
+            lights: [
+                LightUBO::from(lights.lights[0]),
+                LightUBO::from(lights.lights[1]),
+            ],
         }
     }
 }
@@ -980,7 +1010,7 @@ impl Vulkan {
                 binding: LIGHTS_UBO_INDEX as u32,
                 descriptor_type: vk::DescriptorType::UNIFORM_BUFFER,
                 descriptor_count: 1,
-                stage_flags: vk::ShaderStageFlags::FRAGMENT,
+                stage_flags: vk::ShaderStageFlags::VERTEX | vk::ShaderStageFlags::FRAGMENT,
                 ..Default::default()
             },
         ];
@@ -1553,11 +1583,18 @@ impl Vulkan {
         };
 
         for (i, &descritptor_set) in descriptor_sets.iter().enumerate() {
-            let descriptor_buffer_info = [vk::DescriptorBufferInfo {
-                buffer: uniforms_buffers[CAMERA_UBO_INDEX].buffers[i],
-                offset: 0,
-                range: std::mem::size_of::<CameraUBO>() as u64,
-            }];
+            let descriptor_buffer_info = [
+                vk::DescriptorBufferInfo {
+                    buffer: uniforms_buffers[CAMERA_UBO_INDEX].buffers[i],
+                    offset: 0,
+                    range: std::mem::size_of::<CameraUBO>() as u64,
+                },
+                vk::DescriptorBufferInfo {
+                    buffer: uniforms_buffers[LIGHTS_UBO_INDEX].buffers[i],
+                    offset: 0,
+                    range: std::mem::size_of::<LightsUBO>() as u64,
+                },
+            ];
 
             let descriptor_write_sets = [vk::WriteDescriptorSet {
                 dst_set: descritptor_set,

@@ -2,10 +2,10 @@ use cgmath::Point3;
 
 #[derive(Debug, Copy, Clone)]
 pub struct Light {
-    position: [f32; 3],
-    ambient: [f32; 3],
-    diffuse: [f32; 3],
-    specular: [f32; 3],
+    pub position: [f32; 3],
+    pub ambient: [f32; 3],
+    pub diffuse: [f32; 3],
+    pub specular: [f32; 3],
 }
 
 pub struct Lights {
