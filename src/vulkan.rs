@@ -144,6 +144,7 @@ impl From<&Camera> for CameraUBO {
     }
 }
 
+// TODO - how to handle layout 140 better?
 #[repr(C)]
 struct LightUBO {
     position: [f32; 3],
@@ -1655,7 +1656,7 @@ impl Vulkan {
                     self.device
                         .map_memory(
                             self.uniform_buffers[LIGHTS_UBO_INDEX].buffers_memory[current_image],
-                            1,
+                            0,
                             buffer_size,
                             vk::MemoryMapFlags::empty(),
                         )

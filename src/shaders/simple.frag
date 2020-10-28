@@ -33,7 +33,7 @@ vec3 calcLight(Light light);
 
 void main() {
     vec3 result = vec3(0.0);
-    for (int i = 0; i < 2; i++) {
+    for (int i = 0; i < lights.count; i++) {
         result += calcLight(lights.light[i]);
     }
     outColor = vec4(result, 1.0);
