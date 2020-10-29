@@ -12,3 +12,6 @@ memoffset = "0.5.6"
 
 [build-dependencies]
 shaderc = "0.6.2"
+
+[dev-dependencies]
+rstest = "0.6.3"
