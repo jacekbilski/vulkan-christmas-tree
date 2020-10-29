@@ -83,12 +83,12 @@ fn main_loop(
             VirtualKeyCode::Left => {
                 rotate = false;
                 let angle_change = FRAC_PI_8 / 4.;
-                scene.rotate_camera_horizontally(angle_change, &mut vulkan);
+                scene.rotate_camera_horizontally(-angle_change, &mut vulkan);
             }
             VirtualKeyCode::Right => {
                 rotate = false;
                 let angle_change = FRAC_PI_8 / 4.;
-                scene.rotate_camera_horizontally(-angle_change, &mut vulkan);
+                scene.rotate_camera_horizontally(angle_change, &mut vulkan);
             }
             VirtualKeyCode::R => {
                 rotate = !rotate;
