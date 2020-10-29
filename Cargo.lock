@@ -479,9 +479,9 @@ dependencies = [
 
 [[package]]
 name = "memoffset"
-version = "0.5.6"
+version = "0.6.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "043175f069eda7b85febe4a74abbaeff828d9f8b448515d3151a14a3542811aa"
+checksum = "157b4208e3059a8f9e78d559edc658e13df41410cb3ae03979c83130067fdd87"
 dependencies = [
  "autocfg 1.0.1",
 ]
@@ -1030,6 +1030,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "tobj"
+version = "2.0.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6172100cd5b17cdd085c94f261e31101ca31886c86a2337a6687dac6d2fb3cf1"
+
+[[package]]
 name = "toml"
 version = "0.5.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1065,6 +1071,7 @@ dependencies = [
  "memoffset",
  "rstest",
  "shaderc",
+ "tobj",
  "winit",
 ]
 

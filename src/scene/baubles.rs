@@ -14,7 +14,7 @@ struct Bauble {
     color: Color,
 }
 
-pub fn create_mesh() -> Mesh {
+pub fn create_meshes() -> Vec<Mesh> {
     let (vertices, indices) = gen_sphere();
 
     let red = Color {
@@ -182,11 +182,11 @@ pub fn create_mesh() -> Mesh {
         })
         .collect();
 
-    Mesh {
+    vec![Mesh {
         vertices,
         indices,
         instances,
-    }
+    }]
 }
 
 fn gen_sphere() -> (Vec<Vertex>, Vec<VertexIndexType>) {

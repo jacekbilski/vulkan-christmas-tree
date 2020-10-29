@@ -8,7 +8,8 @@ edition = "2018"
 ash = "0.31.0"
 cgmath = "0.17.0"
 winit = "0.23.0"
-memoffset = "0.5.6"
+memoffset = "0.6.1"
+tobj = "2.0.2"
 
 [build-dependencies]
 shaderc = "0.6.2"

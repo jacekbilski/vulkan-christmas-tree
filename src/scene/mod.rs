@@ -10,6 +10,7 @@ mod baubles;
 pub mod camera;
 mod ground;
 pub mod lights;
+mod tree;
 
 const CLEAR_VALUE: [f32; 4] = [0.015_7, 0., 0.360_7, 1.0];
 
@@ -58,8 +59,9 @@ impl Scene {
 
     fn setup_meshes(vulkan: &mut Vulkan) {
         let mut meshes: Vec<Mesh> = Vec::new();
-        meshes.push(ground::create_mesh());
-        meshes.push(baubles::create_mesh());
+        meshes.extend(ground::create_meshes());
+        meshes.extend(baubles::create_meshes());
+        meshes.extend(tree::create_meshes());
         vulkan.set_meshes(&meshes);
     }
 
