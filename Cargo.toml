@@ -9,6 +9,7 @@ ash = "0.31.0"
 cgmath = "0.17.0"
 winit = "0.23.0"
 memoffset = "0.6.1"
+rand = {version = "0.7.3", features = ["small_rng"]}
 tobj = "2.0.2"
 
 [build-dependencies]

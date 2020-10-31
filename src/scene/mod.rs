@@ -10,6 +10,7 @@ mod baubles;
 pub mod camera;
 mod ground;
 pub mod lights;
+mod snow;
 mod tree;
 
 const CLEAR_VALUE: [f32; 4] = [0.015_7, 0., 0.360_7, 1.0];
@@ -62,6 +63,7 @@ impl Scene {
         meshes.extend(ground::create_meshes());
         meshes.extend(baubles::create_meshes());
         meshes.extend(tree::create_meshes());
+        meshes.extend(snow::create_meshes());
         vulkan.set_meshes(&meshes);
     }
 
