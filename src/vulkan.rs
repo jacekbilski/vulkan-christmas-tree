@@ -219,8 +219,8 @@ pub struct Vulkan {
     swapchain_framebuffers: Vec<vk::Framebuffer>,
 
     render_pass: vk::RenderPass,
-    ubo_layout: vk::DescriptorSetLayout,
-    pipeline_layout: vk::PipelineLayout,
+    graphics_descriptor_set_layout: vk::DescriptorSetLayout,
+    graphics_pipeline_layout: vk::PipelineLayout,
     graphics_pipeline: vk::Pipeline,
 
     depth_image: vk::Image,
@@ -230,7 +230,7 @@ pub struct Vulkan {
     uniform_buffers: Vec<UniformBuffer>,
 
     descriptor_pool: vk::DescriptorPool,
-    descriptor_sets: Vec<vk::DescriptorSet>,
+    graphics_descriptor_sets: Vec<vk::DescriptorSet>,
 
     meshes: Vec<VulkanMesh>,
 
@@ -286,12 +286,12 @@ impl Vulkan {
             physical_device,
             swapchain_composite.format,
         );
-        let ubo_layout = Vulkan::create_descriptor_set_layout(&device);
-        let (graphics_pipeline, pipeline_layout) = Vulkan::create_graphics_pipeline(
+        let graphics_descriptor_set_layout = Vulkan::create_graphics_descriptor_set_layout(&device);
+        let (graphics_pipeline, graphics_pipeline_layout) = Vulkan::create_graphics_pipeline(
             &device,
             render_pass,
             swapchain_composite.extent,
-            ubo_layout,
+            graphics_descriptor_set_layout,
         );
         let (depth_image, depth_image_view, depth_image_memory) = Vulkan::create_depth_resources(
             &instance,
@@ -315,10 +315,10 @@ impl Vulkan {
         );
         let descriptor_pool =
             Vulkan::create_descriptor_pool(&device, swapchain_composite.images.len());
-        let descriptor_sets = Vulkan::create_descriptor_sets(
+        let graphics_descriptor_sets = Vulkan::create_graphics_descriptor_sets(
             &device,
             descriptor_pool,
-            ubo_layout,
+            graphics_descriptor_set_layout,
             &uniform_buffers,
             swapchain_composite.images.len(),
         );
@@ -352,8 +352,8 @@ impl Vulkan {
             swapchain_framebuffers,
 
             render_pass,
-            ubo_layout,
-            pipeline_layout,
+            graphics_descriptor_set_layout,
+            graphics_pipeline_layout,
             graphics_pipeline,
 
             depth_image,
@@ -363,7 +363,7 @@ impl Vulkan {
             uniform_buffers,
 
             descriptor_pool,
-            descriptor_sets,
+            graphics_descriptor_sets,
 
             meshes: vec![],
 
@@ -427,8 +427,8 @@ impl Vulkan {
             self.render_pass,
             self.swapchain_extent,
             &vulkan_meshes,
-            self.pipeline_layout,
-            &self.descriptor_sets,
+            self.graphics_pipeline_layout,
+            &self.graphics_descriptor_sets,
             self.clear_value,
         );
         self.meshes = vulkan_meshes;
@@ -998,8 +998,8 @@ impl Vulkan {
         }
     }
 
-    fn create_descriptor_set_layout(device: &ash::Device) -> vk::DescriptorSetLayout {
-        let ubo_layout_bindings = [
+    fn create_graphics_descriptor_set_layout(device: &ash::Device) -> vk::DescriptorSetLayout {
+        let descriptor_set_layout_bindings = [
             vk::DescriptorSetLayoutBinding {
                 binding: CAMERA_UBO_INDEX as u32,
                 descriptor_type: vk::DescriptorType::UNIFORM_BUFFER,
@@ -1016,15 +1016,15 @@ impl Vulkan {
             },
         ];
 
-        let ubo_layout_create_info = vk::DescriptorSetLayoutCreateInfo {
-            binding_count: ubo_layout_bindings.len() as u32,
-            p_bindings: ubo_layout_bindings.as_ptr(),
+        let descriptor_set_layout_create_info = vk::DescriptorSetLayoutCreateInfo {
+            binding_count: descriptor_set_layout_bindings.len() as u32,
+            p_bindings: descriptor_set_layout_bindings.as_ptr(),
             ..Default::default()
         };
 
         unsafe {
             device
-                .create_descriptor_set_layout(&ubo_layout_create_info, None)
+                .create_descriptor_set_layout(&descriptor_set_layout_create_info, None)
                 .expect("Failed to create Descriptor Set Layout!")
         }
     }
@@ -1033,7 +1033,7 @@ impl Vulkan {
         device: &ash::Device,
         render_pass: vk::RenderPass,
         swapchain_extent: vk::Extent2D,
-        ubo_set_layout: vk::DescriptorSetLayout,
+        descriptor_set_layout: vk::DescriptorSetLayout,
     ) -> (vk::Pipeline, vk::PipelineLayout) {
         let vert_shader_code = read_shader_code("simple.vert.spv");
         let frag_shader_code = read_shader_code("simple.frag.spv");
@@ -1179,7 +1179,7 @@ impl Vulkan {
             ..Default::default()
         };
 
-        let set_layouts = [ubo_set_layout];
+        let set_layouts = [descriptor_set_layout];
 
         let pipeline_layout_create_info = vk::PipelineLayoutCreateInfo {
             flags: vk::PipelineLayoutCreateFlags::empty(),
@@ -1558,7 +1558,7 @@ impl Vulkan {
         }
     }
 
-    fn create_descriptor_sets(
+    fn create_graphics_descriptor_sets(
         device: &ash::Device,
         descriptor_pool: vk::DescriptorPool,
         descriptor_set_layout: vk::DescriptorSetLayout,
@@ -2233,10 +2233,10 @@ impl Vulkan {
             &self.device,
             self.render_pass,
             swapchain_composite.extent,
-            self.ubo_layout,
+            self.graphics_descriptor_set_layout,
         );
         self.graphics_pipeline = graphics_pipeline;
-        self.pipeline_layout = pipeline_layout;
+        self.graphics_pipeline_layout = pipeline_layout;
 
         let (depth_image, depth_image_view, depth_image_memory) = Vulkan::create_depth_resources(
             &self.instance,
@@ -2264,8 +2264,8 @@ impl Vulkan {
             self.render_pass,
             self.swapchain_extent,
             &self.meshes,
-            self.pipeline_layout,
-            &self.descriptor_sets,
+            self.graphics_pipeline_layout,
+            &self.graphics_descriptor_sets,
             self.clear_value,
         );
     }
@@ -2283,7 +2283,7 @@ impl Vulkan {
             }
             self.device.destroy_pipeline(self.graphics_pipeline, None);
             self.device
-                .destroy_pipeline_layout(self.pipeline_layout, None);
+                .destroy_pipeline_layout(self.graphics_pipeline_layout, None);
             self.device.destroy_render_pass(self.render_pass, None);
             for &image_view in self.swapchain_imageviews.iter() {
                 self.device.destroy_image_view(image_view, None);
@@ -2333,7 +2333,7 @@ impl Drop for Vulkan {
                 .destroy_descriptor_pool(self.descriptor_pool, None);
 
             self.device
-                .destroy_descriptor_set_layout(self.ubo_layout, None);
+                .destroy_descriptor_set_layout(self.graphics_descriptor_set_layout, None);
 
             for j in 0..self.uniform_buffers.len() {
                 for i in 0..self.uniform_buffers[j].buffers.len() {
