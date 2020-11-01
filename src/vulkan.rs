@@ -227,14 +227,12 @@ pub struct Vulkan {
     depth_image_view: vk::ImageView,
     depth_image_memory: vk::DeviceMemory,
 
-    uniform_buffers: Vec<UniformBuffer>,
-
-    graphics_descriptor_pool: vk::DescriptorPool,
-    graphics_descriptor_sets: Vec<vk::DescriptorSet>,
-
-    meshes: Vec<VulkanMesh>,
-
     graphics_command_pool: vk::CommandPool,
+    graphics_descriptor_pool: vk::DescriptorPool,
+
+    uniform_buffers: Vec<UniformBuffer>,
+    meshes: Vec<VulkanMesh>,
+    graphics_descriptor_sets: Vec<vk::DescriptorSet>,
     command_buffers: Vec<vk::CommandBuffer>,
 
     image_available_semaphores: Vec<vk::Semaphore>,
@@ -328,7 +326,7 @@ impl Vulkan {
             &uniform_buffers,
             swapchain_composite.images.len(),
         );
-        let sync_ojbects = Vulkan::create_sync_objects(&device);
+        let sync_objects = Vulkan::create_sync_objects(&device);
 
         Vulkan {
             clear_value: [0.0, 0.0, 0.0, 0.0],
@@ -366,19 +364,17 @@ impl Vulkan {
             depth_image_view,
             depth_image_memory,
 
-            uniform_buffers,
-
-            graphics_descriptor_pool,
-            graphics_descriptor_sets,
-
-            meshes: vec![],
-
             graphics_command_pool,
+            graphics_descriptor_pool,
+
+            uniform_buffers,
+            meshes: vec![],
+            graphics_descriptor_sets,
             command_buffers: vec![],
 
-            image_available_semaphores: sync_ojbects.image_available_semaphores,
-            render_finished_semaphores: sync_ojbects.render_finished_semaphores,
-            in_flight_fences: sync_ojbects.inflight_fences,
+            image_available_semaphores: sync_objects.image_available_semaphores,
+            render_finished_semaphores: sync_objects.render_finished_semaphores,
+            in_flight_fences: sync_objects.inflight_fences,
             current_frame: 0,
 
             is_framebuffer_resized: false,
