@@ -229,12 +229,12 @@ pub struct Vulkan {
 
     uniform_buffers: Vec<UniformBuffer>,
 
-    descriptor_pool: vk::DescriptorPool,
+    graphics_descriptor_pool: vk::DescriptorPool,
     graphics_descriptor_sets: Vec<vk::DescriptorSet>,
 
     meshes: Vec<VulkanMesh>,
 
-    command_pool: vk::CommandPool,
+    graphics_command_pool: vk::CommandPool,
     command_buffers: Vec<vk::CommandBuffer>,
 
     image_available_semaphores: Vec<vk::Semaphore>,
@@ -249,6 +249,7 @@ pub struct Vulkan {
 
 impl Vulkan {
     pub fn new(window: &winit::window::Window, application_name: &str) -> Self {
+        // Vulkan instance setup phase (always required, goes first)
         let entry = ash::Entry::new().unwrap();
         let instance = Vulkan::create_instance(&entry, application_name);
         let surface_composite = Vulkan::create_surface(&entry, &instance, &window);
@@ -264,6 +265,8 @@ impl Vulkan {
             unsafe { device.get_device_queue(queue_family.present_family.unwrap(), 0) };
         let transfer_queue =
             unsafe { device.get_device_queue(queue_family.transfer_family.unwrap(), 0) };
+
+        // Graphics pipeline setup phase (required to render graphics, requires some info already like layouts, but not concrete buffers)
         let window_width = window.inner_size().width;
         let window_height = window.inner_size().height;
         let swapchain_composite = Vulkan::create_swapchain(
@@ -307,17 +310,20 @@ impl Vulkan {
             depth_image_view,
             &swapchain_composite.extent,
         );
-        let command_pool = Vulkan::create_command_pool(&device, &queue_family);
+        let graphics_command_pool =
+            Vulkan::create_command_pool(&device, queue_family.graphics_family.unwrap());
+        let graphics_descriptor_pool =
+            Vulkan::create_graphics_descriptor_pool(&device, swapchain_composite.images.len());
+
+        // Graphics pipeline rendering preparations (requires actual buffers)
         let uniform_buffers = Vulkan::create_uniform_buffers(
             &device,
             &physical_device_memory_properties,
             swapchain_composite.images.len(),
         );
-        let descriptor_pool =
-            Vulkan::create_descriptor_pool(&device, swapchain_composite.images.len());
         let graphics_descriptor_sets = Vulkan::create_graphics_descriptor_sets(
             &device,
-            descriptor_pool,
+            graphics_descriptor_pool,
             graphics_descriptor_set_layout,
             &uniform_buffers,
             swapchain_composite.images.len(),
@@ -362,12 +368,12 @@ impl Vulkan {
 
             uniform_buffers,
 
-            descriptor_pool,
+            graphics_descriptor_pool,
             graphics_descriptor_sets,
 
             meshes: vec![],
 
-            command_pool,
+            graphics_command_pool,
             command_buffers: vec![],
 
             image_available_semaphores: sync_ojbects.image_available_semaphores,
@@ -388,14 +394,14 @@ impl Vulkan {
             let (vertex_buffer, vertex_buffer_memory) = Vulkan::create_vertex_buffer(
                 &self.device,
                 &self.physical_device_memory_properties,
-                self.command_pool,
+                self.graphics_command_pool,
                 self.transfer_queue,
                 &mesh.vertices,
             );
             let (index_buffer, index_buffer_memory) = Vulkan::create_index_buffer(
                 &self.device,
                 &self.physical_device_memory_properties,
-                self.command_pool,
+                self.graphics_command_pool,
                 self.transfer_queue,
                 &mesh.indices,
             );
@@ -403,7 +409,7 @@ impl Vulkan {
             let (instance_buffer, instance_buffer_memory) = Vulkan::create_vertex_buffer(
                 &self.device,
                 &self.physical_device_memory_properties,
-                self.command_pool,
+                self.graphics_command_pool,
                 self.transfer_queue,
                 &mesh.instances,
             );
@@ -421,7 +427,7 @@ impl Vulkan {
         }
         let command_buffers = Vulkan::create_command_buffers(
             &self.device,
-            self.command_pool,
+            self.graphics_command_pool,
             self.graphics_pipeline,
             &self.swapchain_framebuffers,
             self.render_pass,
@@ -1284,13 +1290,9 @@ impl Vulkan {
         framebuffers
     }
 
-    fn create_command_pool(
-        device: &ash::Device,
-        queue_families: &QueueFamilyIndices,
-    ) -> vk::CommandPool {
+    fn create_command_pool(device: &ash::Device, queue_family_index: u32) -> vk::CommandPool {
         let command_pool_create_info = vk::CommandPoolCreateInfo {
-            flags: vk::CommandPoolCreateFlags::empty(),
-            queue_family_index: queue_families.graphics_family.unwrap(),
+            queue_family_index,
             ..Default::default()
         };
 
@@ -1527,7 +1529,7 @@ impl Vulkan {
         uniform_buffers
     }
 
-    fn create_descriptor_pool(
+    fn create_graphics_descriptor_pool(
         device: &ash::Device,
         swapchain_images_size: usize,
     ) -> vk::DescriptorPool {
@@ -2258,7 +2260,7 @@ impl Vulkan {
         );
         self.command_buffers = Vulkan::create_command_buffers(
             &self.device,
-            self.command_pool,
+            self.graphics_command_pool,
             self.graphics_pipeline,
             &self.swapchain_framebuffers,
             self.render_pass,
@@ -2277,7 +2279,7 @@ impl Vulkan {
             self.device.free_memory(self.depth_image_memory, None);
 
             self.device
-                .free_command_buffers(self.command_pool, &self.command_buffers);
+                .free_command_buffers(self.graphics_command_pool, &self.command_buffers);
             for &framebuffer in self.swapchain_framebuffers.iter() {
                 self.device.destroy_framebuffer(framebuffer, None);
             }
@@ -2330,7 +2332,7 @@ impl Drop for Vulkan {
                 self.device.free_memory(mesh.vertex_buffer_memory, None);
             }
             self.device
-                .destroy_descriptor_pool(self.descriptor_pool, None);
+                .destroy_descriptor_pool(self.graphics_descriptor_pool, None);
 
             self.device
                 .destroy_descriptor_set_layout(self.graphics_descriptor_set_layout, None);
@@ -2344,7 +2346,8 @@ impl Drop for Vulkan {
                 }
             }
 
-            self.device.destroy_command_pool(self.command_pool, None);
+            self.device
+                .destroy_command_pool(self.graphics_command_pool, None);
             self.device.destroy_device(None);
             self.surface_loader.destroy_surface(self.surface, None);
             self.debug_utils_loader
