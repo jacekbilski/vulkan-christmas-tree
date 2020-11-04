@@ -209,6 +209,43 @@ struct VulkanCore {
 }
 
 impl VulkanCore {
+    fn new(window: &winit::window::Window, application_name: &str) -> (Self, SurfaceComposite) {
+        let entry = ash::Entry::new().unwrap();
+        let instance = Vulkan::create_instance(&entry, application_name);
+        let surface_composite = Vulkan::create_surface(&entry, &instance, &window);
+        let (debug_utils_loader, debug_messenger) = Vulkan::setup_debug_utils(&entry, &instance);
+        let physical_device = Vulkan::pick_physical_device(&instance, &surface_composite);
+        let physical_device_memory_properties =
+            unsafe { instance.get_physical_device_memory_properties(physical_device) };
+        let (device, queue_family) =
+            Vulkan::create_logical_device(&instance, physical_device, &surface_composite);
+        let graphics_queue =
+            unsafe { device.get_device_queue(queue_family.graphics_family.unwrap(), 0) };
+        let present_queue =
+            unsafe { device.get_device_queue(queue_family.present_family.unwrap(), 0) };
+        let transfer_queue =
+            unsafe { device.get_device_queue(queue_family.transfer_family.unwrap(), 0) };
+        (
+            VulkanCore {
+                _entry: entry,
+                instance,
+
+                debug_utils_loader,
+                debug_messenger,
+
+                physical_device,
+                physical_device_memory_properties,
+
+                device,
+                queue_family,
+                graphics_queue,
+                present_queue,
+                transfer_queue,
+            },
+            surface_composite,
+        )
+    }
+
     fn shutdown(&self) {
         unsafe {
             self.debug_utils_loader
@@ -263,61 +300,19 @@ pub struct Vulkan {
 impl Vulkan {
     pub fn new(window: &winit::window::Window, application_name: &str) -> Self {
         // Vulkan instance setup phase (always required, goes first)
-        let entry = ash::Entry::new().unwrap();
-        let instance = Vulkan::create_instance(&entry, application_name);
-        let surface_composite = Vulkan::create_surface(&entry, &instance, &window);
-        let (debug_utils_loader, debug_messenger) = Vulkan::setup_debug_utils(&entry, &instance);
-        let physical_device = Vulkan::pick_physical_device(&instance, &surface_composite);
-        let physical_device_memory_properties =
-            unsafe { instance.get_physical_device_memory_properties(physical_device) };
-        let (device, queue_family) =
-            Vulkan::create_logical_device(&instance, physical_device, &surface_composite);
-        let graphics_queue =
-            unsafe { device.get_device_queue(queue_family.graphics_family.unwrap(), 0) };
-        let present_queue =
-            unsafe { device.get_device_queue(queue_family.present_family.unwrap(), 0) };
-        let transfer_queue =
-            unsafe { device.get_device_queue(queue_family.transfer_family.unwrap(), 0) };
-        let core = VulkanCore {
-            _entry: entry,
-            instance,
-
-            debug_utils_loader,
-            debug_messenger,
-
-            physical_device,
-            physical_device_memory_properties,
-
-            device,
-            queue_family,
-            graphics_queue,
-            present_queue,
-            transfer_queue,
-        };
+        let (core, surface_composite) = VulkanCore::new(&window, application_name);
 
         // Graphics pipeline setup phase (required to render graphics, requires some info already like layouts, but not concrete buffers)
         let window_width = window.inner_size().width;
         let window_height = window.inner_size().height;
-        let swapchain_composite = Vulkan::create_swapchain(
-            &core.instance,
-            &core.device,
-            physical_device,
-            &surface_composite,
-            &core.queue_family,
-            window_width,
-            window_height,
-        );
+        let swapchain_composite =
+            Vulkan::create_swapchain(&core, &surface_composite, window_width, window_height);
         let swapchain_imageviews = Vulkan::create_image_views(
             &core.device,
             swapchain_composite.format,
             &swapchain_composite.images,
         );
-        let render_pass = Vulkan::create_render_pass(
-            &core.instance,
-            &core.device,
-            physical_device,
-            swapchain_composite.format,
-        );
+        let render_pass = Vulkan::create_render_pass(&core, swapchain_composite.format);
         let graphics_descriptor_set_layout =
             Vulkan::create_graphics_descriptor_set_layout(&core.device);
         let (graphics_pipeline, graphics_pipeline_layout) = Vulkan::create_graphics_pipeline(
@@ -326,13 +321,8 @@ impl Vulkan {
             swapchain_composite.extent,
             graphics_descriptor_set_layout,
         );
-        let (depth_image, depth_image_view, depth_image_memory) = Vulkan::create_depth_resources(
-            &core.instance,
-            &core.device,
-            physical_device,
-            swapchain_composite.extent,
-            &physical_device_memory_properties,
-        );
+        let (depth_image, depth_image_view, depth_image_memory) =
+            Vulkan::create_depth_resources(&core, swapchain_composite.extent);
         let swapchain_framebuffers = Vulkan::create_framebuffers(
             &core.device,
             render_pass,
@@ -348,7 +338,7 @@ impl Vulkan {
         // Graphics pipeline rendering preparations (requires actual buffers)
         let uniform_buffers = Vulkan::create_uniform_buffers(
             &core.device,
-            &physical_device_memory_properties,
+            &core.physical_device_memory_properties,
             swapchain_composite.images.len(),
         );
         let graphics_descriptor_sets = Vulkan::create_graphics_descriptor_sets(
@@ -667,15 +657,13 @@ impl Vulkan {
     }
 
     fn create_swapchain(
-        instance: &ash::Instance,
-        device: &ash::Device,
-        physical_device: vk::PhysicalDevice,
+        core: &VulkanCore,
         surface_composite: &SurfaceComposite,
-        queue_family: &QueueFamilyIndices,
         window_width: u32,
         window_height: u32,
     ) -> SwapChainComposite {
-        let swapchain_support = Vulkan::find_swapchain_support(physical_device, surface_composite);
+        let swapchain_support =
+            Vulkan::find_swapchain_support(core.physical_device, surface_composite);
 
         let surface_format = Vulkan::choose_swapchain_format(&swapchain_support.formats);
         let present_mode = Vulkan::choose_swapchain_present_mode(&swapchain_support.present_modes);
@@ -693,12 +681,12 @@ impl Vulkan {
         };
 
         let (image_sharing_mode, queue_family_indices) =
-            if queue_family.graphics_family != queue_family.present_family {
+            if core.queue_family.graphics_family != core.queue_family.present_family {
                 (
                     vk::SharingMode::EXCLUSIVE,
                     vec![
-                        queue_family.graphics_family.unwrap(),
-                        queue_family.present_family.unwrap(),
+                        core.queue_family.graphics_family.unwrap(),
+                        core.queue_family.present_family.unwrap(),
                     ],
                 )
             } else {
@@ -723,7 +711,7 @@ impl Vulkan {
             ..Default::default()
         };
 
-        let loader = ash::extensions::khr::Swapchain::new(instance, device);
+        let loader = ash::extensions::khr::Swapchain::new(&core.instance, &core.device);
         let swapchain = unsafe {
             loader
                 .create_swapchain(&swapchain_create_info, None)
@@ -938,12 +926,7 @@ impl Vulkan {
         swapchain_imageviews
     }
 
-    fn create_render_pass(
-        instance: &ash::Instance,
-        device: &ash::Device,
-        physcial_device: vk::PhysicalDevice,
-        surface_format: vk::Format,
-    ) -> vk::RenderPass {
+    fn create_render_pass(core: &VulkanCore, surface_format: vk::Format) -> vk::RenderPass {
         let color_attachment = vk::AttachmentDescription {
             flags: vk::AttachmentDescriptionFlags::empty(),
             format: surface_format,
@@ -958,7 +941,7 @@ impl Vulkan {
 
         let depth_attachment = vk::AttachmentDescription {
             flags: vk::AttachmentDescriptionFlags::empty(),
-            format: Vulkan::find_depth_format(instance, physcial_device),
+            format: Vulkan::find_depth_format(&core.instance, core.physical_device),
             samples: vk::SampleCountFlags::TYPE_1,
             load_op: vk::AttachmentLoadOp::CLEAR,
             store_op: vk::AttachmentStoreOp::DONT_CARE,
@@ -1014,7 +997,7 @@ impl Vulkan {
         };
 
         unsafe {
-            device
+            core.device
                 .create_render_pass(&renderpass_create_info, None)
                 .expect("Failed to create render pass!")
         }
@@ -1320,15 +1303,12 @@ impl Vulkan {
     }
 
     fn create_depth_resources(
-        instance: &ash::Instance,
-        device: &ash::Device,
-        physical_device: vk::PhysicalDevice,
+        core: &VulkanCore,
         swapchain_extent: vk::Extent2D,
-        device_memory_properties: &vk::PhysicalDeviceMemoryProperties,
     ) -> (vk::Image, vk::ImageView, vk::DeviceMemory) {
-        let depth_format = Vulkan::find_depth_format(instance, physical_device);
+        let depth_format = Vulkan::find_depth_format(&core.instance, core.physical_device);
         let (depth_image, depth_image_memory) = Vulkan::create_image(
-            device,
+            &core.device,
             swapchain_extent.width,
             swapchain_extent.height,
             1,
@@ -1337,10 +1317,10 @@ impl Vulkan {
             vk::ImageTiling::OPTIMAL,
             vk::ImageUsageFlags::DEPTH_STENCIL_ATTACHMENT,
             vk::MemoryPropertyFlags::DEVICE_LOCAL,
-            device_memory_properties,
+            &core.physical_device_memory_properties,
         );
         let depth_image_view = Vulkan::create_image_view(
-            device,
+            &core.device,
             depth_image,
             depth_format,
             vk::ImageAspectFlags::DEPTH,
@@ -2231,11 +2211,8 @@ impl Vulkan {
         self.cleanup_swapchain();
 
         let swapchain_composite = Vulkan::create_swapchain(
-            &self.core.instance,
-            &self.core.device,
-            self.core.physical_device,
+            &self.core,
             &surface_composite,
-            &self.core.queue_family,
             self.window_width,
             self.window_height,
         );
@@ -2250,12 +2227,7 @@ impl Vulkan {
             self.swapchain_format,
             &self.swapchain_images,
         );
-        self.render_pass = Vulkan::create_render_pass(
-            &self.core.instance,
-            &self.core.device,
-            self.core.physical_device,
-            self.swapchain_format,
-        );
+        self.render_pass = Vulkan::create_render_pass(&self.core, self.swapchain_format);
         let (graphics_pipeline, pipeline_layout) = Vulkan::create_graphics_pipeline(
             &self.core.device,
             self.render_pass,
@@ -2265,13 +2237,8 @@ impl Vulkan {
         self.graphics_pipeline = graphics_pipeline;
         self.graphics_pipeline_layout = pipeline_layout;
 
-        let (depth_image, depth_image_view, depth_image_memory) = Vulkan::create_depth_resources(
-            &self.core.instance,
-            &self.core.device,
-            self.core.physical_device,
-            swapchain_composite.extent,
-            &self.core.physical_device_memory_properties,
-        );
+        let (depth_image, depth_image_view, depth_image_memory) =
+            Vulkan::create_depth_resources(&self.core, swapchain_composite.extent);
         self.depth_image = depth_image;
         self.depth_image_view = depth_image_view;
         self.depth_image_memory = depth_image_memory;
