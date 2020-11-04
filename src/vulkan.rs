@@ -191,13 +191,10 @@ impl From<&Lights> for LightsUBO {
     }
 }
 
-pub struct Vulkan {
-    clear_value: [f32; 4],
-
+struct VulkanCore {
     _entry: ash::Entry,
     instance: ash::Instance,
-    surface_loader: ash::extensions::khr::Surface,
-    surface: vk::SurfaceKHR,
+
     debug_utils_loader: ash::extensions::ext::DebugUtils,
     debug_messenger: vk::DebugUtilsMessengerEXT,
 
@@ -209,6 +206,24 @@ pub struct Vulkan {
     graphics_queue: vk::Queue,
     present_queue: vk::Queue,
     transfer_queue: vk::Queue,
+}
+
+impl VulkanCore {
+    fn shutdown(&self) {
+        unsafe {
+            self.debug_utils_loader
+                .destroy_debug_utils_messenger(self.debug_messenger, None);
+            self.instance.destroy_instance(None);
+        }
+    }
+}
+
+pub struct Vulkan {
+    core: VulkanCore,
+    clear_value: [f32; 4],
+
+    surface_loader: ash::extensions::khr::Surface,
+    surface: vk::SurfaceKHR,
 
     swapchain_loader: ash::extensions::khr::Swapchain,
     swapchain: vk::SwapchainKHR,
@@ -263,89 +278,94 @@ impl Vulkan {
             unsafe { device.get_device_queue(queue_family.present_family.unwrap(), 0) };
         let transfer_queue =
             unsafe { device.get_device_queue(queue_family.transfer_family.unwrap(), 0) };
+        let core = VulkanCore {
+            _entry: entry,
+            instance,
+
+            debug_utils_loader,
+            debug_messenger,
+
+            physical_device,
+            physical_device_memory_properties,
+
+            device,
+            queue_family,
+            graphics_queue,
+            present_queue,
+            transfer_queue,
+        };
 
         // Graphics pipeline setup phase (required to render graphics, requires some info already like layouts, but not concrete buffers)
         let window_width = window.inner_size().width;
         let window_height = window.inner_size().height;
         let swapchain_composite = Vulkan::create_swapchain(
-            &instance,
-            &device,
+            &core.instance,
+            &core.device,
             physical_device,
             &surface_composite,
-            &queue_family,
+            &core.queue_family,
             window_width,
             window_height,
         );
         let swapchain_imageviews = Vulkan::create_image_views(
-            &device,
+            &core.device,
             swapchain_composite.format,
             &swapchain_composite.images,
         );
         let render_pass = Vulkan::create_render_pass(
-            &instance,
-            &device,
+            &core.instance,
+            &core.device,
             physical_device,
             swapchain_composite.format,
         );
-        let graphics_descriptor_set_layout = Vulkan::create_graphics_descriptor_set_layout(&device);
+        let graphics_descriptor_set_layout =
+            Vulkan::create_graphics_descriptor_set_layout(&core.device);
         let (graphics_pipeline, graphics_pipeline_layout) = Vulkan::create_graphics_pipeline(
-            &device,
+            &core.device,
             render_pass,
             swapchain_composite.extent,
             graphics_descriptor_set_layout,
         );
         let (depth_image, depth_image_view, depth_image_memory) = Vulkan::create_depth_resources(
-            &instance,
-            &device,
+            &core.instance,
+            &core.device,
             physical_device,
             swapchain_composite.extent,
             &physical_device_memory_properties,
         );
         let swapchain_framebuffers = Vulkan::create_framebuffers(
-            &device,
+            &core.device,
             render_pass,
             &swapchain_imageviews,
             depth_image_view,
             &swapchain_composite.extent,
         );
         let graphics_command_pool =
-            Vulkan::create_command_pool(&device, queue_family.graphics_family.unwrap());
+            Vulkan::create_command_pool(&core.device, core.queue_family.graphics_family.unwrap());
         let graphics_descriptor_pool =
-            Vulkan::create_graphics_descriptor_pool(&device, swapchain_composite.images.len());
+            Vulkan::create_graphics_descriptor_pool(&core.device, swapchain_composite.images.len());
 
         // Graphics pipeline rendering preparations (requires actual buffers)
         let uniform_buffers = Vulkan::create_uniform_buffers(
-            &device,
+            &core.device,
             &physical_device_memory_properties,
             swapchain_composite.images.len(),
         );
         let graphics_descriptor_sets = Vulkan::create_graphics_descriptor_sets(
-            &device,
+            &core.device,
             graphics_descriptor_pool,
             graphics_descriptor_set_layout,
             &uniform_buffers,
             swapchain_composite.images.len(),
         );
-        let sync_objects = Vulkan::create_sync_objects(&device);
+        let sync_objects = Vulkan::create_sync_objects(&core.device);
 
         Vulkan {
+            core,
             clear_value: [0.0, 0.0, 0.0, 0.0],
 
-            _entry: entry,
-            instance,
             surface_loader: surface_composite.loader,
             surface: surface_composite.surface,
-            debug_utils_loader,
-            debug_messenger,
-
-            physical_device,
-            physical_device_memory_properties,
-            device,
-
-            queue_family,
-            graphics_queue,
-            present_queue,
-            transfer_queue,
 
             swapchain_loader: swapchain_composite.loader,
             swapchain: swapchain_composite.swapchain,
@@ -388,25 +408,25 @@ impl Vulkan {
 
         for mesh in meshes.iter() {
             let (vertex_buffer, vertex_buffer_memory) = Vulkan::create_vertex_buffer(
-                &self.device,
-                &self.physical_device_memory_properties,
+                &self.core.device,
+                &self.core.physical_device_memory_properties,
                 self.graphics_command_pool,
-                self.transfer_queue,
+                self.core.transfer_queue,
                 &mesh.vertices,
             );
             let (index_buffer, index_buffer_memory) = Vulkan::create_index_buffer(
-                &self.device,
-                &self.physical_device_memory_properties,
+                &self.core.device,
+                &self.core.physical_device_memory_properties,
                 self.graphics_command_pool,
-                self.transfer_queue,
+                self.core.transfer_queue,
                 &mesh.indices,
             );
             let indices_no = mesh.indices.len() as u32;
             let (instance_buffer, instance_buffer_memory) = Vulkan::create_vertex_buffer(
-                &self.device,
-                &self.physical_device_memory_properties,
+                &self.core.device,
+                &self.core.physical_device_memory_properties,
                 self.graphics_command_pool,
-                self.transfer_queue,
+                self.core.transfer_queue,
                 &mesh.instances,
             );
             let instances_no = mesh.instances.len() as u32;
@@ -422,7 +442,7 @@ impl Vulkan {
             });
         }
         let command_buffers = Vulkan::create_command_buffers(
-            &self.device,
+            &self.core.device,
             self.graphics_command_pool,
             self.graphics_pipeline,
             &self.swapchain_framebuffers,
@@ -1624,7 +1644,8 @@ impl Vulkan {
         for current_image in 0..self.swapchain_images.len() {
             unsafe {
                 let data_ptr =
-                    self.device
+                    self.core
+                        .device
                         .map_memory(
                             self.uniform_buffers[CAMERA_UBO_INDEX].buffers_memory[current_image],
                             0,
@@ -1635,7 +1656,7 @@ impl Vulkan {
 
                 data_ptr.copy_from_nonoverlapping(ubos.as_ptr(), ubos.len());
 
-                self.device.unmap_memory(
+                self.core.device.unmap_memory(
                     self.uniform_buffers[CAMERA_UBO_INDEX].buffers_memory[current_image],
                 );
             }
@@ -1651,7 +1672,8 @@ impl Vulkan {
         for current_image in 0..self.swapchain_images.len() {
             unsafe {
                 let data_ptr =
-                    self.device
+                    self.core
+                        .device
                         .map_memory(
                             self.uniform_buffers[LIGHTS_UBO_INDEX].buffers_memory[current_image],
                             0,
@@ -1662,7 +1684,7 @@ impl Vulkan {
 
                 data_ptr.copy_from_nonoverlapping(ubos.as_ptr(), ubos.len());
 
-                self.device.unmap_memory(
+                self.core.device.unmap_memory(
                     self.uniform_buffers[LIGHTS_UBO_INDEX].buffers_memory[current_image],
                 );
             }
@@ -2107,7 +2129,8 @@ impl Vulkan {
         let wait_fences = [self.in_flight_fences[self.current_frame]];
 
         unsafe {
-            self.device
+            self.core
+                .device
                 .wait_for_fences(&wait_fences, true, std::u64::MAX)
                 .expect("Failed to wait for Fence!");
         }
@@ -2147,13 +2170,15 @@ impl Vulkan {
         }];
 
         unsafe {
-            self.device
+            self.core
+                .device
                 .reset_fences(&wait_fences)
                 .expect("Failed to reset Fence!");
 
-            self.device
+            self.core
+                .device
                 .queue_submit(
-                    self.graphics_queue,
+                    self.core.graphics_queue,
                     &submit_infos,
                     self.in_flight_fences[self.current_frame],
                 )
@@ -2174,7 +2199,7 @@ impl Vulkan {
 
         let result = unsafe {
             self.swapchain_loader
-                .queue_present(self.present_queue, &present_info)
+                .queue_present(self.core.present_queue, &present_info)
         };
         let is_resized = match result {
             Ok(_) => self.is_framebuffer_resized,
@@ -2198,18 +2223,19 @@ impl Vulkan {
         };
 
         unsafe {
-            self.device
+            self.core
+                .device
                 .device_wait_idle()
                 .expect("Failed to wait device idle!")
         };
         self.cleanup_swapchain();
 
         let swapchain_composite = Vulkan::create_swapchain(
-            &self.instance,
-            &self.device,
-            self.physical_device,
+            &self.core.instance,
+            &self.core.device,
+            self.core.physical_device,
             &surface_composite,
-            &self.queue_family,
+            &self.core.queue_family,
             self.window_width,
             self.window_height,
         );
@@ -2219,16 +2245,19 @@ impl Vulkan {
         self.swapchain_format = swapchain_composite.format;
         self.swapchain_extent = swapchain_composite.extent;
 
-        self.swapchain_imageviews =
-            Vulkan::create_image_views(&self.device, self.swapchain_format, &self.swapchain_images);
+        self.swapchain_imageviews = Vulkan::create_image_views(
+            &self.core.device,
+            self.swapchain_format,
+            &self.swapchain_images,
+        );
         self.render_pass = Vulkan::create_render_pass(
-            &self.instance,
-            &self.device,
-            self.physical_device,
+            &self.core.instance,
+            &self.core.device,
+            self.core.physical_device,
             self.swapchain_format,
         );
         let (graphics_pipeline, pipeline_layout) = Vulkan::create_graphics_pipeline(
-            &self.device,
+            &self.core.device,
             self.render_pass,
             swapchain_composite.extent,
             self.graphics_descriptor_set_layout,
@@ -2237,25 +2266,25 @@ impl Vulkan {
         self.graphics_pipeline_layout = pipeline_layout;
 
         let (depth_image, depth_image_view, depth_image_memory) = Vulkan::create_depth_resources(
-            &self.instance,
-            &self.device,
-            self.physical_device,
+            &self.core.instance,
+            &self.core.device,
+            self.core.physical_device,
             swapchain_composite.extent,
-            &self.physical_device_memory_properties,
+            &self.core.physical_device_memory_properties,
         );
         self.depth_image = depth_image;
         self.depth_image_view = depth_image_view;
         self.depth_image_memory = depth_image_memory;
 
         self.swapchain_framebuffers = Vulkan::create_framebuffers(
-            &self.device,
+            &self.core.device,
             self.render_pass,
             &self.swapchain_imageviews,
             self.depth_image_view,
             &self.swapchain_extent,
         );
         self.command_buffers = Vulkan::create_command_buffers(
-            &self.device,
+            &self.core.device,
             self.graphics_command_pool,
             self.graphics_pipeline,
             &self.swapchain_framebuffers,
@@ -2270,21 +2299,27 @@ impl Vulkan {
 
     fn cleanup_swapchain(&self) {
         unsafe {
-            self.device.destroy_image_view(self.depth_image_view, None);
-            self.device.destroy_image(self.depth_image, None);
-            self.device.free_memory(self.depth_image_memory, None);
+            self.core
+                .device
+                .destroy_image_view(self.depth_image_view, None);
+            self.core.device.destroy_image(self.depth_image, None);
+            self.core.device.free_memory(self.depth_image_memory, None);
 
-            self.device
+            self.core
+                .device
                 .free_command_buffers(self.graphics_command_pool, &self.command_buffers);
             for &framebuffer in self.swapchain_framebuffers.iter() {
-                self.device.destroy_framebuffer(framebuffer, None);
+                self.core.device.destroy_framebuffer(framebuffer, None);
             }
-            self.device.destroy_pipeline(self.graphics_pipeline, None);
-            self.device
+            self.core
+                .device
+                .destroy_pipeline(self.graphics_pipeline, None);
+            self.core
+                .device
                 .destroy_pipeline_layout(self.graphics_pipeline_layout, None);
-            self.device.destroy_render_pass(self.render_pass, None);
+            self.core.device.destroy_render_pass(self.render_pass, None);
             for &image_view in self.swapchain_imageviews.iter() {
-                self.device.destroy_image_view(image_view, None);
+                self.core.device.destroy_image_view(image_view, None);
             }
             self.swapchain_loader
                 .destroy_swapchain(self.swapchain, None);
@@ -2293,7 +2328,8 @@ impl Vulkan {
 
     pub fn wait_device_idle(&self) {
         unsafe {
-            self.device
+            self.core
+                .device
                 .device_wait_idle()
                 .expect("Failed to wait device idle!")
         };
@@ -2309,46 +2345,38 @@ impl Vulkan {
 impl Drop for Vulkan {
     fn drop(&mut self) {
         unsafe {
+            let device = &self.core.device;
             for i in 0..MAX_FRAMES_IN_FLIGHT {
-                self.device
-                    .destroy_semaphore(self.image_available_semaphores[i], None);
-                self.device
-                    .destroy_semaphore(self.render_finished_semaphores[i], None);
-                self.device.destroy_fence(self.in_flight_fences[i], None);
+                device.destroy_semaphore(self.image_available_semaphores[i], None);
+                device.destroy_semaphore(self.render_finished_semaphores[i], None);
+                device.destroy_fence(self.in_flight_fences[i], None);
             }
 
             self.cleanup_swapchain();
 
             for mesh in self.meshes.iter() {
-                self.device.destroy_buffer(mesh.instance_buffer, None);
-                self.device.free_memory(mesh.instance_buffer_memory, None);
-                self.device.destroy_buffer(mesh.index_buffer, None);
-                self.device.free_memory(mesh.index_buffer_memory, None);
-                self.device.destroy_buffer(mesh.vertex_buffer, None);
-                self.device.free_memory(mesh.vertex_buffer_memory, None);
+                device.destroy_buffer(mesh.instance_buffer, None);
+                device.free_memory(mesh.instance_buffer_memory, None);
+                device.destroy_buffer(mesh.index_buffer, None);
+                device.free_memory(mesh.index_buffer_memory, None);
+                device.destroy_buffer(mesh.vertex_buffer, None);
+                device.free_memory(mesh.vertex_buffer_memory, None);
             }
-            self.device
-                .destroy_descriptor_pool(self.graphics_descriptor_pool, None);
+            device.destroy_descriptor_pool(self.graphics_descriptor_pool, None);
 
-            self.device
-                .destroy_descriptor_set_layout(self.graphics_descriptor_set_layout, None);
+            device.destroy_descriptor_set_layout(self.graphics_descriptor_set_layout, None);
 
             for j in 0..self.uniform_buffers.len() {
                 for i in 0..self.uniform_buffers[j].buffers.len() {
-                    self.device
-                        .destroy_buffer(self.uniform_buffers[j].buffers[i], None);
-                    self.device
-                        .free_memory(self.uniform_buffers[j].buffers_memory[i], None);
+                    device.destroy_buffer(self.uniform_buffers[j].buffers[i], None);
+                    device.free_memory(self.uniform_buffers[j].buffers_memory[i], None);
                 }
             }
 
-            self.device
-                .destroy_command_pool(self.graphics_command_pool, None);
-            self.device.destroy_device(None);
             self.surface_loader.destroy_surface(self.surface, None);
-            self.debug_utils_loader
-                .destroy_debug_utils_messenger(self.debug_messenger, None);
-            self.instance.destroy_instance(None);
+            device.destroy_command_pool(self.graphics_command_pool, None);
+            device.destroy_device(None);
+            self.core.shutdown();
         }
     }
 }
