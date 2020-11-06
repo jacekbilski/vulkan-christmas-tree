@@ -58,12 +58,15 @@ struct SurfaceComposite {
     surface: vk::SurfaceKHR,
 }
 
+#[derive(Clone)]
 struct SwapChainComposite {
     loader: ash::extensions::khr::Swapchain,
     swapchain: vk::SwapchainKHR,
     images: Vec<vk::Image>,
     format: vk::Format,
     extent: vk::Extent2D,
+    image_views: Vec<vk::ImageView>,
+    framebuffers: Vec<vk::Framebuffer>,
 }
 
 struct SwapChainSupportDetails {
@@ -408,7 +411,7 @@ impl VulkanCore {
 
         let is_swapchain_supported = if is_device_extension_supported {
             let swapchain_support =
-                Vulkan::find_swapchain_support(physical_device, surface_composite);
+                VulkanGraphicsSetup::find_swapchain_support(physical_device, surface_composite);
             !swapchain_support.formats.is_empty() && !swapchain_support.present_modes.is_empty()
         } else {
             false
@@ -561,6 +564,7 @@ impl VulkanCore {
 
     fn shutdown(&self) {
         unsafe {
+            self.device.destroy_device(None);
             self.debug_utils_loader
                 .destroy_debug_utils_messenger(self.debug_messenger, None);
             self.instance.destroy_instance(None);
@@ -568,20 +572,9 @@ impl VulkanCore {
     }
 }
 
-pub struct Vulkan {
-    core: VulkanCore,
-    clear_value: [f32; 4],
-
-    surface_loader: ash::extensions::khr::Surface,
-    surface: vk::SurfaceKHR,
-
-    swapchain_loader: ash::extensions::khr::Swapchain,
-    swapchain: vk::SwapchainKHR,
-    swapchain_images: Vec<vk::Image>,
-    swapchain_format: vk::Format,
-    swapchain_extent: vk::Extent2D,
-    swapchain_imageviews: Vec<vk::ImageView>,
-    swapchain_framebuffers: Vec<vk::Framebuffer>,
+struct VulkanGraphicsSetup {
+    surface_composite: SurfaceComposite,
+    swapchain_composite: SwapChainComposite,
 
     render_pass: vk::RenderPass,
     graphics_descriptor_set_layout: vk::DescriptorSetLayout,
@@ -595,36 +588,26 @@ pub struct Vulkan {
     graphics_command_pool: vk::CommandPool,
     graphics_descriptor_pool: vk::DescriptorPool,
 
-    uniform_buffers: Vec<UniformBuffer>,
-    meshes: Vec<VulkanMesh>,
-    graphics_descriptor_sets: Vec<vk::DescriptorSet>,
-    command_buffers: Vec<vk::CommandBuffer>,
-
-    image_available_semaphores: Vec<vk::Semaphore>,
-    render_finished_semaphores: Vec<vk::Semaphore>,
-    in_flight_fences: Vec<vk::Fence>,
-    current_frame: usize,
-
-    is_framebuffer_resized: bool,
     window_width: u32,
     window_height: u32,
 }
 
-impl Vulkan {
-    pub fn new(window: &winit::window::Window, application_name: &str) -> Self {
-        // Vulkan instance setup phase (always required, goes first)
-        let (core, surface_composite) = VulkanCore::new(&window, application_name);
-
-        // Graphics pipeline setup phase (required to render graphics, requires some info already like layouts, but not concrete buffers)
+impl VulkanGraphicsSetup {
+    fn setup(
+        core: &VulkanCore,
+        surface_composite: SurfaceComposite,
+        window: &winit::window::Window,
+    ) -> Self {
         let window_width = window.inner_size().width;
         let window_height = window.inner_size().height;
-        let swapchain_composite =
-            Vulkan::create_swapchain(&core, &surface_composite, window_width, window_height);
-        let swapchain_imageviews = Vulkan::create_image_views(
-            &core.device,
-            swapchain_composite.format,
-            &swapchain_composite.images,
+        let mut swapchain_composite = VulkanGraphicsSetup::create_swapchain(
+            &core,
+            &surface_composite,
+            window_width,
+            window_height,
         );
+        swapchain_composite.image_views =
+            VulkanGraphicsSetup::create_image_views(&core.device, &swapchain_composite);
         let render_pass = Vulkan::create_render_pass(&core, swapchain_composite.format);
         let graphics_descriptor_set_layout =
             Vulkan::create_graphics_descriptor_set_layout(&core.device);
@@ -636,10 +619,10 @@ impl Vulkan {
         );
         let (depth_image, depth_image_view, depth_image_memory) =
             Vulkan::create_depth_resources(&core, swapchain_composite.extent);
-        let swapchain_framebuffers = Vulkan::create_framebuffers(
+        swapchain_composite.framebuffers = Vulkan::create_framebuffers(
             &core.device,
             render_pass,
-            &swapchain_imageviews,
+            &swapchain_composite.image_views,
             depth_image_view,
             &swapchain_composite.extent,
         );
@@ -648,32 +631,9 @@ impl Vulkan {
         let graphics_descriptor_pool =
             Vulkan::create_graphics_descriptor_pool(&core.device, swapchain_composite.images.len());
 
-        // Graphics pipeline rendering preparations (requires actual buffers)
-        let uniform_buffers =
-            Vulkan::create_uniform_buffers(&core, swapchain_composite.images.len());
-        let graphics_descriptor_sets = Vulkan::create_graphics_descriptor_sets(
-            &core.device,
-            graphics_descriptor_pool,
-            graphics_descriptor_set_layout,
-            &uniform_buffers,
-            swapchain_composite.images.len(),
-        );
-        let sync_objects = Vulkan::create_sync_objects(&core.device);
-
-        Vulkan {
-            core,
-            clear_value: [0.0, 0.0, 0.0, 0.0],
-
-            surface_loader: surface_composite.loader,
-            surface: surface_composite.surface,
-
-            swapchain_loader: swapchain_composite.loader,
-            swapchain: swapchain_composite.swapchain,
-            swapchain_format: swapchain_composite.format,
-            swapchain_images: swapchain_composite.images,
-            swapchain_extent: swapchain_composite.extent,
-            swapchain_imageviews,
-            swapchain_framebuffers,
+        VulkanGraphicsSetup {
+            surface_composite,
+            swapchain_composite,
 
             render_pass,
             graphics_descriptor_set_layout,
@@ -687,100 +647,8 @@ impl Vulkan {
             graphics_command_pool,
             graphics_descriptor_pool,
 
-            uniform_buffers,
-            meshes: vec![],
-            graphics_descriptor_sets,
-            command_buffers: vec![],
-
-            image_available_semaphores: sync_objects.image_available_semaphores,
-            render_finished_semaphores: sync_objects.render_finished_semaphores,
-            in_flight_fences: sync_objects.inflight_fences,
-            current_frame: 0,
-
-            is_framebuffer_resized: false,
             window_width,
             window_height,
-        }
-    }
-
-    pub fn set_meshes(&mut self, meshes: &Vec<Mesh>) {
-        let mut vulkan_meshes: Vec<VulkanMesh> = vec![];
-
-        for mesh in meshes.iter() {
-            let (vertex_buffer, vertex_buffer_memory) = Vulkan::create_vertex_buffer(
-                &self.core,
-                self.graphics_command_pool,
-                &mesh.vertices,
-            );
-            let (index_buffer, index_buffer_memory) =
-                Vulkan::create_index_buffer(&self.core, self.graphics_command_pool, &mesh.indices);
-            let indices_no = mesh.indices.len() as u32;
-            let (instance_buffer, instance_buffer_memory) = Vulkan::create_vertex_buffer(
-                &self.core,
-                self.graphics_command_pool,
-                &mesh.instances,
-            );
-            let instances_no = mesh.instances.len() as u32;
-            vulkan_meshes.push(VulkanMesh {
-                vertex_buffer,
-                vertex_buffer_memory,
-                index_buffer,
-                index_buffer_memory,
-                indices_no,
-                instance_buffer,
-                instance_buffer_memory,
-                instances_no,
-            });
-        }
-        let command_buffers = Vulkan::create_command_buffers(
-            &self.core.device,
-            self.graphics_command_pool,
-            self.graphics_pipeline,
-            &self.swapchain_framebuffers,
-            self.render_pass,
-            self.swapchain_extent,
-            &vulkan_meshes,
-            self.graphics_pipeline_layout,
-            &self.graphics_descriptor_sets,
-            self.clear_value,
-        );
-        self.meshes = vulkan_meshes;
-        self.command_buffers = command_buffers;
-    }
-
-    pub fn set_clear_value(&mut self, clear_value: [f32; 4]) {
-        self.clear_value = clear_value;
-    }
-
-    fn find_swapchain_support(
-        physical_device: vk::PhysicalDevice,
-        surface_composite: &SurfaceComposite,
-    ) -> SwapChainSupportDetails {
-        unsafe {
-            let capabilities = surface_composite
-                .loader
-                .get_physical_device_surface_capabilities(
-                    physical_device,
-                    surface_composite.surface,
-                )
-                .expect("Failed to query for surface capabilities.");
-            let formats = surface_composite
-                .loader
-                .get_physical_device_surface_formats(physical_device, surface_composite.surface)
-                .expect("Failed to query for surface formats.");
-            let present_modes = surface_composite
-                .loader
-                .get_physical_device_surface_present_modes(
-                    physical_device,
-                    surface_composite.surface,
-                )
-                .expect("Failed to query for surface present mode.");
-
-            SwapChainSupportDetails {
-                capabilities,
-                formats,
-                present_modes,
-            }
         }
     }
 
@@ -791,11 +659,13 @@ impl Vulkan {
         window_height: u32,
     ) -> SwapChainComposite {
         let swapchain_support =
-            Vulkan::find_swapchain_support(core.physical_device, surface_composite);
+            VulkanGraphicsSetup::find_swapchain_support(core.physical_device, surface_composite);
 
-        let surface_format = Vulkan::choose_swapchain_format(&swapchain_support.formats);
-        let present_mode = Vulkan::choose_swapchain_present_mode(&swapchain_support.present_modes);
-        let extent = Vulkan::choose_swapchain_extent(
+        let surface_format =
+            VulkanGraphicsSetup::choose_swapchain_format(&swapchain_support.formats);
+        let present_mode =
+            VulkanGraphicsSetup::choose_swapchain_present_mode(&swapchain_support.present_modes);
+        let extent = VulkanGraphicsSetup::choose_swapchain_extent(
             &swapchain_support.capabilities,
             window_width,
             window_height,
@@ -858,6 +728,40 @@ impl Vulkan {
             format: surface_format.format,
             extent,
             images,
+            image_views: vec![],
+            framebuffers: vec![],
+        }
+    }
+
+    fn find_swapchain_support(
+        physical_device: vk::PhysicalDevice,
+        surface_composite: &SurfaceComposite,
+    ) -> SwapChainSupportDetails {
+        unsafe {
+            let capabilities = surface_composite
+                .loader
+                .get_physical_device_surface_capabilities(
+                    physical_device,
+                    surface_composite.surface,
+                )
+                .expect("Failed to query for surface capabilities.");
+            let formats = surface_composite
+                .loader
+                .get_physical_device_surface_formats(physical_device, surface_composite.surface)
+                .expect("Failed to query for surface formats.");
+            let present_modes = surface_composite
+                .loader
+                .get_physical_device_surface_present_modes(
+                    physical_device,
+                    surface_composite.surface,
+                )
+                .expect("Failed to query for surface present mode.");
+
+            SwapChainSupportDetails {
+                capabilities,
+                formats,
+                present_modes,
+            }
         }
     }
 
@@ -909,12 +813,11 @@ impl Vulkan {
 
     fn create_image_views(
         device: &ash::Device,
-        surface_format: vk::Format,
-        images: &Vec<vk::Image>,
+        swapchain_composite: &SwapChainComposite,
     ) -> Vec<vk::ImageView> {
         let mut swapchain_imageviews = vec![];
 
-        for &image in images.iter() {
+        for &image in swapchain_composite.images.iter() {
             let components = vk::ComponentMapping {
                 ..Default::default()
             };
@@ -928,7 +831,7 @@ impl Vulkan {
             };
             let imageview_create_info = vk::ImageViewCreateInfo {
                 view_type: vk::ImageViewType::TYPE_2D,
-                format: surface_format,
+                format: swapchain_composite.format,
                 components,
                 subresource_range,
                 image,
@@ -944,6 +847,188 @@ impl Vulkan {
         }
 
         swapchain_imageviews
+    }
+
+    fn recreate_swapchain(&mut self, core: &VulkanCore) {
+        let surface_composite = SurfaceComposite {
+            loader: self.surface_composite.loader.clone(),
+            surface: self.surface_composite.surface,
+        };
+
+        unsafe {
+            core.device
+                .device_wait_idle()
+                .expect("Failed to wait device idle!")
+        };
+        self.cleanup_swapchain(&core.device);
+
+        self.swapchain_composite = VulkanGraphicsSetup::create_swapchain(
+            &core,
+            &surface_composite,
+            self.window_width,
+            self.window_height,
+        );
+
+        self.swapchain_composite.image_views =
+            VulkanGraphicsSetup::create_image_views(&core.device, &self.swapchain_composite);
+        self.render_pass = Vulkan::create_render_pass(&core, self.swapchain_composite.format);
+        let (graphics_pipeline, pipeline_layout) = Vulkan::create_graphics_pipeline(
+            &core.device,
+            self.render_pass,
+            self.swapchain_composite.extent,
+            self.graphics_descriptor_set_layout,
+        );
+        self.graphics_pipeline = graphics_pipeline;
+        self.graphics_pipeline_layout = pipeline_layout;
+
+        let (depth_image, depth_image_view, depth_image_memory) =
+            Vulkan::create_depth_resources(&core, self.swapchain_composite.extent);
+        self.depth_image = depth_image;
+        self.depth_image_view = depth_image_view;
+        self.depth_image_memory = depth_image_memory;
+
+        self.swapchain_composite.framebuffers = Vulkan::create_framebuffers(
+            &core.device,
+            self.render_pass,
+            &self.swapchain_composite.image_views,
+            self.depth_image_view,
+            &self.swapchain_composite.extent,
+        );
+    }
+
+    fn cleanup_swapchain(&self, device: &ash::Device) {
+        unsafe {
+            device.destroy_image_view(self.depth_image_view, None);
+            device.destroy_image(self.depth_image, None);
+            device.free_memory(self.depth_image_memory, None);
+
+            for &framebuffer in self.swapchain_composite.framebuffers.iter() {
+                device.destroy_framebuffer(framebuffer, None);
+            }
+            device.destroy_pipeline(self.graphics_pipeline, None);
+            device.destroy_pipeline_layout(self.graphics_pipeline_layout, None);
+            device.destroy_render_pass(self.render_pass, None);
+            for &image_view in self.swapchain_composite.image_views.iter() {
+                device.destroy_image_view(image_view, None);
+            }
+            self.swapchain_composite
+                .loader
+                .destroy_swapchain(self.swapchain_composite.swapchain, None);
+        }
+    }
+
+    fn shutdown(&self, device: &ash::Device) {
+        unsafe {
+            device.destroy_descriptor_pool(self.graphics_descriptor_pool, None);
+            device.destroy_descriptor_set_layout(self.graphics_descriptor_set_layout, None);
+            self.surface_composite
+                .loader
+                .destroy_surface(self.surface_composite.surface, None);
+            device.destroy_command_pool(self.graphics_command_pool, None);
+        }
+    }
+}
+
+pub struct Vulkan {
+    core: VulkanCore,
+    graphics_setup: VulkanGraphicsSetup,
+    clear_value: [f32; 4],
+
+    uniform_buffers: Vec<UniformBuffer>,
+    meshes: Vec<VulkanMesh>,
+    graphics_descriptor_sets: Vec<vk::DescriptorSet>,
+    command_buffers: Vec<vk::CommandBuffer>,
+
+    image_available_semaphores: Vec<vk::Semaphore>,
+    render_finished_semaphores: Vec<vk::Semaphore>,
+    in_flight_fences: Vec<vk::Fence>,
+    current_frame: usize,
+
+    is_framebuffer_resized: bool,
+}
+
+impl Vulkan {
+    pub fn new(window: &winit::window::Window, application_name: &str) -> Self {
+        // Vulkan instance setup phase (always required, goes first)
+        let (core, surface_composite) = VulkanCore::new(&window, application_name);
+        let graphics_setup = VulkanGraphicsSetup::setup(&core, surface_composite, &window);
+
+        // Graphics pipeline rendering preparations (requires actual buffers)
+        let uniform_buffers =
+            Vulkan::create_uniform_buffers(&core, graphics_setup.swapchain_composite.images.len());
+        let graphics_descriptor_sets = Vulkan::create_graphics_descriptor_sets(
+            &core.device,
+            graphics_setup.graphics_descriptor_pool,
+            graphics_setup.graphics_descriptor_set_layout,
+            &uniform_buffers,
+            graphics_setup.swapchain_composite.images.len(),
+        );
+        let sync_objects = Vulkan::create_sync_objects(&core.device);
+
+        Vulkan {
+            core,
+            graphics_setup,
+            clear_value: [0.0, 0.0, 0.0, 0.0],
+
+            uniform_buffers,
+            meshes: vec![],
+            graphics_descriptor_sets,
+            command_buffers: vec![],
+
+            image_available_semaphores: sync_objects.image_available_semaphores,
+            render_finished_semaphores: sync_objects.render_finished_semaphores,
+            in_flight_fences: sync_objects.inflight_fences,
+            current_frame: 0,
+
+            is_framebuffer_resized: false,
+        }
+    }
+
+    pub fn set_meshes(&mut self, meshes: &Vec<Mesh>) {
+        let mut vulkan_meshes: Vec<VulkanMesh> = vec![];
+
+        for mesh in meshes.iter() {
+            let (vertex_buffer, vertex_buffer_memory) = Vulkan::create_vertex_buffer(
+                &self.core,
+                self.graphics_setup.graphics_command_pool,
+                &mesh.vertices,
+            );
+            let (index_buffer, index_buffer_memory) = Vulkan::create_index_buffer(
+                &self.core,
+                self.graphics_setup.graphics_command_pool,
+                &mesh.indices,
+            );
+            let indices_no = mesh.indices.len() as u32;
+            let (instance_buffer, instance_buffer_memory) = Vulkan::create_vertex_buffer(
+                &self.core,
+                self.graphics_setup.graphics_command_pool,
+                &mesh.instances,
+            );
+            let instances_no = mesh.instances.len() as u32;
+            vulkan_meshes.push(VulkanMesh {
+                vertex_buffer,
+                vertex_buffer_memory,
+                index_buffer,
+                index_buffer_memory,
+                indices_no,
+                instance_buffer,
+                instance_buffer_memory,
+                instances_no,
+            });
+        }
+        let command_buffers = Vulkan::create_command_buffers(
+            &self.core.device,
+            &self.graphics_setup,
+            &vulkan_meshes,
+            &self.graphics_descriptor_sets,
+            self.clear_value,
+        );
+        self.meshes = vulkan_meshes;
+        self.command_buffers = command_buffers;
+    }
+
+    pub fn set_clear_value(&mut self, clear_value: [f32; 4]) {
+        self.clear_value = clear_value;
     }
 
     fn create_render_pass(core: &VulkanCore, surface_format: vk::Format) -> vk::RenderPass {
@@ -1638,7 +1723,7 @@ impl Vulkan {
 
         let buffer_size = (std::mem::size_of::<CameraUBO>() * ubos.len()) as u64;
 
-        for current_image in 0..self.swapchain_images.len() {
+        for current_image in 0..self.graphics_setup.swapchain_composite.images.len() {
             unsafe {
                 let data_ptr =
                     self.core
@@ -1666,7 +1751,7 @@ impl Vulkan {
 
         let buffer_size = (std::mem::size_of::<LightsUBO>() * ubos.len()) as u64;
 
-        for current_image in 0..self.swapchain_images.len() {
+        for current_image in 0..self.graphics_setup.swapchain_composite.images.len() {
             unsafe {
                 let data_ptr =
                     self.core
@@ -1926,19 +2011,14 @@ impl Vulkan {
 
     fn create_command_buffers(
         device: &ash::Device,
-        command_pool: vk::CommandPool,
-        graphics_pipeline: vk::Pipeline,
-        framebuffers: &Vec<vk::Framebuffer>,
-        render_pass: vk::RenderPass,
-        surface_extent: vk::Extent2D,
+        graphics_setup: &VulkanGraphicsSetup,
         meshes: &Vec<VulkanMesh>,
-        pipeline_layout: vk::PipelineLayout,
         descriptor_sets: &Vec<vk::DescriptorSet>,
         clear_value: [f32; 4],
     ) -> Vec<vk::CommandBuffer> {
         let command_buffer_allocate_info = vk::CommandBufferAllocateInfo {
-            command_buffer_count: framebuffers.len() as u32,
-            command_pool,
+            command_buffer_count: graphics_setup.swapchain_composite.framebuffers.len() as u32,
+            command_pool: graphics_setup.graphics_command_pool,
             level: vk::CommandBufferLevel::PRIMARY,
             ..Default::default()
         };
@@ -1977,11 +2057,11 @@ impl Vulkan {
             ];
 
             let render_pass_begin_info = vk::RenderPassBeginInfo {
-                render_pass,
-                framebuffer: framebuffers[i],
+                render_pass: graphics_setup.render_pass,
+                framebuffer: graphics_setup.swapchain_composite.framebuffers[i],
                 render_area: vk::Rect2D {
                     offset: vk::Offset2D { x: 0, y: 0 },
-                    extent: surface_extent,
+                    extent: graphics_setup.swapchain_composite.extent,
                 },
                 clear_value_count: clear_values.len() as u32,
                 p_clear_values: clear_values.as_ptr(),
@@ -1997,14 +2077,14 @@ impl Vulkan {
                 device.cmd_bind_pipeline(
                     command_buffer,
                     vk::PipelineBindPoint::GRAPHICS,
-                    graphics_pipeline,
+                    graphics_setup.graphics_pipeline,
                 );
 
                 let descriptor_sets_to_bind = [descriptor_sets[i]];
                 device.cmd_bind_descriptor_sets(
                     command_buffer,
                     vk::PipelineBindPoint::GRAPHICS,
-                    pipeline_layout,
+                    graphics_setup.graphics_pipeline_layout,
                     0,
                     &descriptor_sets_to_bind,
                     &[],
@@ -2094,12 +2174,16 @@ impl Vulkan {
         }
 
         let (image_index, _is_sub_optimal) = unsafe {
-            let result = self.swapchain_loader.acquire_next_image(
-                self.swapchain,
-                std::u64::MAX,
-                self.image_available_semaphores[self.current_frame],
-                vk::Fence::null(),
-            );
+            let result = self
+                .graphics_setup
+                .swapchain_composite
+                .loader
+                .acquire_next_image(
+                    self.graphics_setup.swapchain_composite.swapchain,
+                    std::u64::MAX,
+                    self.image_available_semaphores[self.current_frame],
+                    vk::Fence::null(),
+                );
             match result {
                 Ok(image_index) => image_index,
                 Err(vk_result) => match vk_result {
@@ -2143,7 +2227,7 @@ impl Vulkan {
                 .expect("Failed to execute queue submit.");
         }
 
-        let swapchains = [self.swapchain];
+        let swapchains = [self.graphics_setup.swapchain_composite.swapchain];
 
         let present_info = vk::PresentInfoKHR {
             wait_semaphore_count: 1,
@@ -2156,7 +2240,9 @@ impl Vulkan {
         };
 
         let result = unsafe {
-            self.swapchain_loader
+            self.graphics_setup
+                .swapchain_composite
+                .loader
                 .queue_present(self.core.present_queue, &present_info)
         };
         let is_resized = match result {
@@ -2175,99 +2261,23 @@ impl Vulkan {
     }
 
     fn recreate_swapchain(&mut self) {
-        let surface_composite = SurfaceComposite {
-            loader: self.surface_loader.clone(),
-            surface: self.surface,
-        };
-
-        unsafe {
-            self.core
-                .device
-                .device_wait_idle()
-                .expect("Failed to wait device idle!")
-        };
-        self.cleanup_swapchain();
-
-        let swapchain_composite = Vulkan::create_swapchain(
-            &self.core,
-            &surface_composite,
-            self.window_width,
-            self.window_height,
-        );
-        self.swapchain_loader = swapchain_composite.loader;
-        self.swapchain = swapchain_composite.swapchain;
-        self.swapchain_images = swapchain_composite.images;
-        self.swapchain_format = swapchain_composite.format;
-        self.swapchain_extent = swapchain_composite.extent;
-
-        self.swapchain_imageviews = Vulkan::create_image_views(
-            &self.core.device,
-            self.swapchain_format,
-            &self.swapchain_images,
-        );
-        self.render_pass = Vulkan::create_render_pass(&self.core, self.swapchain_format);
-        let (graphics_pipeline, pipeline_layout) = Vulkan::create_graphics_pipeline(
-            &self.core.device,
-            self.render_pass,
-            swapchain_composite.extent,
-            self.graphics_descriptor_set_layout,
-        );
-        self.graphics_pipeline = graphics_pipeline;
-        self.graphics_pipeline_layout = pipeline_layout;
-
-        let (depth_image, depth_image_view, depth_image_memory) =
-            Vulkan::create_depth_resources(&self.core, swapchain_composite.extent);
-        self.depth_image = depth_image;
-        self.depth_image_view = depth_image_view;
-        self.depth_image_memory = depth_image_memory;
-
-        self.swapchain_framebuffers = Vulkan::create_framebuffers(
-            &self.core.device,
-            self.render_pass,
-            &self.swapchain_imageviews,
-            self.depth_image_view,
-            &self.swapchain_extent,
-        );
+        self.graphics_setup.recreate_swapchain(&self.core);
         self.command_buffers = Vulkan::create_command_buffers(
             &self.core.device,
-            self.graphics_command_pool,
-            self.graphics_pipeline,
-            &self.swapchain_framebuffers,
-            self.render_pass,
-            self.swapchain_extent,
+            &self.graphics_setup,
             &self.meshes,
-            self.graphics_pipeline_layout,
             &self.graphics_descriptor_sets,
             self.clear_value,
         );
     }
 
-    fn cleanup_swapchain(&self) {
+    fn cleanup_swapchain(&self, device: &ash::Device) {
         unsafe {
-            self.core
-                .device
-                .destroy_image_view(self.depth_image_view, None);
-            self.core.device.destroy_image(self.depth_image, None);
-            self.core.device.free_memory(self.depth_image_memory, None);
-
-            self.core
-                .device
-                .free_command_buffers(self.graphics_command_pool, &self.command_buffers);
-            for &framebuffer in self.swapchain_framebuffers.iter() {
-                self.core.device.destroy_framebuffer(framebuffer, None);
-            }
-            self.core
-                .device
-                .destroy_pipeline(self.graphics_pipeline, None);
-            self.core
-                .device
-                .destroy_pipeline_layout(self.graphics_pipeline_layout, None);
-            self.core.device.destroy_render_pass(self.render_pass, None);
-            for &image_view in self.swapchain_imageviews.iter() {
-                self.core.device.destroy_image_view(image_view, None);
-            }
-            self.swapchain_loader
-                .destroy_swapchain(self.swapchain, None);
+            device.free_command_buffers(
+                self.graphics_setup.graphics_command_pool,
+                &self.command_buffers,
+            );
+            self.graphics_setup.cleanup_swapchain(&device);
         }
     }
 
@@ -2282,8 +2292,8 @@ impl Vulkan {
 
     pub fn framebuffer_resized(&mut self, window_width: u32, window_height: u32) {
         self.is_framebuffer_resized = true;
-        self.window_width = window_width;
-        self.window_height = window_height;
+        self.graphics_setup.window_width = window_width;
+        self.graphics_setup.window_height = window_height;
     }
 }
 
@@ -2297,7 +2307,7 @@ impl Drop for Vulkan {
                 device.destroy_fence(self.in_flight_fences[i], None);
             }
 
-            self.cleanup_swapchain();
+            self.cleanup_swapchain(&device);
 
             for mesh in self.meshes.iter() {
                 device.destroy_buffer(mesh.instance_buffer, None);
@@ -2307,10 +2317,6 @@ impl Drop for Vulkan {
                 device.destroy_buffer(mesh.vertex_buffer, None);
                 device.free_memory(mesh.vertex_buffer_memory, None);
             }
-            device.destroy_descriptor_pool(self.graphics_descriptor_pool, None);
-
-            device.destroy_descriptor_set_layout(self.graphics_descriptor_set_layout, None);
-
             for j in 0..self.uniform_buffers.len() {
                 for i in 0..self.uniform_buffers[j].buffers.len() {
                     device.destroy_buffer(self.uniform_buffers[j].buffers[i], None);
@@ -2318,9 +2324,7 @@ impl Drop for Vulkan {
                 }
             }
 
-            self.surface_loader.destroy_surface(self.surface, None);
-            device.destroy_command_pool(self.graphics_command_pool, None);
-            device.destroy_device(None);
+            self.graphics_setup.shutdown(&device);
             self.core.shutdown();
         }
     }
