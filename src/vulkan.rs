@@ -946,6 +946,35 @@ struct VulkanGraphicsExecution {
 }
 
 impl VulkanGraphicsExecution {
+    fn new(core: &VulkanCore, graphics_setup: &VulkanGraphicsSetup) -> Self {
+        let uniform_buffers =
+            Vulkan::create_uniform_buffers(&core, graphics_setup.swapchain_composite.images.len());
+        let graphics_descriptor_sets = Vulkan::create_graphics_descriptor_sets(
+            &core.device,
+            graphics_setup.graphics_descriptor_pool,
+            graphics_setup.graphics_descriptor_set_layout,
+            &uniform_buffers,
+            graphics_setup.swapchain_composite.images.len(),
+        );
+        let sync_objects = Vulkan::create_sync_objects(&core.device);
+
+        VulkanGraphicsExecution {
+            clear_value: [0.0, 0.0, 0.0, 0.0],
+
+            uniform_buffers,
+            meshes: vec![],
+            graphics_descriptor_sets,
+            command_buffers: vec![],
+
+            image_available_semaphores: sync_objects.image_available_semaphores,
+            render_finished_semaphores: sync_objects.render_finished_semaphores,
+            in_flight_fences: sync_objects.inflight_fences,
+            current_frame: 0,
+
+            is_framebuffer_resized: false,
+        }
+    }
+
     fn drop(&mut self, device: &ash::Device) {
         unsafe {
             for i in 0..MAX_FRAMES_IN_FLIGHT {
@@ -980,37 +1009,9 @@ pub struct Vulkan {
 
 impl Vulkan {
     pub fn new(window: &winit::window::Window, application_name: &str) -> Self {
-        // Vulkan instance setup phase (always required, goes first)
         let (core, surface_composite) = VulkanCore::new(&window, application_name);
         let graphics_setup = VulkanGraphicsSetup::setup(&core, surface_composite, &window);
-
-        // Graphics pipeline rendering preparations (requires actual buffers)
-        let uniform_buffers =
-            Vulkan::create_uniform_buffers(&core, graphics_setup.swapchain_composite.images.len());
-        let graphics_descriptor_sets = Vulkan::create_graphics_descriptor_sets(
-            &core.device,
-            graphics_setup.graphics_descriptor_pool,
-            graphics_setup.graphics_descriptor_set_layout,
-            &uniform_buffers,
-            graphics_setup.swapchain_composite.images.len(),
-        );
-        let sync_objects = Vulkan::create_sync_objects(&core.device);
-
-        let graphics_execution = VulkanGraphicsExecution {
-            clear_value: [0.0, 0.0, 0.0, 0.0],
-
-            uniform_buffers,
-            meshes: vec![],
-            graphics_descriptor_sets,
-            command_buffers: vec![],
-
-            image_available_semaphores: sync_objects.image_available_semaphores,
-            render_finished_semaphores: sync_objects.render_finished_semaphores,
-            in_flight_fences: sync_objects.inflight_fences,
-            current_frame: 0,
-
-            is_framebuffer_resized: false,
-        };
+        let graphics_execution = VulkanGraphicsExecution::new(&core, &graphics_setup);
 
         Vulkan {
             core,
