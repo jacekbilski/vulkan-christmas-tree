@@ -1,8 +1,16 @@
+use std::ffi::CString;
+use std::ptr;
+
 use ash::version::DeviceV1_0;
 use ash::vk;
 
+use crate::fs::read_shader_code;
+use crate::mesh::InstanceData;
 use crate::vulkan::core::VulkanCore;
-use crate::vulkan::{SurfaceComposite, SwapChainComposite, Vulkan};
+use crate::vulkan::{SurfaceComposite, SwapChainComposite, Vertex, Vulkan};
+
+pub const CAMERA_UBO_INDEX: usize = 0;
+pub const LIGHTS_UBO_INDEX: usize = 1;
 
 pub struct SwapChainSupportDetails {
     capabilities: vk::SurfaceCapabilitiesKHR,
@@ -48,18 +56,20 @@ impl VulkanGraphicsSetup {
         );
         swapchain_composite.image_views =
             VulkanGraphicsSetup::create_image_views(&core.device, &swapchain_composite);
-        let render_pass = Vulkan::create_render_pass(&core, swapchain_composite.format);
+        let render_pass =
+            VulkanGraphicsSetup::create_render_pass(&core, swapchain_composite.format);
         let graphics_descriptor_set_layout =
-            Vulkan::create_graphics_descriptor_set_layout(&core.device);
-        let (graphics_pipeline, graphics_pipeline_layout) = Vulkan::create_graphics_pipeline(
-            &core.device,
-            render_pass,
-            swapchain_composite.extent,
-            graphics_descriptor_set_layout,
-        );
+            VulkanGraphicsSetup::create_graphics_descriptor_set_layout(&core.device);
+        let (graphics_pipeline, graphics_pipeline_layout) =
+            VulkanGraphicsSetup::create_graphics_pipeline(
+                &core.device,
+                render_pass,
+                swapchain_composite.extent,
+                graphics_descriptor_set_layout,
+            );
         let (depth_image, depth_image_view, depth_image_memory) =
-            Vulkan::create_depth_resources(&core, swapchain_composite.extent);
-        swapchain_composite.framebuffers = Vulkan::create_framebuffers(
+            VulkanGraphicsSetup::create_depth_resources(&core, swapchain_composite.extent);
+        swapchain_composite.framebuffers = VulkanGraphicsSetup::create_framebuffers(
             &core.device,
             render_pass,
             &swapchain_composite.image_views,
@@ -291,6 +301,400 @@ impl VulkanGraphicsSetup {
         swapchain_imageviews
     }
 
+    fn create_render_pass(core: &VulkanCore, surface_format: vk::Format) -> vk::RenderPass {
+        let color_attachment = vk::AttachmentDescription {
+            flags: vk::AttachmentDescriptionFlags::empty(),
+            format: surface_format,
+            samples: vk::SampleCountFlags::TYPE_1,
+            load_op: vk::AttachmentLoadOp::CLEAR,
+            store_op: vk::AttachmentStoreOp::STORE,
+            stencil_load_op: vk::AttachmentLoadOp::DONT_CARE,
+            stencil_store_op: vk::AttachmentStoreOp::DONT_CARE,
+            initial_layout: vk::ImageLayout::UNDEFINED,
+            final_layout: vk::ImageLayout::PRESENT_SRC_KHR,
+        };
+
+        let depth_attachment = vk::AttachmentDescription {
+            flags: vk::AttachmentDescriptionFlags::empty(),
+            format: VulkanGraphicsSetup::find_depth_format(&core.instance, core.physical_device),
+            samples: vk::SampleCountFlags::TYPE_1,
+            load_op: vk::AttachmentLoadOp::CLEAR,
+            store_op: vk::AttachmentStoreOp::DONT_CARE,
+            stencil_load_op: vk::AttachmentLoadOp::DONT_CARE,
+            stencil_store_op: vk::AttachmentStoreOp::DONT_CARE,
+            initial_layout: vk::ImageLayout::UNDEFINED,
+            final_layout: vk::ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+        };
+
+        let color_attachment_ref = vk::AttachmentReference {
+            attachment: 0,
+            layout: vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
+        };
+
+        let depth_attachment_ref = vk::AttachmentReference {
+            attachment: 1,
+            layout: vk::ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+        };
+
+        let subpasses = [vk::SubpassDescription {
+            flags: vk::SubpassDescriptionFlags::empty(),
+            pipeline_bind_point: vk::PipelineBindPoint::GRAPHICS,
+            input_attachment_count: 0,
+            color_attachment_count: 1,
+            p_color_attachments: &color_attachment_ref,
+            p_depth_stencil_attachment: &depth_attachment_ref,
+            preserve_attachment_count: 0,
+            ..Default::default()
+        }];
+
+        let render_pass_attachments = [color_attachment, depth_attachment];
+
+        let subpass_dependencies = [vk::SubpassDependency {
+            src_subpass: vk::SUBPASS_EXTERNAL,
+            dst_subpass: 0,
+            src_stage_mask: vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT,
+            dst_stage_mask: vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT,
+            src_access_mask: vk::AccessFlags::empty(),
+            dst_access_mask: vk::AccessFlags::COLOR_ATTACHMENT_READ
+                | vk::AccessFlags::COLOR_ATTACHMENT_WRITE,
+            dependency_flags: vk::DependencyFlags::empty(),
+        }];
+
+        let renderpass_create_info = vk::RenderPassCreateInfo {
+            flags: vk::RenderPassCreateFlags::empty(),
+            attachment_count: render_pass_attachments.len() as u32,
+            p_attachments: render_pass_attachments.as_ptr(),
+            subpass_count: subpasses.len() as u32,
+            p_subpasses: subpasses.as_ptr(),
+            dependency_count: subpass_dependencies.len() as u32,
+            p_dependencies: subpass_dependencies.as_ptr(),
+            ..Default::default()
+        };
+
+        unsafe {
+            core.device
+                .create_render_pass(&renderpass_create_info, None)
+                .expect("Failed to create render pass!")
+        }
+    }
+
+    fn create_graphics_descriptor_set_layout(device: &ash::Device) -> vk::DescriptorSetLayout {
+        let descriptor_set_layout_bindings = [
+            vk::DescriptorSetLayoutBinding {
+                binding: CAMERA_UBO_INDEX as u32,
+                descriptor_type: vk::DescriptorType::UNIFORM_BUFFER,
+                descriptor_count: 1,
+                stage_flags: vk::ShaderStageFlags::VERTEX | vk::ShaderStageFlags::FRAGMENT,
+                ..Default::default()
+            },
+            vk::DescriptorSetLayoutBinding {
+                binding: LIGHTS_UBO_INDEX as u32,
+                descriptor_type: vk::DescriptorType::UNIFORM_BUFFER,
+                descriptor_count: 1,
+                stage_flags: vk::ShaderStageFlags::VERTEX | vk::ShaderStageFlags::FRAGMENT,
+                ..Default::default()
+            },
+        ];
+
+        let descriptor_set_layout_create_info = vk::DescriptorSetLayoutCreateInfo {
+            binding_count: descriptor_set_layout_bindings.len() as u32,
+            p_bindings: descriptor_set_layout_bindings.as_ptr(),
+            ..Default::default()
+        };
+
+        unsafe {
+            device
+                .create_descriptor_set_layout(&descriptor_set_layout_create_info, None)
+                .expect("Failed to create Descriptor Set Layout!")
+        }
+    }
+
+    fn create_graphics_pipeline(
+        device: &ash::Device,
+        render_pass: vk::RenderPass,
+        swapchain_extent: vk::Extent2D,
+        descriptor_set_layout: vk::DescriptorSetLayout,
+    ) -> (vk::Pipeline, vk::PipelineLayout) {
+        let vert_shader_code = read_shader_code("simple.vert.spv");
+        let frag_shader_code = read_shader_code("simple.frag.spv");
+
+        let vert_shader_module = Vulkan::create_shader_module(device, vert_shader_code);
+        let frag_shader_module = Vulkan::create_shader_module(device, frag_shader_code);
+
+        let main_function_name = CString::new("main").unwrap(); // the beginning function name in shader code.
+
+        let shader_stages = [
+            vk::PipelineShaderStageCreateInfo {
+                module: vert_shader_module,
+                p_name: main_function_name.as_ptr(),
+                stage: vk::ShaderStageFlags::VERTEX,
+                ..Default::default()
+            },
+            vk::PipelineShaderStageCreateInfo {
+                module: frag_shader_module,
+                p_name: main_function_name.as_ptr(),
+                stage: vk::ShaderStageFlags::FRAGMENT,
+                ..Default::default()
+            },
+        ];
+
+        let mut binding_description: Vec<vk::VertexInputBindingDescription> = vec![];
+        for &bd in Vertex::get_binding_descriptions().iter() {
+            binding_description.push(bd);
+        }
+        for &bd in InstanceData::get_binding_descriptions().iter() {
+            binding_description.push(bd);
+        }
+        let mut attribute_description: Vec<vk::VertexInputAttributeDescription> = vec![];
+        for &ad in Vertex::get_attribute_descriptions().iter() {
+            attribute_description.push(ad);
+        }
+        for &ad in InstanceData::get_attribute_descriptions().iter() {
+            attribute_description.push(ad);
+        }
+
+        let vertex_input_state_create_info = vk::PipelineVertexInputStateCreateInfo {
+            flags: vk::PipelineVertexInputStateCreateFlags::empty(),
+            vertex_attribute_description_count: attribute_description.len() as u32,
+            p_vertex_attribute_descriptions: attribute_description.as_ptr(),
+            vertex_binding_description_count: binding_description.len() as u32,
+            p_vertex_binding_descriptions: binding_description.as_ptr(),
+            ..Default::default()
+        };
+        let vertex_input_assembly_state_info = vk::PipelineInputAssemblyStateCreateInfo {
+            flags: vk::PipelineInputAssemblyStateCreateFlags::empty(),
+            primitive_restart_enable: vk::FALSE,
+            topology: vk::PrimitiveTopology::TRIANGLE_LIST,
+            ..Default::default()
+        };
+
+        let viewports = [vk::Viewport {
+            x: 0.0,
+            y: 0.0,
+            width: swapchain_extent.width as f32,
+            height: swapchain_extent.height as f32,
+            min_depth: 0.0,
+            max_depth: 1.0,
+        }];
+
+        let scissors = [vk::Rect2D {
+            offset: vk::Offset2D { x: 0, y: 0 },
+            extent: swapchain_extent,
+        }];
+
+        let viewport_state_create_info = vk::PipelineViewportStateCreateInfo {
+            scissor_count: scissors.len() as u32,
+            p_scissors: scissors.as_ptr(),
+            viewport_count: viewports.len() as u32,
+            p_viewports: viewports.as_ptr(),
+            ..Default::default()
+        };
+
+        let rasterization_state_create_info = vk::PipelineRasterizationStateCreateInfo {
+            flags: vk::PipelineRasterizationStateCreateFlags::empty(),
+            depth_clamp_enable: vk::FALSE,
+            cull_mode: vk::CullModeFlags::BACK,
+            front_face: vk::FrontFace::CLOCKWISE,
+            line_width: 1.0,
+            polygon_mode: vk::PolygonMode::FILL,
+            rasterizer_discard_enable: vk::FALSE,
+            depth_bias_clamp: 0.0,
+            depth_bias_constant_factor: 0.0,
+            depth_bias_enable: vk::FALSE,
+            depth_bias_slope_factor: 0.0,
+            ..Default::default()
+        };
+        let multisample_state_create_info = vk::PipelineMultisampleStateCreateInfo {
+            flags: vk::PipelineMultisampleStateCreateFlags::empty(),
+            rasterization_samples: vk::SampleCountFlags::TYPE_1,
+            sample_shading_enable: vk::FALSE,
+            min_sample_shading: 0.0,
+            alpha_to_one_enable: vk::FALSE,
+            alpha_to_coverage_enable: vk::FALSE,
+            ..Default::default()
+        };
+
+        let stencil_state = vk::StencilOpState {
+            fail_op: vk::StencilOp::KEEP,
+            pass_op: vk::StencilOp::KEEP,
+            depth_fail_op: vk::StencilOp::KEEP,
+            compare_op: vk::CompareOp::ALWAYS,
+            compare_mask: 0,
+            write_mask: 0,
+            reference: 0,
+        };
+
+        let depth_state_create_info = vk::PipelineDepthStencilStateCreateInfo {
+            flags: vk::PipelineDepthStencilStateCreateFlags::empty(),
+            depth_test_enable: vk::TRUE,
+            depth_write_enable: vk::TRUE,
+            depth_compare_op: vk::CompareOp::LESS,
+            depth_bounds_test_enable: vk::FALSE,
+            stencil_test_enable: vk::FALSE,
+            front: stencil_state,
+            back: stencil_state,
+            max_depth_bounds: 1.0,
+            min_depth_bounds: 0.0,
+            ..Default::default()
+        };
+
+        let color_blend_attachment_states = [vk::PipelineColorBlendAttachmentState {
+            blend_enable: vk::FALSE,
+            color_write_mask: vk::ColorComponentFlags::all(),
+            src_color_blend_factor: vk::BlendFactor::ONE,
+            dst_color_blend_factor: vk::BlendFactor::ZERO,
+            color_blend_op: vk::BlendOp::ADD,
+            src_alpha_blend_factor: vk::BlendFactor::ONE,
+            dst_alpha_blend_factor: vk::BlendFactor::ZERO,
+            alpha_blend_op: vk::BlendOp::ADD,
+        }];
+
+        let color_blend_state = vk::PipelineColorBlendStateCreateInfo {
+            flags: vk::PipelineColorBlendStateCreateFlags::empty(),
+            logic_op_enable: vk::FALSE,
+            logic_op: vk::LogicOp::COPY,
+            attachment_count: color_blend_attachment_states.len() as u32,
+            p_attachments: color_blend_attachment_states.as_ptr(),
+            blend_constants: [0.0, 0.0, 0.0, 0.0],
+            ..Default::default()
+        };
+
+        let set_layouts = [descriptor_set_layout];
+
+        let pipeline_layout_create_info = vk::PipelineLayoutCreateInfo {
+            flags: vk::PipelineLayoutCreateFlags::empty(),
+            set_layout_count: set_layouts.len() as u32,
+            p_set_layouts: set_layouts.as_ptr(),
+            push_constant_range_count: 0,
+            ..Default::default()
+        };
+
+        let pipeline_layout = unsafe {
+            device
+                .create_pipeline_layout(&pipeline_layout_create_info, None)
+                .expect("Failed to create pipeline layout!")
+        };
+
+        let graphic_pipeline_create_infos = [vk::GraphicsPipelineCreateInfo {
+            flags: vk::PipelineCreateFlags::empty(),
+            stage_count: shader_stages.len() as u32,
+            p_stages: shader_stages.as_ptr(),
+            p_vertex_input_state: &vertex_input_state_create_info,
+            p_input_assembly_state: &vertex_input_assembly_state_info,
+            p_tessellation_state: ptr::null(),
+            p_viewport_state: &viewport_state_create_info,
+            p_rasterization_state: &rasterization_state_create_info,
+            p_multisample_state: &multisample_state_create_info,
+            p_depth_stencil_state: &depth_state_create_info,
+            p_color_blend_state: &color_blend_state,
+            p_dynamic_state: ptr::null(),
+            layout: pipeline_layout,
+            render_pass,
+            subpass: 0,
+            base_pipeline_handle: vk::Pipeline::null(),
+            base_pipeline_index: -1,
+            ..Default::default()
+        }];
+
+        let graphics_pipelines = unsafe {
+            device
+                .create_graphics_pipelines(
+                    vk::PipelineCache::null(),
+                    &graphic_pipeline_create_infos,
+                    None,
+                )
+                .expect("Failed to create Graphics Pipeline!.")
+        };
+
+        unsafe {
+            device.destroy_shader_module(vert_shader_module, None);
+            device.destroy_shader_module(frag_shader_module, None);
+        }
+
+        (graphics_pipelines[0], pipeline_layout)
+    }
+
+    fn create_depth_resources(
+        core: &VulkanCore,
+        swapchain_extent: vk::Extent2D,
+    ) -> (vk::Image, vk::ImageView, vk::DeviceMemory) {
+        let depth_format =
+            VulkanGraphicsSetup::find_depth_format(&core.instance, core.physical_device);
+        let (depth_image, depth_image_memory) = Vulkan::create_image(
+            &core.device,
+            swapchain_extent.width,
+            swapchain_extent.height,
+            1,
+            vk::SampleCountFlags::TYPE_1,
+            depth_format,
+            vk::ImageTiling::OPTIMAL,
+            vk::ImageUsageFlags::DEPTH_STENCIL_ATTACHMENT,
+            vk::MemoryPropertyFlags::DEVICE_LOCAL,
+            &core.physical_device_memory_properties,
+        );
+        let depth_image_view = Vulkan::create_image_view(
+            &core.device,
+            depth_image,
+            depth_format,
+            vk::ImageAspectFlags::DEPTH,
+            1,
+        );
+
+        (depth_image, depth_image_view, depth_image_memory)
+    }
+
+    fn find_depth_format(
+        instance: &ash::Instance,
+        physical_device: vk::PhysicalDevice,
+    ) -> vk::Format {
+        Vulkan::find_supported_format(
+            instance,
+            physical_device,
+            &[
+                vk::Format::D32_SFLOAT,
+                vk::Format::D32_SFLOAT_S8_UINT,
+                vk::Format::D24_UNORM_S8_UINT,
+            ],
+            vk::ImageTiling::OPTIMAL,
+            vk::FormatFeatureFlags::DEPTH_STENCIL_ATTACHMENT,
+        )
+    }
+
+    fn create_framebuffers(
+        device: &ash::Device,
+        render_pass: vk::RenderPass,
+        image_views: &Vec<vk::ImageView>,
+        depth_image_view: vk::ImageView,
+        swapchain_extent: &vk::Extent2D,
+    ) -> Vec<vk::Framebuffer> {
+        let mut framebuffers = vec![];
+
+        for &image_view in image_views.iter() {
+            let attachments = [image_view, depth_image_view];
+
+            let framebuffer_create_info = vk::FramebufferCreateInfo {
+                flags: vk::FramebufferCreateFlags::empty(),
+                render_pass,
+                attachment_count: attachments.len() as u32,
+                p_attachments: attachments.as_ptr(),
+                width: swapchain_extent.width,
+                height: swapchain_extent.height,
+                layers: 1,
+                ..Default::default()
+            };
+
+            let framebuffer = unsafe {
+                device
+                    .create_framebuffer(&framebuffer_create_info, None)
+                    .expect("Failed to create Framebuffer!")
+            };
+
+            framebuffers.push(framebuffer);
+        }
+
+        framebuffers
+    }
+
     pub fn recreate_swapchain(&mut self) {
         let surface_composite = SurfaceComposite {
             loader: self.surface_composite.loader.clone(),
@@ -314,8 +718,9 @@ impl VulkanGraphicsSetup {
 
         self.swapchain_composite.image_views =
             VulkanGraphicsSetup::create_image_views(&self.core.device, &self.swapchain_composite);
-        self.render_pass = Vulkan::create_render_pass(&self.core, self.swapchain_composite.format);
-        let (graphics_pipeline, pipeline_layout) = Vulkan::create_graphics_pipeline(
+        self.render_pass =
+            VulkanGraphicsSetup::create_render_pass(&self.core, self.swapchain_composite.format);
+        let (graphics_pipeline, pipeline_layout) = VulkanGraphicsSetup::create_graphics_pipeline(
             &self.core.device,
             self.render_pass,
             self.swapchain_composite.extent,
@@ -325,12 +730,15 @@ impl VulkanGraphicsSetup {
         self.pipeline_layout = pipeline_layout;
 
         let (depth_image, depth_image_view, depth_image_memory) =
-            Vulkan::create_depth_resources(&self.core, self.swapchain_composite.extent);
+            VulkanGraphicsSetup::create_depth_resources(
+                &self.core,
+                self.swapchain_composite.extent,
+            );
         self.depth_image = depth_image;
         self.depth_image_view = depth_image_view;
         self.depth_image_memory = depth_image_memory;
 
-        self.swapchain_composite.framebuffers = Vulkan::create_framebuffers(
+        self.swapchain_composite.framebuffers = VulkanGraphicsSetup::create_framebuffers(
             &self.core.device,
             self.render_pass,
             &self.swapchain_composite.image_views,

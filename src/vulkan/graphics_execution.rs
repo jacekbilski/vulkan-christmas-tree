@@ -7,10 +7,8 @@ use crate::mesh::Mesh;
 use crate::scene::camera::Camera;
 use crate::scene::lights::Lights;
 use crate::vulkan::core::VulkanCore;
-use crate::vulkan::graphics_setup::VulkanGraphicsSetup;
-use crate::vulkan::{
-    CameraUBO, LightsUBO, UniformBuffer, Vulkan, VulkanMesh, CAMERA_UBO_INDEX, LIGHTS_UBO_INDEX,
-};
+use crate::vulkan::graphics_setup::{VulkanGraphicsSetup, CAMERA_UBO_INDEX, LIGHTS_UBO_INDEX};
+use crate::vulkan::{CameraUBO, LightsUBO, UniformBuffer, Vulkan, VulkanMesh};
 
 const MAX_FRAMES_IN_FLIGHT: usize = 2;
 
