@@ -318,6 +318,30 @@ impl VulkanCore {
         }
     }
 
+    pub(crate) fn create_semaphore(&self) -> vk::Semaphore {
+        let semaphore_create_info = vk::SemaphoreCreateInfo {
+            ..Default::default()
+        };
+        unsafe {
+            self.device
+                .create_semaphore(&semaphore_create_info, None)
+                .expect("Failed to create Semaphore Object!")
+        }
+    }
+
+    pub(crate) fn create_fence(&self) -> vk::Fence {
+        let fence_create_info = vk::FenceCreateInfo {
+            flags: vk::FenceCreateFlags::SIGNALED,
+            ..Default::default()
+        };
+
+        unsafe {
+            self.device
+                .create_fence(&fence_create_info, None)
+                .expect("Failed to create Fence Object!")
+        }
+    }
+
     fn find_memory_type(
         type_filter: u32,
         required_properties: vk::MemoryPropertyFlags,
