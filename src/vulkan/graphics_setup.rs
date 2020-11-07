@@ -1,13 +1,12 @@
 use std::ffi::CString;
 use std::ptr;
 
-use ash::version::DeviceV1_0;
+use ash::version::{DeviceV1_0, InstanceV1_0};
 use ash::vk;
 
-use crate::fs::read_shader_code;
 use crate::mesh::InstanceData;
 use crate::vulkan::core::VulkanCore;
-use crate::vulkan::{SurfaceComposite, Vertex, Vulkan};
+use crate::vulkan::{SurfaceComposite, Vertex};
 
 pub const CAMERA_UBO_INDEX: usize = 0;
 pub const LIGHTS_UBO_INDEX: usize = 1;
@@ -47,8 +46,8 @@ pub struct VulkanGraphicsSetup {
     pub command_pool: vk::CommandPool,
     pub descriptor_pool: vk::DescriptorPool,
 
-    pub window_width: u32,
-    pub window_height: u32,
+    window_width: u32,
+    window_height: u32,
 }
 
 impl VulkanGraphicsSetup {
@@ -73,7 +72,7 @@ impl VulkanGraphicsSetup {
             VulkanGraphicsSetup::create_graphics_descriptor_set_layout(&core.device);
         let (graphics_pipeline, graphics_pipeline_layout) =
             VulkanGraphicsSetup::create_graphics_pipeline(
-                &core.device,
+                &core,
                 render_pass,
                 swapchain_composite.extent,
                 graphics_descriptor_set_layout,
@@ -88,9 +87,11 @@ impl VulkanGraphicsSetup {
             &swapchain_composite.extent,
         );
         let graphics_command_pool =
-            Vulkan::create_command_pool(&core.device, core.queue_family.graphics_family.unwrap());
-        let graphics_descriptor_pool =
-            Vulkan::create_graphics_descriptor_pool(&core.device, swapchain_composite.images.len());
+            core.create_command_pool(core.queue_family.graphics_family.unwrap());
+        let graphics_descriptor_pool = VulkanGraphicsSetup::create_graphics_descriptor_pool(
+            &core.device,
+            swapchain_composite.images.len(),
+        );
 
         VulkanGraphicsSetup {
             core,
@@ -421,16 +422,14 @@ impl VulkanGraphicsSetup {
     }
 
     fn create_graphics_pipeline(
-        device: &ash::Device,
+        core: &VulkanCore,
         render_pass: vk::RenderPass,
         swapchain_extent: vk::Extent2D,
         descriptor_set_layout: vk::DescriptorSetLayout,
     ) -> (vk::Pipeline, vk::PipelineLayout) {
-        let vert_shader_code = read_shader_code("simple.vert.spv");
-        let frag_shader_code = read_shader_code("simple.frag.spv");
-
-        let vert_shader_module = Vulkan::create_shader_module(device, vert_shader_code);
-        let frag_shader_module = Vulkan::create_shader_module(device, frag_shader_code);
+        let device = &core.device;
+        let vert_shader_module = core.create_shader_module("simple.vert.spv");
+        let frag_shader_module = core.create_shader_module("simple.frag.spv");
 
         let main_function_name = CString::new("main").unwrap(); // the beginning function name in shader code.
 
@@ -652,7 +651,7 @@ impl VulkanGraphicsSetup {
         instance: &ash::Instance,
         physical_device: vk::PhysicalDevice,
     ) -> vk::Format {
-        Vulkan::find_supported_format(
+        VulkanGraphicsSetup::find_supported_format(
             instance,
             physical_device,
             &[
@@ -663,6 +662,30 @@ impl VulkanGraphicsSetup {
             vk::ImageTiling::OPTIMAL,
             vk::FormatFeatureFlags::DEPTH_STENCIL_ATTACHMENT,
         )
+    }
+
+    fn find_supported_format(
+        instance: &ash::Instance,
+        physical_device: vk::PhysicalDevice,
+        candidate_formats: &[vk::Format],
+        tiling: vk::ImageTiling,
+        features: vk::FormatFeatureFlags,
+    ) -> vk::Format {
+        for &format in candidate_formats.iter() {
+            let format_properties =
+                unsafe { instance.get_physical_device_format_properties(physical_device, format) };
+            if tiling == vk::ImageTiling::LINEAR
+                && format_properties.linear_tiling_features.contains(features)
+            {
+                return format.clone();
+            } else if tiling == vk::ImageTiling::OPTIMAL
+                && format_properties.optimal_tiling_features.contains(features)
+            {
+                return format.clone();
+            }
+        }
+
+        panic!("Failed to find supported format!")
     }
 
     fn create_framebuffers(
@@ -700,6 +723,42 @@ impl VulkanGraphicsSetup {
         framebuffers
     }
 
+    fn create_graphics_descriptor_pool(
+        device: &ash::Device,
+        swapchain_images_size: usize,
+    ) -> vk::DescriptorPool {
+        let pool_sizes = [
+            vk::DescriptorPoolSize {
+                // CameraUBO
+                ty: vk::DescriptorType::UNIFORM_BUFFER,
+                descriptor_count: swapchain_images_size as u32,
+            },
+            vk::DescriptorPoolSize {
+                // LightsUBO
+                ty: vk::DescriptorType::UNIFORM_BUFFER,
+                descriptor_count: swapchain_images_size as u32,
+            },
+        ];
+
+        let descriptor_pool_create_info = vk::DescriptorPoolCreateInfo {
+            max_sets: swapchain_images_size as u32,
+            pool_size_count: pool_sizes.len() as u32,
+            p_pool_sizes: pool_sizes.as_ptr(),
+            ..Default::default()
+        };
+
+        unsafe {
+            device
+                .create_descriptor_pool(&descriptor_pool_create_info, None)
+                .expect("Failed to create Descriptor Pool!")
+        }
+    }
+
+    pub fn framebuffer_resized(&mut self, window_width: u32, window_height: u32) {
+        self.window_width = window_width;
+        self.window_height = window_height;
+    }
+
     pub fn recreate_swapchain(&mut self) {
         let surface_composite = SurfaceComposite {
             loader: self.surface_composite.loader.clone(),
@@ -726,7 +785,7 @@ impl VulkanGraphicsSetup {
         self.render_pass =
             VulkanGraphicsSetup::create_render_pass(&self.core, self.swapchain_composite.format);
         let (graphics_pipeline, pipeline_layout) = VulkanGraphicsSetup::create_graphics_pipeline(
-            &self.core.device,
+            &self.core,
             self.render_pass,
             self.swapchain_composite.extent,
             self.descriptor_set_layout,

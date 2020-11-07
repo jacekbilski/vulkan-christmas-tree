@@ -118,7 +118,7 @@ pub(crate) struct VulkanGraphicsExecution {
     in_flight_fences: Vec<vk::Fence>,
     current_frame: usize,
 
-    pub is_framebuffer_resized: bool,
+    is_framebuffer_resized: bool,
 }
 
 impl VulkanGraphicsExecution {
@@ -613,9 +613,14 @@ impl VulkanGraphicsExecution {
                 .free_command_buffers(command_pool, &self.command_buffers);
         }
     }
+
     fn recreate_swapchain(&mut self, graphics_setup: &mut VulkanGraphicsSetup) {
         graphics_setup.recreate_swapchain();
         self.create_command_buffers(graphics_setup);
+    }
+
+    pub(crate) fn framebuffer_resized(&mut self) {
+        self.is_framebuffer_resized = true;
     }
 
     fn create_vertex_buffer<T>(

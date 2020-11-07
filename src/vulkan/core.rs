@@ -8,6 +8,7 @@ use ash::extensions::khr::{Surface, WaylandSurface, XlibSurface};
 use ash::version::{DeviceV1_0, EntryV1_0, InstanceV1_0};
 use ash::vk;
 
+use crate::fs::read_shader_code;
 use crate::vulkan::{QueueFamilyIndices, SurfaceComposite, VulkanGraphicsSetup};
 
 const APPLICATION_VERSION: u32 = vk::make_version(0, 1, 0);
@@ -29,7 +30,7 @@ pub struct VulkanCore {
     pub queue_family: QueueFamilyIndices,
     pub graphics_queue: vk::Queue,
     pub present_queue: vk::Queue,
-    pub transfer_queue: vk::Queue,
+    transfer_queue: vk::Queue,
 }
 
 impl VulkanCore {
@@ -281,6 +282,35 @@ impl VulkanCore {
 
             self.device
                 .free_command_buffers(command_pool, &command_buffers);
+        }
+    }
+
+    pub(crate) fn create_shader_module(&self, file_name: &str) -> vk::ShaderModule {
+        let shader_code = read_shader_code(file_name);
+        let shader_module_create_info = vk::ShaderModuleCreateInfo {
+            flags: vk::ShaderModuleCreateFlags::empty(),
+            code_size: shader_code.len(),
+            p_code: shader_code.as_ptr() as *const u32,
+            ..Default::default()
+        };
+
+        unsafe {
+            self.device
+                .create_shader_module(&shader_module_create_info, None)
+                .expect("Failed to create Shader Module!")
+        }
+    }
+
+    pub(crate) fn create_command_pool(&self, queue_family_index: u32) -> vk::CommandPool {
+        let command_pool_create_info = vk::CommandPoolCreateInfo {
+            queue_family_index,
+            ..Default::default()
+        };
+
+        unsafe {
+            self.device
+                .create_command_pool(&command_pool_create_info, None)
+                .expect("Failed to create Command Pool!")
         }
     }
 

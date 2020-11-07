@@ -1,4 +1,4 @@
-use ash::version::{DeviceV1_0, InstanceV1_0};
+use ash::version::DeviceV1_0;
 use ash::vk;
 use memoffset::offset_of;
 
@@ -106,89 +106,6 @@ impl Vulkan {
         self.graphics_execution.set_clear_value(clear_value);
     }
 
-    fn create_shader_module(device: &ash::Device, code: Vec<u8>) -> vk::ShaderModule {
-        let shader_module_create_info = vk::ShaderModuleCreateInfo {
-            flags: vk::ShaderModuleCreateFlags::empty(),
-            code_size: code.len(),
-            p_code: code.as_ptr() as *const u32,
-            ..Default::default()
-        };
-
-        unsafe {
-            device
-                .create_shader_module(&shader_module_create_info, None)
-                .expect("Failed to create Shader Module!")
-        }
-    }
-
-    fn create_command_pool(device: &ash::Device, queue_family_index: u32) -> vk::CommandPool {
-        let command_pool_create_info = vk::CommandPoolCreateInfo {
-            queue_family_index,
-            ..Default::default()
-        };
-
-        unsafe {
-            device
-                .create_command_pool(&command_pool_create_info, None)
-                .expect("Failed to create Command Pool!")
-        }
-    }
-
-    fn find_supported_format(
-        instance: &ash::Instance,
-        physical_device: vk::PhysicalDevice,
-        candidate_formats: &[vk::Format],
-        tiling: vk::ImageTiling,
-        features: vk::FormatFeatureFlags,
-    ) -> vk::Format {
-        for &format in candidate_formats.iter() {
-            let format_properties =
-                unsafe { instance.get_physical_device_format_properties(physical_device, format) };
-            if tiling == vk::ImageTiling::LINEAR
-                && format_properties.linear_tiling_features.contains(features)
-            {
-                return format.clone();
-            } else if tiling == vk::ImageTiling::OPTIMAL
-                && format_properties.optimal_tiling_features.contains(features)
-            {
-                return format.clone();
-            }
-        }
-
-        panic!("Failed to find supported format!")
-    }
-
-    fn create_graphics_descriptor_pool(
-        device: &ash::Device,
-        swapchain_images_size: usize,
-    ) -> vk::DescriptorPool {
-        let pool_sizes = [
-            vk::DescriptorPoolSize {
-                // CameraUBO
-                ty: vk::DescriptorType::UNIFORM_BUFFER,
-                descriptor_count: swapchain_images_size as u32,
-            },
-            vk::DescriptorPoolSize {
-                // LightsUBO
-                ty: vk::DescriptorType::UNIFORM_BUFFER,
-                descriptor_count: swapchain_images_size as u32,
-            },
-        ];
-
-        let descriptor_pool_create_info = vk::DescriptorPoolCreateInfo {
-            max_sets: swapchain_images_size as u32,
-            pool_size_count: pool_sizes.len() as u32,
-            p_pool_sizes: pool_sizes.as_ptr(),
-            ..Default::default()
-        };
-
-        unsafe {
-            device
-                .create_descriptor_pool(&descriptor_pool_create_info, None)
-                .expect("Failed to create Descriptor Pool!")
-        }
-    }
-
     pub fn update_camera(&mut self, camera: &Camera) {
         self.graphics_execution
             .update_camera(camera, &self.graphics_setup);
@@ -219,9 +136,9 @@ impl Vulkan {
     }
 
     pub fn framebuffer_resized(&mut self, window_width: u32, window_height: u32) {
-        self.graphics_execution.is_framebuffer_resized = true;
-        self.graphics_setup.window_width = window_width;
-        self.graphics_setup.window_height = window_height;
+        self.graphics_execution.framebuffer_resized();
+        self.graphics_setup
+            .framebuffer_resized(window_width, window_height);
     }
 }
 
