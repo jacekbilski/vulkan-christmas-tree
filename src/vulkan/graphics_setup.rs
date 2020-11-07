@@ -11,6 +11,8 @@ pub struct SwapChainSupportDetails {
 }
 
 pub struct VulkanGraphicsSetup {
+    core: VulkanCore,
+
     surface_composite: SurfaceComposite,
     pub swapchain_composite: SwapChainComposite,
 
@@ -32,7 +34,7 @@ pub struct VulkanGraphicsSetup {
 
 impl VulkanGraphicsSetup {
     pub fn new(
-        core: &VulkanCore,
+        core: VulkanCore,
         surface_composite: SurfaceComposite,
         window: &winit::window::Window,
     ) -> Self {
@@ -70,6 +72,8 @@ impl VulkanGraphicsSetup {
             Vulkan::create_graphics_descriptor_pool(&core.device, swapchain_composite.images.len());
 
         VulkanGraphicsSetup {
+            core,
+
             surface_composite,
             swapchain_composite,
 
@@ -287,31 +291,32 @@ impl VulkanGraphicsSetup {
         swapchain_imageviews
     }
 
-    pub fn recreate_swapchain(&mut self, core: &VulkanCore) {
+    pub fn recreate_swapchain(&mut self) {
         let surface_composite = SurfaceComposite {
             loader: self.surface_composite.loader.clone(),
             surface: self.surface_composite.surface,
         };
 
         unsafe {
-            core.device
+            self.core
+                .device
                 .device_wait_idle()
                 .expect("Failed to wait device idle!")
         };
-        self.cleanup_swapchain(&core.device);
+        self.cleanup_swapchain();
 
         self.swapchain_composite = VulkanGraphicsSetup::create_swapchain(
-            &core,
+            &self.core,
             &surface_composite,
             self.window_width,
             self.window_height,
         );
 
         self.swapchain_composite.image_views =
-            VulkanGraphicsSetup::create_image_views(&core.device, &self.swapchain_composite);
-        self.render_pass = Vulkan::create_render_pass(&core, self.swapchain_composite.format);
+            VulkanGraphicsSetup::create_image_views(&self.core.device, &self.swapchain_composite);
+        self.render_pass = Vulkan::create_render_pass(&self.core, self.swapchain_composite.format);
         let (graphics_pipeline, pipeline_layout) = Vulkan::create_graphics_pipeline(
-            &core.device,
+            &self.core.device,
             self.render_pass,
             self.swapchain_composite.extent,
             self.descriptor_set_layout,
@@ -320,13 +325,13 @@ impl VulkanGraphicsSetup {
         self.pipeline_layout = pipeline_layout;
 
         let (depth_image, depth_image_view, depth_image_memory) =
-            Vulkan::create_depth_resources(&core, self.swapchain_composite.extent);
+            Vulkan::create_depth_resources(&self.core, self.swapchain_composite.extent);
         self.depth_image = depth_image;
         self.depth_image_view = depth_image_view;
         self.depth_image_memory = depth_image_memory;
 
         self.swapchain_composite.framebuffers = Vulkan::create_framebuffers(
-            &core.device,
+            &self.core.device,
             self.render_pass,
             &self.swapchain_composite.image_views,
             self.depth_image_view,
@@ -334,8 +339,9 @@ impl VulkanGraphicsSetup {
         );
     }
 
-    pub fn cleanup_swapchain(&self, device: &ash::Device) {
+    pub fn cleanup_swapchain(&self) {
         unsafe {
+            let device = &self.core.device;
             device.destroy_image_view(self.depth_image_view, None);
             device.destroy_image(self.depth_image, None);
             device.free_memory(self.depth_image_memory, None);

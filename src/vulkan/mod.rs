@@ -21,6 +21,7 @@ mod graphics_setup;
 pub const CAMERA_UBO_INDEX: usize = 0;
 pub const LIGHTS_UBO_INDEX: usize = 1;
 
+#[derive(Clone)]
 pub struct QueueFamilyIndices {
     graphics_family: Option<u32>,
     compute_family: Option<u32>,
@@ -189,7 +190,7 @@ pub struct Vulkan {
 impl Vulkan {
     pub fn new(window: &winit::window::Window, application_name: &str) -> Self {
         let (core, surface_composite) = VulkanCore::new(&window, application_name);
-        let graphics_setup = VulkanGraphicsSetup::new(&core, surface_composite, &window);
+        let graphics_setup = VulkanGraphicsSetup::new(core.clone(), surface_composite, &window);
         let graphics_execution = VulkanGraphicsExecution::new(&core, &graphics_setup);
 
         Vulkan {
@@ -1039,7 +1040,7 @@ impl Vulkan {
                 self.graphics_setup.command_pool,
                 &self.graphics_execution.command_buffers,
             );
-            self.graphics_setup.cleanup_swapchain(&device);
+            self.graphics_setup.cleanup_swapchain();
         }
     }
 

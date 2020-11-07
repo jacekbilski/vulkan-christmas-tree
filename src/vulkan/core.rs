@@ -13,6 +13,7 @@ const APPLICATION_VERSION: u32 = vk::make_version(0, 1, 0);
 const ENGINE_VERSION: u32 = vk::make_version(0, 1, 0);
 const VULKAN_API_VERSION: u32 = vk::make_version(1, 2, 154);
 
+#[derive(Clone)]
 pub struct VulkanCore {
     _entry: ash::Entry,
     pub instance: ash::Instance,

@@ -522,7 +522,7 @@ impl VulkanGraphicsExecution {
     }
 
     fn recreate_swapchain(&mut self, core: &VulkanCore, graphics_setup: &mut VulkanGraphicsSetup) {
-        graphics_setup.recreate_swapchain(core);
+        graphics_setup.recreate_swapchain();
         self.create_command_buffers(&core.device, graphics_setup);
     }
 
