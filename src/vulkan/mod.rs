@@ -539,14 +539,10 @@ impl Vulkan {
         self.graphics_execution.draw_frame(&mut self.graphics_setup);
     }
 
-    fn cleanup_swapchain(&self, device: &ash::Device) {
-        unsafe {
-            device.free_command_buffers(
-                self.graphics_setup.command_pool,
-                &self.graphics_execution.command_buffers,
-            );
-            self.graphics_setup.cleanup_swapchain();
-        }
+    fn cleanup_swapchain(&self) {
+        self.graphics_execution
+            .cleanup_swapchain(self.graphics_setup.command_pool);
+        self.graphics_setup.cleanup_swapchain();
     }
 
     pub fn wait_device_idle(&self) {
@@ -567,8 +563,7 @@ impl Vulkan {
 
 impl Drop for Vulkan {
     fn drop(&mut self) {
-        let device = &self.core.device;
-        self.cleanup_swapchain(&device);
+        self.cleanup_swapchain();
         self.graphics_execution.drop();
         self.graphics_setup.drop();
         self.core.drop();

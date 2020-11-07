@@ -103,15 +103,16 @@ struct SyncObjects {
     inflight_fences: Vec<vk::Fence>,
 }
 
-pub struct VulkanGraphicsExecution {
+// would be good to have graphics_setup here, but as it is mutable this opens up a Pandroras box
+pub(crate) struct VulkanGraphicsExecution {
     core: VulkanCore,
 
     clear_value: [f32; 4],
 
     uniform_buffers: Vec<UniformBuffer>,
     meshes: Vec<VulkanMesh>,
-    pub descriptor_sets: Vec<vk::DescriptorSet>,
-    pub command_buffers: Vec<vk::CommandBuffer>,
+    descriptor_sets: Vec<vk::DescriptorSet>,
+    command_buffers: Vec<vk::CommandBuffer>,
 
     image_available_semaphores: Vec<vk::Semaphore>,
     render_finished_semaphores: Vec<vk::Semaphore>,
@@ -122,7 +123,7 @@ pub struct VulkanGraphicsExecution {
 }
 
 impl VulkanGraphicsExecution {
-    pub fn new(core: VulkanCore, graphics_setup: &VulkanGraphicsSetup) -> Self {
+    pub(crate) fn new(core: VulkanCore, graphics_setup: &VulkanGraphicsSetup) -> Self {
         let uniform_buffers = VulkanGraphicsExecution::create_uniform_buffers(
             &core,
             graphics_setup.swapchain_composite.images.len(),
@@ -308,7 +309,7 @@ impl VulkanGraphicsExecution {
         sync_objects
     }
 
-    pub fn update_camera(&mut self, camera: &Camera, graphics_setup: &VulkanGraphicsSetup) {
+    pub(crate) fn update_camera(&mut self, camera: &Camera, graphics_setup: &VulkanGraphicsSetup) {
         let ubo: CameraUBO = CameraUBO::from(camera);
         let ubos = [ubo];
 
@@ -336,7 +337,7 @@ impl VulkanGraphicsExecution {
         }
     }
 
-    pub fn update_lights(&mut self, lights: &Lights, graphics_setup: &VulkanGraphicsSetup) {
+    pub(crate) fn update_lights(&mut self, lights: &Lights, graphics_setup: &VulkanGraphicsSetup) {
         let ubo: LightsUBO = LightsUBO::from(lights);
         let ubos = [ubo];
 
@@ -364,11 +365,11 @@ impl VulkanGraphicsExecution {
         }
     }
 
-    pub fn set_clear_value(&mut self, clear_value: [f32; 4]) {
+    pub(crate) fn set_clear_value(&mut self, clear_value: [f32; 4]) {
         self.clear_value = clear_value;
     }
 
-    pub fn set_meshes(&mut self, meshes: &Vec<Mesh>, mut graphics_setup: &VulkanGraphicsSetup) {
+    pub(crate) fn set_meshes(&mut self, meshes: &Vec<Mesh>, graphics_setup: &VulkanGraphicsSetup) {
         let mut vulkan_meshes: Vec<VulkanMesh> = vec![];
 
         for mesh in meshes.iter() {
@@ -398,7 +399,7 @@ impl VulkanGraphicsExecution {
             });
         }
         self.meshes = vulkan_meshes;
-        self.create_command_buffers(&mut graphics_setup);
+        self.create_command_buffers(&graphics_setup);
     }
 
     fn create_command_buffers(&mut self, graphics_setup: &VulkanGraphicsSetup) {
@@ -509,7 +510,7 @@ impl VulkanGraphicsExecution {
         self.command_buffers = command_buffers;
     }
 
-    pub fn draw_frame(&mut self, graphics_setup: &mut VulkanGraphicsSetup) {
+    pub(crate) fn draw_frame(&mut self, graphics_setup: &mut VulkanGraphicsSetup) {
         let device = &self.core.device;
         let wait_fences = [self.in_flight_fences[self.current_frame]];
 
@@ -603,12 +604,19 @@ impl VulkanGraphicsExecution {
         self.current_frame = (self.current_frame + 1) % MAX_FRAMES_IN_FLIGHT;
     }
 
+    pub(crate) fn cleanup_swapchain(&self, command_pool: vk::CommandPool) {
+        unsafe {
+            self.core
+                .device
+                .free_command_buffers(command_pool, &self.command_buffers);
+        }
+    }
     fn recreate_swapchain(&mut self, graphics_setup: &mut VulkanGraphicsSetup) {
         graphics_setup.recreate_swapchain();
         self.create_command_buffers(graphics_setup);
     }
 
-    pub fn drop(&mut self) {
+    pub(crate) fn drop(&mut self) {
         unsafe {
             let device = &self.core.device;
             for i in 0..MAX_FRAMES_IN_FLIGHT {
