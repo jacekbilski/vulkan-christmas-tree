@@ -2,12 +2,11 @@ use std::ptr;
 
 use ash::version::{DeviceV1_0, InstanceV1_0};
 use ash::vk;
-use cgmath::{Matrix4, Point3};
 use memoffset::offset_of;
 
 use crate::mesh::Mesh;
 use crate::scene::camera::Camera;
-use crate::scene::lights::{Light, Lights};
+use crate::scene::lights::Lights;
 use crate::vulkan::core::VulkanCore;
 use crate::vulkan::graphics_execution::VulkanGraphicsExecution;
 use crate::vulkan::graphics_setup::VulkanGraphicsSetup;
@@ -78,90 +77,6 @@ impl Vertex {
                 offset: offset_of!(Self, norm) as u32,
             },
         ]
-    }
-}
-
-struct UniformBuffer {
-    buffers: Vec<vk::Buffer>,              // one per swapchain_image_count
-    buffers_memory: Vec<vk::DeviceMemory>, // one per swapchain_image_count
-}
-
-#[derive(Clone, Copy)]
-struct VulkanMesh {
-    vertex_buffer: vk::Buffer,
-    vertex_buffer_memory: vk::DeviceMemory,
-    index_buffer: vk::Buffer,
-    index_buffer_memory: vk::DeviceMemory,
-    indices_no: u32,
-    instance_buffer: vk::Buffer,
-    instance_buffer_memory: vk::DeviceMemory,
-    instances_no: u32,
-}
-
-#[repr(C)]
-#[derive(Clone, Debug, Copy)]
-struct CameraUBO {
-    position: Point3<f32>,
-    alignment_fix: f32, // see https://vulkan-tutorial.com/en/Uniform_buffers/Descriptor_pool_and_sets#page_Alignment-requirements
-    view: Matrix4<f32>,
-    proj: Matrix4<f32>,
-}
-
-impl From<&Camera> for CameraUBO {
-    fn from(camera: &Camera) -> Self {
-        CameraUBO {
-            position: camera.position.into(),
-            alignment_fix: 0.0,
-            view: camera.view,
-            proj: camera.projection,
-        }
-    }
-}
-
-// TODO - how to handle layout 140 better?
-#[repr(C)]
-struct LightUBO {
-    position: [f32; 3],
-    alignment_fix_1: f32,
-    ambient: [f32; 3],
-    alignment_fix_2: f32,
-    diffuse: [f32; 3],
-    alignment_fix_3: f32,
-    specular: [f32; 3],
-    alignment_fix_4: f32,
-}
-impl From<Light> for LightUBO {
-    fn from(light: Light) -> Self {
-        LightUBO {
-            position: light.position,
-            ambient: light.ambient,
-            diffuse: light.diffuse,
-            specular: light.specular,
-            alignment_fix_1: 0.0,
-            alignment_fix_2: 0.0,
-            alignment_fix_3: 0.0,
-            alignment_fix_4: 0.0,
-        }
-    }
-}
-
-#[repr(C)]
-struct LightsUBO {
-    count: u32,
-    alignment_fix_1: [f32; 3],
-    lights: [LightUBO; 2], // hardcoded "2"
-}
-
-impl From<&Lights> for LightsUBO {
-    fn from(lights: &Lights) -> Self {
-        LightsUBO {
-            count: lights.lights.len() as u32,
-            alignment_fix_1: [0., 0., 0.],
-            lights: [
-                LightUBO::from(lights.lights[0]),
-                LightUBO::from(lights.lights[1]),
-            ],
-        }
     }
 }
 
