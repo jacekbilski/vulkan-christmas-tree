@@ -929,9 +929,7 @@ impl VulkanGraphicsSetup {
     }
 }
 
-pub struct Vulkan {
-    core: VulkanCore,
-    graphics_setup: VulkanGraphicsSetup,
+struct VulkanGraphicsExecution {
     clear_value: [f32; 4],
 
     uniform_buffers: Vec<UniformBuffer>,
@@ -945,6 +943,12 @@ pub struct Vulkan {
     current_frame: usize,
 
     is_framebuffer_resized: bool,
+}
+
+pub struct Vulkan {
+    core: VulkanCore,
+    graphics_setup: VulkanGraphicsSetup,
+    graphics_execution: VulkanGraphicsExecution,
 }
 
 impl Vulkan {
@@ -965,9 +969,7 @@ impl Vulkan {
         );
         let sync_objects = Vulkan::create_sync_objects(&core.device);
 
-        Vulkan {
-            core,
-            graphics_setup,
+        let graphics_execution = VulkanGraphicsExecution {
             clear_value: [0.0, 0.0, 0.0, 0.0],
 
             uniform_buffers,
@@ -981,6 +983,12 @@ impl Vulkan {
             current_frame: 0,
 
             is_framebuffer_resized: false,
+        };
+
+        Vulkan {
+            core,
+            graphics_setup,
+            graphics_execution,
         }
     }
 
@@ -1020,15 +1028,15 @@ impl Vulkan {
             &self.core.device,
             &self.graphics_setup,
             &vulkan_meshes,
-            &self.graphics_descriptor_sets,
-            self.clear_value,
+            &self.graphics_execution.graphics_descriptor_sets,
+            self.graphics_execution.clear_value,
         );
-        self.meshes = vulkan_meshes;
-        self.command_buffers = command_buffers;
+        self.graphics_execution.meshes = vulkan_meshes;
+        self.graphics_execution.command_buffers = command_buffers;
     }
 
     pub fn set_clear_value(&mut self, clear_value: [f32; 4]) {
-        self.clear_value = clear_value;
+        self.graphics_execution.clear_value = clear_value;
     }
 
     fn create_render_pass(core: &VulkanCore, surface_format: vk::Format) -> vk::RenderPass {
@@ -1729,7 +1737,8 @@ impl Vulkan {
                     self.core
                         .device
                         .map_memory(
-                            self.uniform_buffers[CAMERA_UBO_INDEX].buffers_memory[current_image],
+                            self.graphics_execution.uniform_buffers[CAMERA_UBO_INDEX]
+                                .buffers_memory[current_image],
                             0,
                             buffer_size,
                             vk::MemoryMapFlags::empty(),
@@ -1739,7 +1748,8 @@ impl Vulkan {
                 data_ptr.copy_from_nonoverlapping(ubos.as_ptr(), ubos.len());
 
                 self.core.device.unmap_memory(
-                    self.uniform_buffers[CAMERA_UBO_INDEX].buffers_memory[current_image],
+                    self.graphics_execution.uniform_buffers[CAMERA_UBO_INDEX].buffers_memory
+                        [current_image],
                 );
             }
         }
@@ -1757,7 +1767,8 @@ impl Vulkan {
                     self.core
                         .device
                         .map_memory(
-                            self.uniform_buffers[LIGHTS_UBO_INDEX].buffers_memory[current_image],
+                            self.graphics_execution.uniform_buffers[LIGHTS_UBO_INDEX]
+                                .buffers_memory[current_image],
                             0,
                             buffer_size,
                             vk::MemoryMapFlags::empty(),
@@ -1767,7 +1778,8 @@ impl Vulkan {
                 data_ptr.copy_from_nonoverlapping(ubos.as_ptr(), ubos.len());
 
                 self.core.device.unmap_memory(
-                    self.uniform_buffers[LIGHTS_UBO_INDEX].buffers_memory[current_image],
+                    self.graphics_execution.uniform_buffers[LIGHTS_UBO_INDEX].buffers_memory
+                        [current_image],
                 );
             }
         }
@@ -2164,7 +2176,8 @@ impl Vulkan {
     }
 
     pub fn draw_frame(&mut self) {
-        let wait_fences = [self.in_flight_fences[self.current_frame]];
+        let wait_fences =
+            [self.graphics_execution.in_flight_fences[self.graphics_execution.current_frame]];
 
         unsafe {
             self.core
@@ -2181,7 +2194,8 @@ impl Vulkan {
                 .acquire_next_image(
                     self.graphics_setup.swapchain_composite.swapchain,
                     std::u64::MAX,
-                    self.image_available_semaphores[self.current_frame],
+                    self.graphics_execution.image_available_semaphores
+                        [self.graphics_execution.current_frame],
                     vk::Fence::null(),
                 );
             match result {
@@ -2196,16 +2210,18 @@ impl Vulkan {
             }
         };
 
-        let wait_semaphores = [self.image_available_semaphores[self.current_frame]];
+        let wait_semaphores = [self.graphics_execution.image_available_semaphores
+            [self.graphics_execution.current_frame]];
         let wait_stages = [vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT];
-        let signal_semaphores = [self.render_finished_semaphores[self.current_frame]];
+        let signal_semaphores = [self.graphics_execution.render_finished_semaphores
+            [self.graphics_execution.current_frame]];
 
         let submit_infos = [vk::SubmitInfo {
             wait_semaphore_count: wait_semaphores.len() as u32,
             p_wait_semaphores: wait_semaphores.as_ptr(),
             p_wait_dst_stage_mask: wait_stages.as_ptr(),
             command_buffer_count: 1,
-            p_command_buffers: &self.command_buffers[image_index as usize],
+            p_command_buffers: &self.graphics_execution.command_buffers[image_index as usize],
             signal_semaphore_count: signal_semaphores.len() as u32,
             p_signal_semaphores: signal_semaphores.as_ptr(),
             ..Default::default()
@@ -2222,7 +2238,7 @@ impl Vulkan {
                 .queue_submit(
                     self.core.graphics_queue,
                     &submit_infos,
-                    self.in_flight_fences[self.current_frame],
+                    self.graphics_execution.in_flight_fences[self.graphics_execution.current_frame],
                 )
                 .expect("Failed to execute queue submit.");
         }
@@ -2246,28 +2262,29 @@ impl Vulkan {
                 .queue_present(self.core.present_queue, &present_info)
         };
         let is_resized = match result {
-            Ok(_) => self.is_framebuffer_resized,
+            Ok(_) => self.graphics_execution.is_framebuffer_resized,
             Err(vk_result) => match vk_result {
                 vk::Result::ERROR_OUT_OF_DATE_KHR | vk::Result::SUBOPTIMAL_KHR => true,
                 _ => panic!("Failed to execute queue present."),
             },
         };
         if is_resized {
-            self.is_framebuffer_resized = false;
+            self.graphics_execution.is_framebuffer_resized = false;
             self.recreate_swapchain();
         }
 
-        self.current_frame = (self.current_frame + 1) % MAX_FRAMES_IN_FLIGHT;
+        self.graphics_execution.current_frame =
+            (self.graphics_execution.current_frame + 1) % MAX_FRAMES_IN_FLIGHT;
     }
 
     fn recreate_swapchain(&mut self) {
         self.graphics_setup.recreate_swapchain(&self.core);
-        self.command_buffers = Vulkan::create_command_buffers(
+        self.graphics_execution.command_buffers = Vulkan::create_command_buffers(
             &self.core.device,
             &self.graphics_setup,
-            &self.meshes,
-            &self.graphics_descriptor_sets,
-            self.clear_value,
+            &self.graphics_execution.meshes,
+            &self.graphics_execution.graphics_descriptor_sets,
+            self.graphics_execution.clear_value,
         );
     }
 
@@ -2275,7 +2292,7 @@ impl Vulkan {
         unsafe {
             device.free_command_buffers(
                 self.graphics_setup.graphics_command_pool,
-                &self.command_buffers,
+                &self.graphics_execution.command_buffers,
             );
             self.graphics_setup.cleanup_swapchain(&device);
         }
@@ -2291,7 +2308,7 @@ impl Vulkan {
     }
 
     pub fn framebuffer_resized(&mut self, window_width: u32, window_height: u32) {
-        self.is_framebuffer_resized = true;
+        self.graphics_execution.is_framebuffer_resized = true;
         self.graphics_setup.window_width = window_width;
         self.graphics_setup.window_height = window_height;
     }
@@ -2302,14 +2319,16 @@ impl Drop for Vulkan {
         unsafe {
             let device = &self.core.device;
             for i in 0..MAX_FRAMES_IN_FLIGHT {
-                device.destroy_semaphore(self.image_available_semaphores[i], None);
-                device.destroy_semaphore(self.render_finished_semaphores[i], None);
-                device.destroy_fence(self.in_flight_fences[i], None);
+                device
+                    .destroy_semaphore(self.graphics_execution.image_available_semaphores[i], None);
+                device
+                    .destroy_semaphore(self.graphics_execution.render_finished_semaphores[i], None);
+                device.destroy_fence(self.graphics_execution.in_flight_fences[i], None);
             }
 
             self.cleanup_swapchain(&device);
 
-            for mesh in self.meshes.iter() {
+            for mesh in self.graphics_execution.meshes.iter() {
                 device.destroy_buffer(mesh.instance_buffer, None);
                 device.free_memory(mesh.instance_buffer_memory, None);
                 device.destroy_buffer(mesh.index_buffer, None);
@@ -2317,10 +2336,16 @@ impl Drop for Vulkan {
                 device.destroy_buffer(mesh.vertex_buffer, None);
                 device.free_memory(mesh.vertex_buffer_memory, None);
             }
-            for j in 0..self.uniform_buffers.len() {
-                for i in 0..self.uniform_buffers[j].buffers.len() {
-                    device.destroy_buffer(self.uniform_buffers[j].buffers[i], None);
-                    device.free_memory(self.uniform_buffers[j].buffers_memory[i], None);
+            for j in 0..self.graphics_execution.uniform_buffers.len() {
+                for i in 0..self.graphics_execution.uniform_buffers[j].buffers.len() {
+                    device.destroy_buffer(
+                        self.graphics_execution.uniform_buffers[j].buffers[i],
+                        None,
+                    );
+                    device.free_memory(
+                        self.graphics_execution.uniform_buffers[j].buffers_memory[i],
+                        None,
+                    );
                 }
             }
 
