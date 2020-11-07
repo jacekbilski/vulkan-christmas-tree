@@ -206,7 +206,7 @@ impl Vulkan {
     }
 
     pub fn set_clear_value(&mut self, clear_value: [f32; 4]) {
-        self.graphics_execution.clear_value = clear_value;
+        self.graphics_execution.set_clear_value(clear_value);
     }
 
     fn create_render_pass(core: &VulkanCore, surface_format: vk::Format) -> vk::RenderPass {

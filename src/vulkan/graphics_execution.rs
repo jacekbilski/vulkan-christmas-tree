@@ -23,7 +23,7 @@ struct SyncObjects {
 pub struct VulkanGraphicsExecution {
     core: VulkanCore,
 
-    pub clear_value: [f32; 4],
+    clear_value: [f32; 4],
 
     uniform_buffers: Vec<UniformBuffer>,
     meshes: Vec<VulkanMesh>,
@@ -281,6 +281,10 @@ impl VulkanGraphicsExecution {
         }
     }
 
+    pub fn set_clear_value(&mut self, clear_value: [f32; 4]) {
+        self.clear_value = clear_value;
+    }
+
     pub fn set_meshes(&mut self, meshes: &Vec<Mesh>, mut graphics_setup: &VulkanGraphicsSetup) {
         let mut vulkan_meshes: Vec<VulkanMesh> = vec![];
 
@@ -314,7 +318,7 @@ impl VulkanGraphicsExecution {
         self.create_command_buffers(&mut graphics_setup);
     }
 
-    pub fn create_command_buffers(&mut self, graphics_setup: &VulkanGraphicsSetup) {
+    fn create_command_buffers(&mut self, graphics_setup: &VulkanGraphicsSetup) {
         let device = &self.core.device;
         let command_buffer_allocate_info = vk::CommandBufferAllocateInfo {
             command_buffer_count: graphics_setup.swapchain_composite.framebuffers.len() as u32,
