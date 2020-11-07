@@ -149,6 +149,7 @@ impl Vulkan {
 
 impl Drop for Vulkan {
     fn drop(&mut self) {
+        self.compute_setup.drop();
         self.cleanup_swapchain();
         self.graphics_execution.drop();
         self.graphics_setup.drop();

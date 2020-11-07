@@ -26,6 +26,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                     .and_then(|ext| match ext.to_string_lossy().as_ref() {
                         "vert" => Some(shaderc::ShaderKind::Vertex),
                         "frag" => Some(shaderc::ShaderKind::Fragment),
+                        "comp" => Some(shaderc::ShaderKind::Compute),
                         _ => None,
                     });
             if let Some(shader_type) = shader_type {
