@@ -127,7 +127,7 @@ impl VulkanGraphicsExecution {
             &core,
             graphics_setup.swapchain_composite.images.len(),
         );
-        let graphics_descriptor_sets = VulkanGraphicsExecution::create_graphics_descriptor_sets(
+        let descriptor_sets = VulkanGraphicsExecution::create_descriptor_sets(
             &core.device,
             graphics_setup.descriptor_pool,
             graphics_setup.descriptor_set_layout,
@@ -143,7 +143,7 @@ impl VulkanGraphicsExecution {
 
             uniform_buffers,
             meshes: vec![],
-            descriptor_sets: graphics_descriptor_sets,
+            descriptor_sets,
             command_buffers: vec![],
 
             image_available_semaphores: sync_objects.image_available_semaphores,
@@ -206,7 +206,7 @@ impl VulkanGraphicsExecution {
         uniform_buffers
     }
 
-    fn create_graphics_descriptor_sets(
+    fn create_descriptor_sets(
         device: &ash::Device,
         descriptor_pool: vk::DescriptorPool,
         descriptor_set_layout: vk::DescriptorSetLayout,
@@ -366,7 +366,11 @@ impl VulkanGraphicsExecution {
         self.clear_value = clear_value;
     }
 
-    pub(crate) fn set_meshes(&mut self, meshes: &Vec<Mesh>, graphics_setup: &VulkanGraphicsSetup) {
+    pub(crate) fn set_meshes(
+        &mut self,
+        meshes: &Vec<Mesh>,
+        graphics_setup: &VulkanGraphicsSetup,
+    ) -> (vk::Buffer, vk::DeviceMemory) {
         let mut vulkan_meshes: Vec<VulkanMesh> = vec![];
 
         for mesh in meshes.iter() {
@@ -402,6 +406,13 @@ impl VulkanGraphicsExecution {
         }
         self.meshes = vulkan_meshes;
         self.create_command_buffers(&graphics_setup);
+
+        // TODO - dirty hack, last one is the snow
+        let last_mesh = self.meshes.last().unwrap();
+        (
+            last_mesh.instance_buffer.clone(),
+            last_mesh.instance_buffer_memory.clone(),
+        )
     }
 
     fn create_command_buffers(&mut self, graphics_setup: &VulkanGraphicsSetup) {
@@ -653,7 +664,9 @@ impl VulkanGraphicsExecution {
 
         let (vertex_buffer, vertex_buffer_memory) = core.create_buffer(
             buffer_size,
-            vk::BufferUsageFlags::TRANSFER_DST | vk::BufferUsageFlags::VERTEX_BUFFER,
+            vk::BufferUsageFlags::TRANSFER_DST
+                | vk::BufferUsageFlags::VERTEX_BUFFER
+                | vk::BufferUsageFlags::STORAGE_BUFFER,
             vk::MemoryPropertyFlags::DEVICE_LOCAL,
         );
 

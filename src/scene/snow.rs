@@ -16,7 +16,7 @@ const SNOW_Y_MAX: f32 = 5.;
 const SNOW_Z_MIN: f32 = -10.;
 const SNOW_Z_MAX: f32 = 10.;
 
-const MAX_SNOWFLAKES: usize = 5_000;
+pub const MAX_SNOWFLAKES: usize = 5_000;
 
 struct Snowflake {
     position: Point3<f32>,

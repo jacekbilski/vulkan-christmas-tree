@@ -2,14 +2,17 @@ use ash::version::DeviceV1_0;
 use ash::vk;
 use memoffset::offset_of;
 
-use crate::mesh::Mesh;
+use crate::mesh::{InstanceData, Mesh};
 use crate::scene::camera::Camera;
 use crate::scene::lights::Lights;
+use crate::scene::snow::MAX_SNOWFLAKES;
+use crate::vulkan::compute_execution::VulkanComputeExecution;
 use crate::vulkan::compute_setup::VulkanComputeSetup;
 use crate::vulkan::core::VulkanCore;
 use crate::vulkan::graphics_execution::VulkanGraphicsExecution;
 use crate::vulkan::graphics_setup::VulkanGraphicsSetup;
 
+mod compute_execution;
 mod compute_setup;
 mod core;
 mod graphics_execution;
@@ -85,6 +88,7 @@ pub struct Vulkan {
     graphics_setup: VulkanGraphicsSetup,
     graphics_execution: VulkanGraphicsExecution,
     compute_setup: VulkanComputeSetup,
+    compute_execution: Option<VulkanComputeExecution>,
 }
 
 impl Vulkan {
@@ -99,12 +103,21 @@ impl Vulkan {
             graphics_setup,
             graphics_execution,
             compute_setup,
+            compute_execution: None,
         }
     }
 
     pub fn set_meshes(&mut self, meshes: &Vec<Mesh>) {
-        self.graphics_execution
+        let (buffer, _buffer_memory) = self
+            .graphics_execution
             .set_meshes(meshes, &mut self.graphics_setup);
+
+        self.compute_execution = Some(VulkanComputeExecution::new(
+            self.core.clone(),
+            &self.compute_setup,
+            buffer,
+            std::mem::size_of::<InstanceData>() * MAX_SNOWFLAKES,
+        ));
     }
 
     pub fn set_clear_value(&mut self, clear_value: [f32; 4]) {
@@ -149,6 +162,9 @@ impl Vulkan {
 
 impl Drop for Vulkan {
     fn drop(&mut self) {
+        if self.compute_execution.is_some() {
+            self.compute_execution.as_ref().unwrap().drop();
+        }
         self.compute_setup.drop();
         self.cleanup_swapchain();
         self.graphics_execution.drop();

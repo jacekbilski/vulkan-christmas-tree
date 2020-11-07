@@ -8,11 +8,11 @@ use crate::vulkan::core::VulkanCore;
 pub struct VulkanComputeSetup {
     core: VulkanCore,
 
-    descriptor_set_layout: vk::DescriptorSetLayout,
+    pub descriptor_set_layout: vk::DescriptorSetLayout,
     pipeline_layout: vk::PipelineLayout,
     pipeline: vk::Pipeline,
 
-    descriptor_pool: vk::DescriptorPool,
+    pub descriptor_pool: vk::DescriptorPool,
 }
 
 impl VulkanComputeSetup {

@@ -10,7 +10,7 @@ mod baubles;
 pub mod camera;
 mod ground;
 pub mod lights;
-mod snow;
+pub mod snow;
 mod tree;
 
 const CLEAR_VALUE: [f32; 4] = [0.015_7, 0., 0.360_7, 1.0];
