@@ -7,10 +7,21 @@ use ash::vk;
 use crate::fs::read_shader_code;
 use crate::mesh::InstanceData;
 use crate::vulkan::core::VulkanCore;
-use crate::vulkan::{SurfaceComposite, SwapChainComposite, Vertex, Vulkan};
+use crate::vulkan::{SurfaceComposite, Vertex, Vulkan};
 
 pub const CAMERA_UBO_INDEX: usize = 0;
 pub const LIGHTS_UBO_INDEX: usize = 1;
+
+#[derive(Clone)]
+pub struct SwapChainComposite {
+    pub loader: ash::extensions::khr::Swapchain,
+    pub swapchain: vk::SwapchainKHR,
+    pub images: Vec<vk::Image>,
+    format: vk::Format,
+    pub extent: vk::Extent2D,
+    image_views: Vec<vk::ImageView>,
+    pub framebuffers: Vec<vk::Framebuffer>,
+}
 
 pub struct SwapChainSupportDetails {
     capabilities: vk::SurfaceCapabilitiesKHR,

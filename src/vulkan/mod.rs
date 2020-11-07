@@ -46,17 +46,6 @@ pub struct SurfaceComposite {
     surface: vk::SurfaceKHR,
 }
 
-#[derive(Clone)]
-pub struct SwapChainComposite {
-    loader: ash::extensions::khr::Swapchain,
-    swapchain: vk::SwapchainKHR,
-    images: Vec<vk::Image>,
-    format: vk::Format,
-    extent: vk::Extent2D,
-    image_views: Vec<vk::ImageView>,
-    framebuffers: Vec<vk::Framebuffer>,
-}
-
 pub(crate) type VertexIndexType = u32;
 
 #[repr(C)]
