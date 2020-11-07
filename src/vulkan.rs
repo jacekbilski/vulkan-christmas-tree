@@ -562,7 +562,7 @@ impl VulkanCore {
         (device, indices)
     }
 
-    fn shutdown(&self) {
+    fn drop(&self) {
         unsafe {
             self.device.destroy_device(None);
             self.debug_utils_loader
@@ -917,7 +917,7 @@ impl VulkanGraphicsSetup {
         }
     }
 
-    fn shutdown(&self, device: &ash::Device) {
+    fn drop(&self, device: &ash::Device) {
         unsafe {
             device.destroy_descriptor_pool(self.graphics_descriptor_pool, None);
             device.destroy_descriptor_set_layout(self.graphics_descriptor_set_layout, None);
@@ -943,6 +943,33 @@ struct VulkanGraphicsExecution {
     current_frame: usize,
 
     is_framebuffer_resized: bool,
+}
+
+impl VulkanGraphicsExecution {
+    fn drop(&mut self, device: &ash::Device) {
+        unsafe {
+            for i in 0..MAX_FRAMES_IN_FLIGHT {
+                device.destroy_semaphore(self.image_available_semaphores[i], None);
+                device.destroy_semaphore(self.render_finished_semaphores[i], None);
+                device.destroy_fence(self.in_flight_fences[i], None);
+            }
+
+            for mesh in self.meshes.iter() {
+                device.destroy_buffer(mesh.instance_buffer, None);
+                device.free_memory(mesh.instance_buffer_memory, None);
+                device.destroy_buffer(mesh.index_buffer, None);
+                device.free_memory(mesh.index_buffer_memory, None);
+                device.destroy_buffer(mesh.vertex_buffer, None);
+                device.free_memory(mesh.vertex_buffer_memory, None);
+            }
+            for j in 0..self.uniform_buffers.len() {
+                for i in 0..self.uniform_buffers[j].buffers.len() {
+                    device.destroy_buffer(self.uniform_buffers[j].buffers[i], None);
+                    device.free_memory(self.uniform_buffers[j].buffers_memory[i], None);
+                }
+            }
+        }
+    }
 }
 
 pub struct Vulkan {
@@ -2316,42 +2343,11 @@ impl Vulkan {
 
 impl Drop for Vulkan {
     fn drop(&mut self) {
-        unsafe {
-            let device = &self.core.device;
-            for i in 0..MAX_FRAMES_IN_FLIGHT {
-                device
-                    .destroy_semaphore(self.graphics_execution.image_available_semaphores[i], None);
-                device
-                    .destroy_semaphore(self.graphics_execution.render_finished_semaphores[i], None);
-                device.destroy_fence(self.graphics_execution.in_flight_fences[i], None);
-            }
-
-            self.cleanup_swapchain(&device);
-
-            for mesh in self.graphics_execution.meshes.iter() {
-                device.destroy_buffer(mesh.instance_buffer, None);
-                device.free_memory(mesh.instance_buffer_memory, None);
-                device.destroy_buffer(mesh.index_buffer, None);
-                device.free_memory(mesh.index_buffer_memory, None);
-                device.destroy_buffer(mesh.vertex_buffer, None);
-                device.free_memory(mesh.vertex_buffer_memory, None);
-            }
-            for j in 0..self.graphics_execution.uniform_buffers.len() {
-                for i in 0..self.graphics_execution.uniform_buffers[j].buffers.len() {
-                    device.destroy_buffer(
-                        self.graphics_execution.uniform_buffers[j].buffers[i],
-                        None,
-                    );
-                    device.free_memory(
-                        self.graphics_execution.uniform_buffers[j].buffers_memory[i],
-                        None,
-                    );
-                }
-            }
-
-            self.graphics_setup.shutdown(&device);
-            self.core.shutdown();
-        }
+        let device = &self.core.device;
+        self.cleanup_swapchain(&device);
+        self.graphics_execution.drop(&device);
+        self.graphics_setup.drop(&device);
+        self.core.drop();
     }
 }
 
