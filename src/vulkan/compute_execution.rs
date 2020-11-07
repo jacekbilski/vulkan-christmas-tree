@@ -3,6 +3,7 @@ use std::ptr;
 use ash::version::DeviceV1_0;
 use ash::vk;
 
+use crate::scene::snow::MAX_SNOWFLAKES;
 use crate::vulkan::compute_setup::VulkanComputeSetup;
 use crate::vulkan::core::VulkanCore;
 
@@ -10,6 +11,7 @@ pub struct VulkanComputeExecution {
     core: VulkanCore,
 
     descriptor_set: vk::DescriptorSet,
+    command_buffer: vk::CommandBuffer,
 }
 
 impl VulkanComputeExecution {
@@ -26,11 +28,14 @@ impl VulkanComputeExecution {
             buffer,
             buffer_size,
         );
+        let command_buffer =
+            VulkanComputeExecution::create_command_buffer(&core, compute_setup, descriptor_set);
 
         VulkanComputeExecution {
             core,
 
             descriptor_set,
+            command_buffer,
         }
     }
 
@@ -41,10 +46,11 @@ impl VulkanComputeExecution {
         buffer: vk::Buffer,
         buffer_size: usize,
     ) -> vk::DescriptorSet {
+        let descriptor_set_layouts = [descriptor_set_layout];
         let descriptor_set_allocate_info = vk::DescriptorSetAllocateInfo {
             descriptor_pool,
             descriptor_set_count: 1 as u32,
-            p_set_layouts: &descriptor_set_layout,
+            p_set_layouts: descriptor_set_layouts.as_ptr(),
             ..Default::default()
         };
 
@@ -81,7 +87,67 @@ impl VulkanComputeExecution {
         descriptor_sets[0]
     }
 
-    pub fn drop(&self) {
-        // nothing yet
+    fn create_command_buffer(
+        core: &VulkanCore,
+        compute_setup: &VulkanComputeSetup,
+        descriptor_set: vk::DescriptorSet,
+    ) -> vk::CommandBuffer {
+        let device = &core.device;
+        let command_buffer_allocate_info = vk::CommandBufferAllocateInfo {
+            command_buffer_count: 1,
+            command_pool: compute_setup.command_pool,
+            level: vk::CommandBufferLevel::PRIMARY,
+            ..Default::default()
+        };
+
+        let command_buffer = unsafe {
+            device
+                .allocate_command_buffers(&command_buffer_allocate_info)
+                .expect("Failed to allocate Command Buffers!")[0]
+        };
+
+        let command_buffer_begin_info = vk::CommandBufferBeginInfo {
+            p_inheritance_info: ptr::null(),
+            flags: vk::CommandBufferUsageFlags::SIMULTANEOUS_USE,
+            ..Default::default()
+        };
+
+        unsafe {
+            device
+                .begin_command_buffer(command_buffer, &command_buffer_begin_info)
+                .expect("Failed to begin recording Command Buffer at beginning!");
+
+            device.cmd_bind_pipeline(
+                command_buffer,
+                vk::PipelineBindPoint::COMPUTE,
+                compute_setup.pipeline,
+            );
+
+            let descriptor_sets_to_bind = [descriptor_set];
+            device.cmd_bind_descriptor_sets(
+                command_buffer,
+                vk::PipelineBindPoint::COMPUTE,
+                compute_setup.pipeline_layout,
+                0,
+                &descriptor_sets_to_bind,
+                &[],
+            );
+
+            device.cmd_dispatch(command_buffer, MAX_SNOWFLAKES as u32, 1, 1);
+
+            device
+                .end_command_buffer(command_buffer)
+                .expect("Failed to record Command Buffer at Ending!");
+        }
+
+        command_buffer
+    }
+
+    pub fn drop(&self, compute_setup: &VulkanComputeSetup) {
+        unsafe {
+            self.core
+                .device
+                .free_command_buffers(compute_setup.command_pool, &vec![self.command_buffer]);
+        }
     }
 }

@@ -9,9 +9,10 @@ pub struct VulkanComputeSetup {
     core: VulkanCore,
 
     pub descriptor_set_layout: vk::DescriptorSetLayout,
-    pipeline_layout: vk::PipelineLayout,
-    pipeline: vk::Pipeline,
+    pub pipeline_layout: vk::PipelineLayout,
+    pub pipeline: vk::Pipeline,
 
+    pub command_pool: vk::CommandPool,
     pub descriptor_pool: vk::DescriptorPool,
 }
 
@@ -20,6 +21,7 @@ impl VulkanComputeSetup {
         let descriptor_set_layout = VulkanComputeSetup::create_descriptor_set_layout(&core.device);
         let (pipeline, pipeline_layout) =
             VulkanComputeSetup::create_pipeline(&core, descriptor_set_layout);
+        let command_pool = core.create_command_pool(core.queue_family.compute_family.unwrap());
         let descriptor_pool = VulkanComputeSetup::create_descriptor_pool(&core.device);
 
         VulkanComputeSetup {
@@ -29,6 +31,7 @@ impl VulkanComputeSetup {
             pipeline_layout,
             pipeline,
 
+            command_pool,
             descriptor_pool,
         }
     }
@@ -133,6 +136,7 @@ impl VulkanComputeSetup {
     pub fn drop(&self) {
         unsafe {
             let device = &self.core.device;
+            device.destroy_command_pool(self.command_pool, None);
             device.destroy_pipeline(self.pipeline, None);
             device.destroy_pipeline_layout(self.pipeline_layout, None);
             device.destroy_descriptor_pool(self.descriptor_pool, None);

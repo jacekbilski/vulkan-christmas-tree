@@ -163,7 +163,10 @@ impl Vulkan {
 impl Drop for Vulkan {
     fn drop(&mut self) {
         if self.compute_execution.is_some() {
-            self.compute_execution.as_ref().unwrap().drop();
+            self.compute_execution
+                .as_ref()
+                .unwrap()
+                .drop(&self.compute_setup);
         }
         self.compute_setup.drop();
         self.cleanup_swapchain();
