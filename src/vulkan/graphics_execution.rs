@@ -21,6 +21,8 @@ struct SyncObjects {
 }
 
 pub struct VulkanGraphicsExecution {
+    core: VulkanCore,
+
     pub clear_value: [f32; 4],
 
     uniform_buffers: Vec<UniformBuffer>,
@@ -37,7 +39,7 @@ pub struct VulkanGraphicsExecution {
 }
 
 impl VulkanGraphicsExecution {
-    pub fn new(core: &VulkanCore, graphics_setup: &VulkanGraphicsSetup) -> Self {
+    pub fn new(core: VulkanCore, graphics_setup: &VulkanGraphicsSetup) -> Self {
         let uniform_buffers = VulkanGraphicsExecution::create_uniform_buffers(
             &core,
             graphics_setup.swapchain_composite.images.len(),
@@ -52,6 +54,8 @@ impl VulkanGraphicsExecution {
         let sync_objects = VulkanGraphicsExecution::create_sync_objects(&core.device);
 
         VulkanGraphicsExecution {
+            core,
+
             clear_value: [0.0, 0.0, 0.0, 0.0],
 
             uniform_buffers,
@@ -221,12 +225,7 @@ impl VulkanGraphicsExecution {
         sync_objects
     }
 
-    pub fn update_camera(
-        &mut self,
-        camera: &Camera,
-        core: &VulkanCore,
-        graphics_setup: &VulkanGraphicsSetup,
-    ) {
+    pub fn update_camera(&mut self, camera: &Camera, graphics_setup: &VulkanGraphicsSetup) {
         let ubo: CameraUBO = CameraUBO::from(camera);
         let ubos = [ubo];
 
@@ -235,7 +234,8 @@ impl VulkanGraphicsExecution {
         for current_image in 0..graphics_setup.swapchain_composite.images.len() {
             unsafe {
                 let data_ptr =
-                    core.device
+                    self.core
+                        .device
                         .map_memory(
                             self.uniform_buffers[CAMERA_UBO_INDEX].buffers_memory[current_image],
                             0,
@@ -246,19 +246,14 @@ impl VulkanGraphicsExecution {
 
                 data_ptr.copy_from_nonoverlapping(ubos.as_ptr(), ubos.len());
 
-                core.device.unmap_memory(
+                self.core.device.unmap_memory(
                     self.uniform_buffers[CAMERA_UBO_INDEX].buffers_memory[current_image],
                 );
             }
         }
     }
 
-    pub fn update_lights(
-        &mut self,
-        lights: &Lights,
-        core: &VulkanCore,
-        graphics_setup: &VulkanGraphicsSetup,
-    ) {
+    pub fn update_lights(&mut self, lights: &Lights, graphics_setup: &VulkanGraphicsSetup) {
         let ubo: LightsUBO = LightsUBO::from(lights);
         let ubos = [ubo];
 
@@ -267,7 +262,8 @@ impl VulkanGraphicsExecution {
         for current_image in 0..graphics_setup.swapchain_composite.images.len() {
             unsafe {
                 let data_ptr =
-                    core.device
+                    self.core
+                        .device
                         .map_memory(
                             self.uniform_buffers[LIGHTS_UBO_INDEX].buffers_memory[current_image],
                             0,
@@ -278,29 +274,30 @@ impl VulkanGraphicsExecution {
 
                 data_ptr.copy_from_nonoverlapping(ubos.as_ptr(), ubos.len());
 
-                core.device.unmap_memory(
+                self.core.device.unmap_memory(
                     self.uniform_buffers[LIGHTS_UBO_INDEX].buffers_memory[current_image],
                 );
             }
         }
     }
 
-    pub fn set_meshes(
-        &mut self,
-        meshes: &Vec<Mesh>,
-        core: &VulkanCore,
-        mut graphics_setup: &VulkanGraphicsSetup,
-    ) {
+    pub fn set_meshes(&mut self, meshes: &Vec<Mesh>, mut graphics_setup: &VulkanGraphicsSetup) {
         let mut vulkan_meshes: Vec<VulkanMesh> = vec![];
 
         for mesh in meshes.iter() {
-            let (vertex_buffer, vertex_buffer_memory) =
-                Vulkan::create_vertex_buffer(&core, graphics_setup.command_pool, &mesh.vertices);
+            let (vertex_buffer, vertex_buffer_memory) = Vulkan::create_vertex_buffer(
+                &self.core,
+                graphics_setup.command_pool,
+                &mesh.vertices,
+            );
             let (index_buffer, index_buffer_memory) =
-                Vulkan::create_index_buffer(&core, graphics_setup.command_pool, &mesh.indices);
+                Vulkan::create_index_buffer(&self.core, graphics_setup.command_pool, &mesh.indices);
             let indices_no = mesh.indices.len() as u32;
-            let (instance_buffer, instance_buffer_memory) =
-                Vulkan::create_vertex_buffer(&core, graphics_setup.command_pool, &mesh.instances);
+            let (instance_buffer, instance_buffer_memory) = Vulkan::create_vertex_buffer(
+                &self.core,
+                graphics_setup.command_pool,
+                &mesh.instances,
+            );
             let instances_no = mesh.instances.len() as u32;
             vulkan_meshes.push(VulkanMesh {
                 vertex_buffer,
@@ -314,14 +311,11 @@ impl VulkanGraphicsExecution {
             });
         }
         self.meshes = vulkan_meshes;
-        self.create_command_buffers(&core.device, &mut graphics_setup);
+        self.create_command_buffers(&mut graphics_setup);
     }
 
-    pub fn create_command_buffers(
-        &mut self,
-        device: &ash::Device,
-        graphics_setup: &VulkanGraphicsSetup,
-    ) {
+    pub fn create_command_buffers(&mut self, graphics_setup: &VulkanGraphicsSetup) {
+        let device = &self.core.device;
         let command_buffer_allocate_info = vk::CommandBufferAllocateInfo {
             command_buffer_count: graphics_setup.swapchain_composite.framebuffers.len() as u32,
             command_pool: graphics_setup.command_pool,
@@ -428,11 +422,12 @@ impl VulkanGraphicsExecution {
         self.command_buffers = command_buffers;
     }
 
-    pub fn draw_frame(&mut self, core: &VulkanCore, graphics_setup: &mut VulkanGraphicsSetup) {
+    pub fn draw_frame(&mut self, graphics_setup: &mut VulkanGraphicsSetup) {
+        let device = &self.core.device;
         let wait_fences = [self.in_flight_fences[self.current_frame]];
 
         unsafe {
-            core.device
+            device
                 .wait_for_fences(&wait_fences, true, std::u64::MAX)
                 .expect("Failed to wait for Fence!");
         }
@@ -451,7 +446,7 @@ impl VulkanGraphicsExecution {
                 Ok(image_index) => image_index,
                 Err(vk_result) => match vk_result {
                     vk::Result::ERROR_OUT_OF_DATE_KHR => {
-                        self.recreate_swapchain(core, graphics_setup);
+                        self.recreate_swapchain(graphics_setup);
                         return;
                     }
                     _ => panic!("Failed to acquire Swap Chain Image!"),
@@ -475,13 +470,13 @@ impl VulkanGraphicsExecution {
         }];
 
         unsafe {
-            core.device
+            device
                 .reset_fences(&wait_fences)
                 .expect("Failed to reset Fence!");
 
-            core.device
+            device
                 .queue_submit(
-                    core.graphics_queue,
+                    self.core.graphics_queue,
                     &submit_infos,
                     self.in_flight_fences[self.current_frame],
                 )
@@ -504,7 +499,7 @@ impl VulkanGraphicsExecution {
             graphics_setup
                 .swapchain_composite
                 .loader
-                .queue_present(core.present_queue, &present_info)
+                .queue_present(self.core.present_queue, &present_info)
         };
         let is_resized = match result {
             Ok(_) => self.is_framebuffer_resized,
@@ -515,19 +510,20 @@ impl VulkanGraphicsExecution {
         };
         if is_resized {
             self.is_framebuffer_resized = false;
-            self.recreate_swapchain(core, graphics_setup);
+            self.recreate_swapchain(graphics_setup);
         }
 
         self.current_frame = (self.current_frame + 1) % MAX_FRAMES_IN_FLIGHT;
     }
 
-    fn recreate_swapchain(&mut self, core: &VulkanCore, graphics_setup: &mut VulkanGraphicsSetup) {
+    fn recreate_swapchain(&mut self, graphics_setup: &mut VulkanGraphicsSetup) {
         graphics_setup.recreate_swapchain();
-        self.create_command_buffers(&core.device, graphics_setup);
+        self.create_command_buffers(graphics_setup);
     }
 
-    pub fn drop(&mut self, device: &ash::Device) {
+    pub fn drop(&mut self) {
         unsafe {
+            let device = &self.core.device;
             for i in 0..MAX_FRAMES_IN_FLIGHT {
                 device.destroy_semaphore(self.image_available_semaphores[i], None);
                 device.destroy_semaphore(self.render_finished_semaphores[i], None);

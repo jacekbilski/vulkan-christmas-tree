@@ -361,14 +361,20 @@ impl VulkanGraphicsSetup {
         }
     }
 
-    pub fn drop(&self, device: &ash::Device) {
+    pub fn drop(&self) {
         unsafe {
-            device.destroy_descriptor_pool(self.descriptor_pool, None);
-            device.destroy_descriptor_set_layout(self.descriptor_set_layout, None);
+            self.core
+                .device
+                .destroy_descriptor_pool(self.descriptor_pool, None);
+            self.core
+                .device
+                .destroy_descriptor_set_layout(self.descriptor_set_layout, None);
             self.surface_composite
                 .loader
                 .destroy_surface(self.surface_composite.surface, None);
-            device.destroy_command_pool(self.command_pool, None);
+            self.core
+                .device
+                .destroy_command_pool(self.command_pool, None);
         }
     }
 }

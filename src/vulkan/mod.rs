@@ -191,7 +191,7 @@ impl Vulkan {
     pub fn new(window: &winit::window::Window, application_name: &str) -> Self {
         let (core, surface_composite) = VulkanCore::new(&window, application_name);
         let graphics_setup = VulkanGraphicsSetup::new(core.clone(), surface_composite, &window);
-        let graphics_execution = VulkanGraphicsExecution::new(&core, &graphics_setup);
+        let graphics_execution = VulkanGraphicsExecution::new(core.clone(), &graphics_setup);
 
         Vulkan {
             core,
@@ -202,7 +202,7 @@ impl Vulkan {
 
     pub fn set_meshes(&mut self, meshes: &Vec<Mesh>) {
         self.graphics_execution
-            .set_meshes(meshes, &self.core, &mut self.graphics_setup);
+            .set_meshes(meshes, &mut self.graphics_setup);
     }
 
     pub fn set_clear_value(&mut self, clear_value: [f32; 4]) {
@@ -785,12 +785,12 @@ impl Vulkan {
 
     pub fn update_camera(&mut self, camera: &Camera) {
         self.graphics_execution
-            .update_camera(camera, &self.core, &self.graphics_setup);
+            .update_camera(camera, &self.graphics_setup);
     }
 
     pub fn update_lights(&mut self, lights: &Lights) {
         self.graphics_execution
-            .update_lights(lights, &self.core, &self.graphics_setup);
+            .update_lights(lights, &self.graphics_setup);
     }
 
     fn create_vertex_buffer<T>(
@@ -1030,8 +1030,7 @@ impl Vulkan {
     }
 
     pub fn draw_frame(&mut self) {
-        self.graphics_execution
-            .draw_frame(&self.core, &mut self.graphics_setup);
+        self.graphics_execution.draw_frame(&mut self.graphics_setup);
     }
 
     fn cleanup_swapchain(&self, device: &ash::Device) {
@@ -1064,8 +1063,8 @@ impl Drop for Vulkan {
     fn drop(&mut self) {
         let device = &self.core.device;
         self.cleanup_swapchain(&device);
-        self.graphics_execution.drop(&device);
-        self.graphics_setup.drop(&device);
+        self.graphics_execution.drop();
+        self.graphics_setup.drop();
         self.core.drop();
     }
 }
