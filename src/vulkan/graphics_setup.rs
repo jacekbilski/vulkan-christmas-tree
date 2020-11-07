@@ -631,8 +631,7 @@ impl VulkanGraphicsSetup {
     ) -> (vk::Image, vk::ImageView, vk::DeviceMemory) {
         let depth_format =
             VulkanGraphicsSetup::find_depth_format(&core.instance, core.physical_device);
-        let (depth_image, depth_image_memory) = Vulkan::create_image(
-            &core.device,
+        let (depth_image, depth_image_memory) = core.create_image(
             swapchain_extent.width,
             swapchain_extent.height,
             1,
@@ -643,13 +642,8 @@ impl VulkanGraphicsSetup {
             vk::MemoryPropertyFlags::DEVICE_LOCAL,
             &core.physical_device_memory_properties,
         );
-        let depth_image_view = Vulkan::create_image_view(
-            &core.device,
-            depth_image,
-            depth_format,
-            vk::ImageAspectFlags::DEPTH,
-            1,
-        );
+        let depth_image_view =
+            core.create_image_view(depth_image, depth_format, vk::ImageAspectFlags::DEPTH, 1);
 
         (depth_image, depth_image_view, depth_image_memory)
     }

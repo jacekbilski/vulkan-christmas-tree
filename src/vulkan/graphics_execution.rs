@@ -9,7 +9,6 @@ use crate::scene::camera::Camera;
 use crate::scene::lights::{Light, Lights};
 use crate::vulkan::core::VulkanCore;
 use crate::vulkan::graphics_setup::{VulkanGraphicsSetup, CAMERA_UBO_INDEX, LIGHTS_UBO_INDEX};
-use crate::vulkan::Vulkan;
 
 const MAX_FRAMES_IN_FLIGHT: usize = 2;
 
@@ -169,8 +168,7 @@ impl VulkanGraphicsExecution {
             let mut buffers_memory = vec![];
 
             for _ in 0..swapchain_image_count {
-                let (uniform_buffer, uniform_buffer_memory) = Vulkan::create_buffer(
-                    core,
+                let (uniform_buffer, uniform_buffer_memory) = core.create_buffer(
                     buffer_size as u64,
                     vk::BufferUsageFlags::UNIFORM_BUFFER,
                     vk::MemoryPropertyFlags::HOST_VISIBLE | vk::MemoryPropertyFlags::HOST_COHERENT,
@@ -191,8 +189,7 @@ impl VulkanGraphicsExecution {
             let mut buffers_memory = vec![];
 
             for _ in 0..swapchain_image_count {
-                let (uniform_buffer, uniform_buffer_memory) = Vulkan::create_buffer(
-                    core,
+                let (uniform_buffer, uniform_buffer_memory) = core.create_buffer(
                     buffer_size as u64,
                     vk::BufferUsageFlags::UNIFORM_BUFFER,
                     vk::MemoryPropertyFlags::HOST_VISIBLE | vk::MemoryPropertyFlags::HOST_COHERENT,
@@ -373,19 +370,24 @@ impl VulkanGraphicsExecution {
         let mut vulkan_meshes: Vec<VulkanMesh> = vec![];
 
         for mesh in meshes.iter() {
-            let (vertex_buffer, vertex_buffer_memory) = Vulkan::create_vertex_buffer(
+            let (vertex_buffer, vertex_buffer_memory) =
+                VulkanGraphicsExecution::create_vertex_buffer(
+                    &self.core,
+                    graphics_setup.command_pool,
+                    &mesh.vertices,
+                );
+            let (index_buffer, index_buffer_memory) = VulkanGraphicsExecution::create_index_buffer(
                 &self.core,
                 graphics_setup.command_pool,
-                &mesh.vertices,
+                &mesh.indices,
             );
-            let (index_buffer, index_buffer_memory) =
-                Vulkan::create_index_buffer(&self.core, graphics_setup.command_pool, &mesh.indices);
             let indices_no = mesh.indices.len() as u32;
-            let (instance_buffer, instance_buffer_memory) = Vulkan::create_vertex_buffer(
-                &self.core,
-                graphics_setup.command_pool,
-                &mesh.instances,
-            );
+            let (instance_buffer, instance_buffer_memory) =
+                VulkanGraphicsExecution::create_vertex_buffer(
+                    &self.core,
+                    graphics_setup.command_pool,
+                    &mesh.instances,
+                );
             let instances_no = mesh.instances.len() as u32;
             vulkan_meshes.push(VulkanMesh {
                 vertex_buffer,
@@ -614,6 +616,94 @@ impl VulkanGraphicsExecution {
     fn recreate_swapchain(&mut self, graphics_setup: &mut VulkanGraphicsSetup) {
         graphics_setup.recreate_swapchain();
         self.create_command_buffers(graphics_setup);
+    }
+
+    fn create_vertex_buffer<T>(
+        core: &VulkanCore,
+        command_pool: vk::CommandPool,
+        data: &[T],
+    ) -> (vk::Buffer, vk::DeviceMemory) {
+        let buffer_size = std::mem::size_of_val(data) as vk::DeviceSize;
+        let (staging_buffer, staging_buffer_memory) = core.create_buffer(
+            buffer_size,
+            vk::BufferUsageFlags::TRANSFER_SRC,
+            vk::MemoryPropertyFlags::HOST_VISIBLE | vk::MemoryPropertyFlags::HOST_COHERENT,
+        );
+
+        unsafe {
+            let data_ptr = core
+                .device
+                .map_memory(
+                    staging_buffer_memory,
+                    0,
+                    buffer_size,
+                    vk::MemoryMapFlags::empty(),
+                )
+                .expect("Failed to Map Memory") as *mut T;
+
+            data_ptr.copy_from_nonoverlapping(data.as_ptr(), data.len());
+
+            core.device.unmap_memory(staging_buffer_memory);
+        }
+
+        let (vertex_buffer, vertex_buffer_memory) = core.create_buffer(
+            buffer_size,
+            vk::BufferUsageFlags::TRANSFER_DST | vk::BufferUsageFlags::VERTEX_BUFFER,
+            vk::MemoryPropertyFlags::DEVICE_LOCAL,
+        );
+
+        core.copy_buffer(command_pool, staging_buffer, vertex_buffer, buffer_size);
+
+        unsafe {
+            core.device.destroy_buffer(staging_buffer, None);
+            core.device.free_memory(staging_buffer_memory, None);
+        }
+
+        (vertex_buffer, vertex_buffer_memory)
+    }
+
+    fn create_index_buffer(
+        core: &VulkanCore,
+        command_pool: vk::CommandPool,
+        data: &[u32],
+    ) -> (vk::Buffer, vk::DeviceMemory) {
+        let buffer_size = std::mem::size_of_val(data) as vk::DeviceSize;
+        let (staging_buffer, staging_buffer_memory) = core.create_buffer(
+            buffer_size,
+            vk::BufferUsageFlags::TRANSFER_SRC,
+            vk::MemoryPropertyFlags::HOST_VISIBLE | vk::MemoryPropertyFlags::HOST_COHERENT,
+        );
+
+        unsafe {
+            let data_ptr = core
+                .device
+                .map_memory(
+                    staging_buffer_memory,
+                    0,
+                    buffer_size,
+                    vk::MemoryMapFlags::empty(),
+                )
+                .expect("Failed to Map Memory") as *mut u32;
+
+            data_ptr.copy_from_nonoverlapping(data.as_ptr(), data.len());
+
+            core.device.unmap_memory(staging_buffer_memory);
+        }
+
+        let (index_buffer, index_buffer_memory) = core.create_buffer(
+            buffer_size,
+            vk::BufferUsageFlags::TRANSFER_DST | vk::BufferUsageFlags::INDEX_BUFFER,
+            vk::MemoryPropertyFlags::DEVICE_LOCAL,
+        );
+
+        core.copy_buffer(command_pool, staging_buffer, index_buffer, buffer_size);
+
+        unsafe {
+            core.device.destroy_buffer(staging_buffer, None);
+            core.device.free_memory(staging_buffer_memory, None);
+        }
+
+        (index_buffer, index_buffer_memory)
     }
 
     pub(crate) fn drop(&mut self) {

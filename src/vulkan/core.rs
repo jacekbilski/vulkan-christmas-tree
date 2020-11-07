@@ -1,6 +1,7 @@
 use std::collections::HashSet;
 use std::ffi::{CStr, CString};
 use std::os::raw::{c_char, c_void};
+use std::ptr;
 
 use ash::extensions::ext::DebugUtils;
 use ash::extensions::khr::{Surface, WaylandSurface, XlibSurface};
@@ -68,6 +69,236 @@ impl VulkanCore {
             },
             surface_composite,
         )
+    }
+
+    pub(crate) fn create_image(
+        &self,
+        width: u32,
+        height: u32,
+        mip_levels: u32,
+        num_samples: vk::SampleCountFlags,
+        format: vk::Format,
+        tiling: vk::ImageTiling,
+        usage: vk::ImageUsageFlags,
+        required_memory_properties: vk::MemoryPropertyFlags,
+        device_memory_properties: &vk::PhysicalDeviceMemoryProperties,
+    ) -> (vk::Image, vk::DeviceMemory) {
+        let image_create_info = vk::ImageCreateInfo {
+            image_type: vk::ImageType::TYPE_2D,
+            format,
+            mip_levels,
+            array_layers: 1,
+            samples: num_samples,
+            tiling,
+            usage,
+            sharing_mode: vk::SharingMode::EXCLUSIVE,
+            queue_family_index_count: 0,
+            p_queue_family_indices: ptr::null(),
+            initial_layout: vk::ImageLayout::UNDEFINED,
+            extent: vk::Extent3D {
+                width,
+                height,
+                depth: 1,
+            },
+            ..Default::default()
+        };
+
+        let image = unsafe {
+            self.device
+                .create_image(&image_create_info, None)
+                .expect("Failed to create Texture Image!")
+        };
+
+        let image_memory_requirement = unsafe { self.device.get_image_memory_requirements(image) };
+        let memory_allocate_info = vk::MemoryAllocateInfo {
+            allocation_size: image_memory_requirement.size,
+            memory_type_index: VulkanCore::find_memory_type(
+                image_memory_requirement.memory_type_bits,
+                required_memory_properties,
+                device_memory_properties,
+            ),
+            ..Default::default()
+        };
+
+        let image_memory = unsafe {
+            self.device
+                .allocate_memory(&memory_allocate_info, None)
+                .expect("Failed to allocate Texture Image memory!")
+        };
+
+        unsafe {
+            self.device
+                .bind_image_memory(image, image_memory, 0)
+                .expect("Failed to bind Image Memmory!");
+        }
+
+        (image, image_memory)
+    }
+
+    pub(crate) fn create_image_view(
+        &self,
+        image: vk::Image,
+        format: vk::Format,
+        aspect_flags: vk::ImageAspectFlags,
+        mip_levels: u32,
+    ) -> vk::ImageView {
+        let imageview_create_info = vk::ImageViewCreateInfo {
+            view_type: vk::ImageViewType::TYPE_2D,
+            format,
+            components: vk::ComponentMapping {
+                r: vk::ComponentSwizzle::IDENTITY,
+                g: vk::ComponentSwizzle::IDENTITY,
+                b: vk::ComponentSwizzle::IDENTITY,
+                a: vk::ComponentSwizzle::IDENTITY,
+            },
+            subresource_range: vk::ImageSubresourceRange {
+                aspect_mask: aspect_flags,
+                base_mip_level: 0,
+                level_count: mip_levels,
+                base_array_layer: 0,
+                layer_count: 1,
+            },
+            image,
+            ..Default::default()
+        };
+
+        unsafe {
+            self.device
+                .create_image_view(&imageview_create_info, None)
+                .expect("Failed to create Image View!")
+        }
+    }
+
+    pub(crate) fn create_buffer(
+        &self,
+        size: vk::DeviceSize,
+        usage: vk::BufferUsageFlags,
+        required_memory_properties: vk::MemoryPropertyFlags,
+    ) -> (vk::Buffer, vk::DeviceMemory) {
+        let buffer_create_info = vk::BufferCreateInfo {
+            size,
+            usage,
+            sharing_mode: vk::SharingMode::EXCLUSIVE,
+            queue_family_index_count: 0,
+            ..Default::default()
+        };
+
+        let buffer = unsafe {
+            self.device
+                .create_buffer(&buffer_create_info, None)
+                .expect("Failed to create Vertex Buffer")
+        };
+
+        let mem_requirements = unsafe { self.device.get_buffer_memory_requirements(buffer) };
+        let memory_type = VulkanCore::find_memory_type(
+            mem_requirements.memory_type_bits,
+            required_memory_properties,
+            &self.physical_device_memory_properties,
+        );
+
+        let allocate_info = vk::MemoryAllocateInfo {
+            allocation_size: mem_requirements.size,
+            memory_type_index: memory_type,
+            ..Default::default()
+        };
+
+        let buffer_memory = unsafe {
+            self.device
+                .allocate_memory(&allocate_info, None)
+                .expect("Failed to allocate vertex buffer memory!")
+        };
+
+        unsafe {
+            self.device
+                .bind_buffer_memory(buffer, buffer_memory, 0)
+                .expect("Failed to bind Buffer");
+        }
+
+        (buffer, buffer_memory)
+    }
+
+    pub(crate) fn copy_buffer(
+        &self,
+        command_pool: vk::CommandPool,
+        src_buffer: vk::Buffer,
+        dst_buffer: vk::Buffer,
+        size: vk::DeviceSize,
+    ) {
+        let allocate_info = vk::CommandBufferAllocateInfo {
+            command_buffer_count: 1,
+            command_pool,
+            level: vk::CommandBufferLevel::PRIMARY,
+            ..Default::default()
+        };
+
+        let command_buffers = unsafe {
+            self.device
+                .allocate_command_buffers(&allocate_info)
+                .expect("Failed to allocate Command Buffer")
+        };
+        let command_buffer = command_buffers[0];
+
+        let begin_info = vk::CommandBufferBeginInfo {
+            flags: vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT,
+            ..Default::default()
+        };
+
+        unsafe {
+            self.device
+                .begin_command_buffer(command_buffer, &begin_info)
+                .expect("Failed to begin Command Buffer");
+
+            let copy_regions = [vk::BufferCopy {
+                src_offset: 0,
+                dst_offset: 0,
+                size,
+            }];
+
+            self.device
+                .cmd_copy_buffer(command_buffer, src_buffer, dst_buffer, &copy_regions);
+
+            self.device
+                .end_command_buffer(command_buffer)
+                .expect("Failed to end Command Buffer");
+        }
+
+        let submit_info = [vk::SubmitInfo {
+            wait_semaphore_count: 0,
+            p_wait_dst_stage_mask: ptr::null(),
+            command_buffer_count: 1,
+            p_command_buffers: &command_buffer,
+            signal_semaphore_count: 0,
+            ..Default::default()
+        }];
+
+        unsafe {
+            self.device
+                .queue_submit(self.transfer_queue, &submit_info, vk::Fence::null())
+                .expect("Failed to Submit Queue.");
+            self.device
+                .queue_wait_idle(self.transfer_queue)
+                .expect("Failed to wait Queue idle");
+
+            self.device
+                .free_command_buffers(command_pool, &command_buffers);
+        }
+    }
+
+    fn find_memory_type(
+        type_filter: u32,
+        required_properties: vk::MemoryPropertyFlags,
+        mem_properties: &vk::PhysicalDeviceMemoryProperties,
+    ) -> u32 {
+        for (i, memory_type) in mem_properties.memory_types.iter().enumerate() {
+            // same implementation
+            if (type_filter & (1 << i)) > 0
+                && memory_type.property_flags.contains(required_properties)
+            {
+                return i as u32;
+            }
+        }
+
+        panic!("Failed to find suitable memory type!")
     }
 
     fn create_instance(entry: &ash::Entry, application_name: &str) -> ash::Instance {
