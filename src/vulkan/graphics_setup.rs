@@ -68,15 +68,13 @@ impl VulkanGraphicsSetup {
             VulkanGraphicsSetup::create_image_views(&core.device, &swapchain_composite);
         let render_pass =
             VulkanGraphicsSetup::create_render_pass(&core, swapchain_composite.format);
-        let graphics_descriptor_set_layout =
-            VulkanGraphicsSetup::create_graphics_descriptor_set_layout(&core.device);
-        let (graphics_pipeline, graphics_pipeline_layout) =
-            VulkanGraphicsSetup::create_graphics_pipeline(
-                &core,
-                render_pass,
-                swapchain_composite.extent,
-                graphics_descriptor_set_layout,
-            );
+        let descriptor_set_layout = VulkanGraphicsSetup::create_descriptor_set_layout(&core.device);
+        let (pipeline, pipeline_layout) = VulkanGraphicsSetup::create_pipeline(
+            &core,
+            render_pass,
+            swapchain_composite.extent,
+            descriptor_set_layout,
+        );
         let (depth_image, depth_image_view, depth_image_memory) =
             VulkanGraphicsSetup::create_depth_resources(&core, swapchain_composite.extent);
         swapchain_composite.framebuffers = VulkanGraphicsSetup::create_framebuffers(
@@ -86,9 +84,8 @@ impl VulkanGraphicsSetup {
             depth_image_view,
             &swapchain_composite.extent,
         );
-        let graphics_command_pool =
-            core.create_command_pool(core.queue_family.graphics_family.unwrap());
-        let graphics_descriptor_pool = VulkanGraphicsSetup::create_graphics_descriptor_pool(
+        let command_pool = core.create_command_pool(core.queue_family.graphics_family.unwrap());
+        let descriptor_pool = VulkanGraphicsSetup::create_descriptor_pool(
             &core.device,
             swapchain_composite.images.len(),
         );
@@ -100,16 +97,16 @@ impl VulkanGraphicsSetup {
             swapchain_composite,
 
             render_pass,
-            descriptor_set_layout: graphics_descriptor_set_layout,
-            pipeline_layout: graphics_pipeline_layout,
-            pipeline: graphics_pipeline,
+            descriptor_set_layout,
+            pipeline_layout,
+            pipeline,
 
             depth_image,
             depth_image_view,
             depth_image_memory,
 
-            command_pool: graphics_command_pool,
-            descriptor_pool: graphics_descriptor_pool,
+            command_pool,
+            descriptor_pool,
 
             window_width,
             window_height,
@@ -390,7 +387,7 @@ impl VulkanGraphicsSetup {
         }
     }
 
-    fn create_graphics_descriptor_set_layout(device: &ash::Device) -> vk::DescriptorSetLayout {
+    fn create_descriptor_set_layout(device: &ash::Device) -> vk::DescriptorSetLayout {
         let descriptor_set_layout_bindings = [
             vk::DescriptorSetLayoutBinding {
                 binding: CAMERA_UBO_INDEX as u32,
@@ -421,7 +418,7 @@ impl VulkanGraphicsSetup {
         }
     }
 
-    fn create_graphics_pipeline(
+    fn create_pipeline(
         core: &VulkanCore,
         render_pass: vk::RenderPass,
         swapchain_extent: vk::Extent2D,
@@ -723,7 +720,7 @@ impl VulkanGraphicsSetup {
         framebuffers
     }
 
-    fn create_graphics_descriptor_pool(
+    fn create_descriptor_pool(
         device: &ash::Device,
         swapchain_images_size: usize,
     ) -> vk::DescriptorPool {
@@ -784,7 +781,7 @@ impl VulkanGraphicsSetup {
             VulkanGraphicsSetup::create_image_views(&self.core.device, &self.swapchain_composite);
         self.render_pass =
             VulkanGraphicsSetup::create_render_pass(&self.core, self.swapchain_composite.format);
-        let (graphics_pipeline, pipeline_layout) = VulkanGraphicsSetup::create_graphics_pipeline(
+        let (graphics_pipeline, pipeline_layout) = VulkanGraphicsSetup::create_pipeline(
             &self.core,
             self.render_pass,
             self.swapchain_composite.extent,
