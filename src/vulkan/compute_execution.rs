@@ -10,8 +10,10 @@ use crate::vulkan::core::VulkanCore;
 pub struct VulkanComputeExecution {
     core: VulkanCore,
 
-    descriptor_set: vk::DescriptorSet,
+    _descriptor_set: vk::DescriptorSet,
     command_buffer: vk::CommandBuffer,
+
+    fence: vk::Fence,
 }
 
 impl VulkanComputeExecution {
@@ -30,12 +32,15 @@ impl VulkanComputeExecution {
         );
         let command_buffer =
             VulkanComputeExecution::create_command_buffer(&core, compute_setup, descriptor_set);
+        let fence = core.create_fence();
 
         VulkanComputeExecution {
             core,
 
-            descriptor_set,
+            _descriptor_set: descriptor_set,
             command_buffer,
+
+            fence,
         }
     }
 
@@ -143,11 +148,48 @@ impl VulkanComputeExecution {
         command_buffer
     }
 
+    pub fn do_calculations(&self, snow_calculated_semaphore: vk::Semaphore) {
+        let command_buffers = [self.command_buffer];
+
+        let wait_fences = [self.fence];
+        unsafe {
+            self.core
+                .device
+                .wait_for_fences(&wait_fences, true, std::u64::MAX)
+                .expect("Failed to wait for Fence!");
+        }
+
+        let wait_stages = [vk::PipelineStageFlags::COMPUTE_SHADER];
+        let signal_semaphores = [snow_calculated_semaphore];
+        let submit_infos = [vk::SubmitInfo {
+            wait_semaphore_count: 0,
+            p_wait_semaphores: ptr::null(),
+            p_wait_dst_stage_mask: wait_stages.as_ptr(),
+            command_buffer_count: command_buffers.len() as u32,
+            p_command_buffers: command_buffers.as_ptr(),
+            signal_semaphore_count: signal_semaphores.len() as u32,
+            p_signal_semaphores: signal_semaphores.as_ptr(),
+            ..Default::default()
+        }];
+        unsafe {
+            self.core
+                .device
+                .reset_fences(&wait_fences)
+                .expect("Failed to reset Fence!");
+
+            self.core
+                .device
+                .queue_submit(self.core.compute_queue, &submit_infos, self.fence)
+                .expect("Failed to execute queue submit.");
+        }
+    }
+
     pub fn drop(&self, compute_setup: &VulkanComputeSetup) {
         unsafe {
             self.core
                 .device
                 .free_command_buffers(compute_setup.command_pool, &vec![self.command_buffer]);
+            self.core.device.destroy_fence(self.fence, None);
         }
     }
 }

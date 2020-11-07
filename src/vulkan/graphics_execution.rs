@@ -506,7 +506,11 @@ impl VulkanGraphicsExecution {
         self.command_buffers = command_buffers;
     }
 
-    pub(crate) fn draw_frame(&mut self, graphics_setup: &mut VulkanGraphicsSetup) {
+    pub(crate) fn draw_frame(
+        &mut self,
+        graphics_setup: &mut VulkanGraphicsSetup,
+        snow_calculated_semaphore: vk::Semaphore,
+    ) {
         let device = &self.core.device;
         let wait_fences = [self.in_flight_fences[self.current_frame]];
 
@@ -538,7 +542,10 @@ impl VulkanGraphicsExecution {
             }
         };
 
-        let wait_semaphores = [self.image_available_semaphores[self.current_frame]];
+        let wait_semaphores = [
+            self.image_available_semaphores[self.current_frame],
+            snow_calculated_semaphore,
+        ];
         let wait_stages = [vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT];
         let signal_semaphores = [self.render_finished_semaphores[self.current_frame]];
 

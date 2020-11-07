@@ -89,6 +89,8 @@ pub struct Vulkan {
     graphics_execution: VulkanGraphicsExecution,
     compute_setup: VulkanComputeSetup,
     compute_execution: Option<VulkanComputeExecution>,
+
+    snow_calculated_semaphore: vk::Semaphore,
 }
 
 impl Vulkan {
@@ -98,12 +100,16 @@ impl Vulkan {
         let graphics_execution = VulkanGraphicsExecution::new(core.clone(), &graphics_setup);
         let compute_setup = VulkanComputeSetup::new(core.clone());
 
+        let snow_calculated_semaphore = core.create_semaphore();
+
         Vulkan {
             core,
             graphics_setup,
             graphics_execution,
             compute_setup,
             compute_execution: None,
+
+            snow_calculated_semaphore,
         }
     }
 
@@ -135,7 +141,12 @@ impl Vulkan {
     }
 
     pub fn draw_frame(&mut self) {
-        self.graphics_execution.draw_frame(&mut self.graphics_setup);
+        self.compute_execution
+            .as_ref()
+            .unwrap()
+            .do_calculations(self.snow_calculated_semaphore);
+        self.graphics_execution
+            .draw_frame(&mut self.graphics_setup, self.snow_calculated_semaphore);
     }
 
     fn cleanup_swapchain(&self) {
@@ -162,6 +173,11 @@ impl Vulkan {
 
 impl Drop for Vulkan {
     fn drop(&mut self) {
+        unsafe {
+            self.core
+                .device
+                .destroy_semaphore(self.snow_calculated_semaphore, None);
+        }
         if self.compute_execution.is_some() {
             self.compute_execution
                 .as_ref()
