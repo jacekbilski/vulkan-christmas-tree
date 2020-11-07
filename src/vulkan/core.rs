@@ -28,6 +28,7 @@ pub struct VulkanCore {
     pub device: ash::Device,
 
     pub queue_family: QueueFamilyIndices,
+    pub compute_queue: vk::Queue,
     pub graphics_queue: vk::Queue,
     pub present_queue: vk::Queue,
     transfer_queue: vk::Queue,
@@ -45,6 +46,8 @@ impl VulkanCore {
             unsafe { instance.get_physical_device_memory_properties(physical_device) };
         let (device, queue_family) =
             VulkanCore::create_logical_device(&instance, physical_device, &surface_composite);
+        let compute_queue =
+            unsafe { device.get_device_queue(queue_family.compute_family.unwrap(), 0) };
         let graphics_queue =
             unsafe { device.get_device_queue(queue_family.graphics_family.unwrap(), 0) };
         let present_queue =
@@ -64,6 +67,7 @@ impl VulkanCore {
 
                 device,
                 queue_family,
+                compute_queue,
                 graphics_queue,
                 present_queue,
                 transfer_queue,

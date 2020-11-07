@@ -5,10 +5,12 @@ use memoffset::offset_of;
 use crate::mesh::Mesh;
 use crate::scene::camera::Camera;
 use crate::scene::lights::Lights;
+use crate::vulkan::compute_setup::VulkanComputeSetup;
 use crate::vulkan::core::VulkanCore;
 use crate::vulkan::graphics_execution::VulkanGraphicsExecution;
 use crate::vulkan::graphics_setup::VulkanGraphicsSetup;
 
+mod compute_setup;
 mod core;
 mod graphics_execution;
 mod graphics_setup;
@@ -82,6 +84,7 @@ pub struct Vulkan {
     core: VulkanCore,
     graphics_setup: VulkanGraphicsSetup,
     graphics_execution: VulkanGraphicsExecution,
+    compute_setup: VulkanComputeSetup,
 }
 
 impl Vulkan {
@@ -89,11 +92,13 @@ impl Vulkan {
         let (core, surface_composite) = VulkanCore::new(&window, application_name);
         let graphics_setup = VulkanGraphicsSetup::new(core.clone(), surface_composite, &window);
         let graphics_execution = VulkanGraphicsExecution::new(core.clone(), &graphics_setup);
+        let compute_setup = VulkanComputeSetup::new(core.clone());
 
         Vulkan {
             core,
             graphics_setup,
             graphics_execution,
+            compute_setup,
         }
     }
 
