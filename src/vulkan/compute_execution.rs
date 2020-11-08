@@ -7,6 +7,8 @@ use crate::scene::snow::MAX_SNOWFLAKES;
 use crate::vulkan::compute_setup::VulkanComputeSetup;
 use crate::vulkan::core::VulkanCore;
 
+const WORKGROUP_SIZE: u32 = 64;
+
 pub struct VulkanComputeExecution {
     core: VulkanCore,
 
@@ -138,7 +140,7 @@ impl VulkanComputeExecution {
                 &[],
             );
 
-            device.cmd_dispatch(command_buffer, MAX_SNOWFLAKES as u32, 1, 1);
+            device.cmd_dispatch(command_buffer, MAX_SNOWFLAKES as u32 / WORKGROUP_SIZE, 1, 1);
 
             device
                 .end_command_buffer(command_buffer)
