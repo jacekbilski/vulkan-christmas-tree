@@ -38,7 +38,7 @@ impl VulkanComputeSetup {
 
     fn create_descriptor_set_layout(device: &ash::Device) -> vk::DescriptorSetLayout {
         let descriptor_set_layout_bindings = [vk::DescriptorSetLayoutBinding {
-            binding: 0 as u32,
+            binding: 0,
             descriptor_type: vk::DescriptorType::STORAGE_BUFFER,
             descriptor_count: 1,
             stage_flags: vk::ShaderStageFlags::COMPUTE,

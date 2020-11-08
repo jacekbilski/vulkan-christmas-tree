@@ -140,7 +140,12 @@ impl VulkanComputeExecution {
                 &[],
             );
 
-            device.cmd_dispatch(command_buffer, MAX_SNOWFLAKES as u32 / WORKGROUP_SIZE, 1, 1);
+            device.cmd_dispatch(
+                command_buffer,
+                (MAX_SNOWFLAKES as f32 / WORKGROUP_SIZE as f32).ceil() as u32,
+                1,
+                1,
+            );
 
             device
                 .end_command_buffer(command_buffer)
