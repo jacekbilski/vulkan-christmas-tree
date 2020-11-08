@@ -12,9 +12,11 @@ pub struct Mesh {
 
 #[repr(C)]
 pub struct InstanceData {
-    pub color: Color,
     pub model: Matrix4<f32>,
+    pub color: Color,
+    pub padding: [f32; 2], // needed for std430 layout
 }
+
 impl InstanceData {
     pub fn get_binding_descriptions() -> [vk::VertexInputBindingDescription; 1] {
         [vk::VertexInputBindingDescription {
@@ -84,8 +86,9 @@ impl InstanceData {
 impl Default for InstanceData {
     fn default() -> Self {
         Self {
-            color: Color::default(),
             model: Matrix4::identity(),
+            color: Color::default(),
+            padding: [0.0, 0.0],
         }
     }
 }

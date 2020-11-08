@@ -178,6 +178,7 @@ pub fn create_meshes() -> Vec<Mesh> {
             InstanceData {
                 color: b.color,
                 model: Matrix4::from_translation(point.to_vec()).into(),
+                ..Default::default()
             }
         })
         .collect();

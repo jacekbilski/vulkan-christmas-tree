@@ -36,6 +36,7 @@ pub fn create_meshes() -> Vec<Mesh> {
         instances: vec![InstanceData {
             color,
             model: Matrix4::identity(),
+            ..Default::default()
         }],
     }]
 }

@@ -99,7 +99,11 @@ fn gen_instances(snowflakes: &Vec<Snowflake>, color: Color) -> Vec<InstanceData>
         });
         let translation = Matrix4::from_translation(snowflake.position.to_vec());
         let model = translation * rotation;
-        instances.push(InstanceData { model, color });
+        instances.push(InstanceData {
+            model,
+            color,
+            ..Default::default()
+        });
     }
     instances
 }

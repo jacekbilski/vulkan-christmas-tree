@@ -36,7 +36,11 @@ pub fn create_meshes() -> Vec<Mesh> {
         };
         let model: Matrix4<f32> =
             Matrix4::from_angle_z(Rad(PI)) * Matrix4::from_nonuniform_scale(1.8, 1., 1.8);
-        let instance = InstanceData { color, model };
+        let instance = InstanceData {
+            color,
+            model,
+            ..Default::default()
+        };
         let mesh = Mesh {
             vertices,
             indices,
