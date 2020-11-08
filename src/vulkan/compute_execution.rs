@@ -140,6 +140,18 @@ impl VulkanComputeExecution {
                 &[],
             );
 
+            let snow_velocity: f32 = 0.003;
+            let constants = [snow_velocity];
+            let constants_data =
+                std::slice::from_raw_parts(constants.as_ptr() as *const u8, constants.len() * 4);
+            device.cmd_push_constants(
+                command_buffer,
+                compute_setup.pipeline_layout,
+                vk::ShaderStageFlags::COMPUTE,
+                0,
+                &constants_data,
+            );
+
             device.cmd_dispatch(
                 command_buffer,
                 (MAX_SNOWFLAKES as f32 / WORKGROUP_SIZE as f32).ceil() as u32,
