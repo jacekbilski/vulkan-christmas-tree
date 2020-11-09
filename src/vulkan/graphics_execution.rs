@@ -546,7 +546,10 @@ impl VulkanGraphicsExecution {
             self.image_available_semaphores[self.current_frame],
             snow_calculated_semaphore,
         ];
-        let wait_stages = [vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT];
+        let wait_stages = [
+            vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT,
+            vk::PipelineStageFlags::VERTEX_INPUT,
+        ];
         let signal_semaphores = [self.render_finished_semaphores[self.current_frame]];
 
         let submit_infos = [vk::SubmitInfo {
