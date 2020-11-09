@@ -1,16 +1,17 @@
-use std::f32::consts::FRAC_PI_8;
-use std::time::Instant;
+use std::f32::consts::{FRAC_PI_8, TAU};
 
 use winit::event::{ElementState, Event, KeyboardInput, VirtualKeyCode, WindowEvent};
 use winit::event_loop::{ControlFlow, EventLoop};
 
 use vulkan::Vulkan;
 
+use crate::fps_calculator::FpsCalculator;
 use crate::scene::Scene;
 
 mod vulkan;
 
 mod coords;
+mod fps_calculator;
 mod fs;
 mod mesh;
 mod scene;
@@ -18,6 +19,8 @@ mod scene;
 // settings
 const SCR_WIDTH: u32 = 1920;
 const SCR_HEIGHT: u32 = 1080;
+
+const AUTO_ROTATION_SPEED_RAD_PER_SEC: f32 = TAU / 30.0;
 
 const APPLICATION_NAME: &'static str = "Vulkan Christmas Tree";
 
@@ -43,7 +46,7 @@ fn main_loop(
     mut scene: Scene,
     event_loop: EventLoop<()>,
 ) {
-    let mut ticker = Instant::now();
+    let mut fps_calculator = FpsCalculator::new();
     let mut rotate = true;
     event_loop.run(move |event, _, control_flow| match event {
         Event::WindowEvent {
@@ -106,12 +109,15 @@ fn main_loop(
             window.request_redraw();
         }
         Event::RedrawRequested(_window_id) => {
+            fps_calculator.tick();
             if rotate {
-                let delta = ticker.elapsed().subsec_micros() as f32;
-                scene.rotate_camera_horizontally(delta / 100_000.0, &mut vulkan);
+                let last_frame_time_secs = fps_calculator.last_frame_time_secs();
+                scene.rotate_camera_horizontally(
+                    AUTO_ROTATION_SPEED_RAD_PER_SEC * last_frame_time_secs,
+                    &mut vulkan,
+                );
             }
             vulkan.draw_frame();
-            ticker = Instant::now();
         }
         Event::LoopDestroyed => {
             vulkan.wait_device_idle();
