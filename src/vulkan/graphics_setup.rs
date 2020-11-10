@@ -231,7 +231,7 @@ impl VulkanGraphicsSetup {
     ) -> vk::SurfaceFormatKHR {
         // check if list contains most widely used R8G8B8A8 format with nonlinear color space
         let selected_format = available_formats.iter().find(|format| {
-            format.format == vk::Format::B8G8R8A8_SRGB
+            format.format == vk::Format::B8G8R8A8_UNORM
                 && format.color_space == vk::ColorSpaceKHR::SRGB_NONLINEAR
         });
 
