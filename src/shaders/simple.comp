@@ -1,10 +1,15 @@
 #version 450
 #define WORKGROUP_SIZE 64
 #define MAX_SNOWFLAKES 5000
+#define SNOW_X_MIN -10
+#define SNOW_X_MAX 10
 #define SNOW_Y_MIN -10
 #define SNOW_Y_MAX 5
+#define SNOW_Z_MIN -10
+#define SNOW_Z_MAX 10
 
 #define SNOW_FALL_VELOCITY 0.15
+#define SNOW_RANDOM_MOVES 0.002
 
 layout (local_size_x = WORKGROUP_SIZE, local_size_y = 1, local_size_z = 1) in;
 
@@ -28,13 +33,41 @@ layout(std430, set = 0, binding = 0) buffer buf {
     InstanceData instances[MAX_SNOWFLAKES];
 };
 
+uint rng_state;
+
+uint rand_lcg() {
+    rng_state = 1664525 * rng_state + 1013904223;
+    return rng_state;
+}
+
+float randomFromRange(float min, float max) {
+    float rnd = fract(float(rand_lcg()) * (1.0 / 4294967295.0));   // [0; 1)
+    return rnd * (max - min) + min;
+}
+
 void main() {
     if (gl_GlobalInvocationID.x >= MAX_SNOWFLAKES) {
         return;
     }
 
-    instances[gl_GlobalInvocationID.x].model[3][1] = instances[gl_GlobalInvocationID.x].model[3][1] + constants.lastFrameTimeSecs * SNOW_FALL_VELOCITY;
+    rng_state = gl_GlobalInvocationID.x + floatBitsToUint(constants.lastFrameTimeSecs);
+
+    instances[gl_GlobalInvocationID.x].model[3][0] += randomFromRange(-SNOW_RANDOM_MOVES, SNOW_RANDOM_MOVES);
+    instances[gl_GlobalInvocationID.x].model[3][1] += constants.lastFrameTimeSecs * SNOW_FALL_VELOCITY + randomFromRange(-SNOW_RANDOM_MOVES, SNOW_RANDOM_MOVES);
+    instances[gl_GlobalInvocationID.x].model[3][2] += randomFromRange(-SNOW_RANDOM_MOVES, SNOW_RANDOM_MOVES);
+    if (instances[gl_GlobalInvocationID.x].model[3][0] < SNOW_X_MIN) {
+        instances[gl_GlobalInvocationID.x].model[3][0] = SNOW_X_MIN;
+    }
+    if (instances[gl_GlobalInvocationID.x].model[3][0] > SNOW_X_MAX) {
+        instances[gl_GlobalInvocationID.x].model[3][0] = SNOW_X_MAX;
+    }
     if (instances[gl_GlobalInvocationID.x].model[3][1] > SNOW_Y_MAX) {
         instances[gl_GlobalInvocationID.x].model[3][1] -= (SNOW_Y_MAX - SNOW_Y_MIN);
+    }
+    if (instances[gl_GlobalInvocationID.x].model[3][2] < SNOW_Z_MIN) {
+        instances[gl_GlobalInvocationID.x].model[3][2] = SNOW_Z_MIN;
+    }
+    if (instances[gl_GlobalInvocationID.x].model[3][2] > SNOW_Z_MAX) {
+        instances[gl_GlobalInvocationID.x].model[3][2] = SNOW_Z_MAX;
     }
 }
