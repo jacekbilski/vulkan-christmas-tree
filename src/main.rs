@@ -110,14 +110,14 @@ fn main_loop(
         }
         Event::RedrawRequested(_window_id) => {
             fps_calculator.tick();
+            let last_frame_time_secs = fps_calculator.last_frame_time_secs();
             if rotate {
-                let last_frame_time_secs = fps_calculator.last_frame_time_secs();
                 scene.rotate_camera_horizontally(
                     AUTO_ROTATION_SPEED_RAD_PER_SEC * last_frame_time_secs,
                     &mut vulkan,
                 );
             }
-            vulkan.draw_frame();
+            vulkan.draw_frame(last_frame_time_secs);
         }
         Event::LoopDestroyed => {
             vulkan.wait_device_idle();

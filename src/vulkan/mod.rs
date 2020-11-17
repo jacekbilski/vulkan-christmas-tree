@@ -120,7 +120,7 @@ impl Vulkan {
 
         self.compute_execution = Some(VulkanComputeExecution::new(
             self.core.clone(),
-            &self.compute_setup,
+            self.compute_setup.clone(),
             buffer,
             std::mem::size_of::<InstanceData>() * MAX_SNOWFLAKES,
         ));
@@ -140,11 +140,11 @@ impl Vulkan {
             .update_lights(lights, &self.graphics_setup);
     }
 
-    pub fn draw_frame(&mut self) {
+    pub fn draw_frame(&mut self, last_frame_time_secs: f32) {
         self.compute_execution
-            .as_ref()
+            .as_mut()
             .unwrap()
-            .do_calculations(self.snow_calculated_semaphore);
+            .do_calculations(self.snow_calculated_semaphore, last_frame_time_secs);
         self.graphics_execution
             .draw_frame(&mut self.graphics_setup, self.snow_calculated_semaphore);
     }

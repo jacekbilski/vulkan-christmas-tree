@@ -4,10 +4,12 @@
 #define SNOW_Y_MIN -10
 #define SNOW_Y_MAX 5
 
+#define SNOW_FALL_VELOCITY 0.15
+
 layout (local_size_x = WORKGROUP_SIZE, local_size_y = 1, local_size_z = 1) in;
 
 layout (push_constant) uniform Constants {
-    float fallVelocity;
+    float lastFrameTimeSecs;
 } constants;
 
 struct Color {
@@ -31,7 +33,7 @@ void main() {
         return;
     }
 
-    instances[gl_GlobalInvocationID.x].model[3][1] = instances[gl_GlobalInvocationID.x].model[3][1] + constants.fallVelocity;
+    instances[gl_GlobalInvocationID.x].model[3][1] = instances[gl_GlobalInvocationID.x].model[3][1] + constants.lastFrameTimeSecs * SNOW_FALL_VELOCITY;
     if (instances[gl_GlobalInvocationID.x].model[3][1] > SNOW_Y_MAX) {
         instances[gl_GlobalInvocationID.x].model[3][1] -= (SNOW_Y_MAX - SNOW_Y_MIN);
     }

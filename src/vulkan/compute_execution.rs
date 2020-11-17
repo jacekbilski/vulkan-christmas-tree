@@ -11,8 +11,9 @@ const WORKGROUP_SIZE: u32 = 64;
 
 pub struct VulkanComputeExecution {
     core: VulkanCore,
+    compute_setup: VulkanComputeSetup,
 
-    _descriptor_set: vk::DescriptorSet,
+    descriptor_set: vk::DescriptorSet,
     command_buffer: vk::CommandBuffer,
 
     fence: vk::Fence,
@@ -21,7 +22,7 @@ pub struct VulkanComputeExecution {
 impl VulkanComputeExecution {
     pub fn new(
         core: VulkanCore,
-        compute_setup: &VulkanComputeSetup,
+        compute_setup: VulkanComputeSetup,
         buffer: vk::Buffer,
         buffer_size: usize,
     ) -> Self {
@@ -32,14 +33,19 @@ impl VulkanComputeExecution {
             buffer,
             buffer_size,
         );
-        let command_buffer =
-            VulkanComputeExecution::create_command_buffer(&core, compute_setup, descriptor_set);
+        let command_buffer = VulkanComputeExecution::create_command_buffer(
+            &core,
+            &compute_setup,
+            descriptor_set,
+            0.0,
+        );
         let fence = core.create_fence();
 
         VulkanComputeExecution {
             core,
+            compute_setup,
 
-            _descriptor_set: descriptor_set,
+            descriptor_set,
             command_buffer,
 
             fence,
@@ -98,6 +104,7 @@ impl VulkanComputeExecution {
         core: &VulkanCore,
         compute_setup: &VulkanComputeSetup,
         descriptor_set: vk::DescriptorSet,
+        last_frame_time_secs: f32,
     ) -> vk::CommandBuffer {
         let device = &core.device;
         let command_buffer_allocate_info = vk::CommandBufferAllocateInfo {
@@ -140,8 +147,7 @@ impl VulkanComputeExecution {
                 &[],
             );
 
-            let snow_velocity: f32 = 0.003;
-            let constants = snow_velocity.to_le_bytes();
+            let constants = last_frame_time_secs.to_le_bytes();
             device.cmd_push_constants(
                 command_buffer,
                 compute_setup.pipeline_layout,
@@ -165,8 +171,18 @@ impl VulkanComputeExecution {
         command_buffer
     }
 
-    pub fn do_calculations(&self, snow_calculated_semaphore: vk::Semaphore) {
-        let command_buffers = [self.command_buffer];
+    pub fn do_calculations(
+        &mut self,
+        snow_calculated_semaphore: vk::Semaphore,
+        last_frame_time_secs: f32,
+    ) {
+        let new_command_buffer = VulkanComputeExecution::create_command_buffer(
+            &self.core,
+            &self.compute_setup,
+            self.descriptor_set,
+            last_frame_time_secs,
+        );
+        let command_buffers = [new_command_buffer];
 
         let wait_fences = [self.fence];
         unsafe {
@@ -174,7 +190,14 @@ impl VulkanComputeExecution {
                 .device
                 .wait_for_fences(&wait_fences, true, std::u64::MAX)
                 .expect("Failed to wait for Fence!");
+
+            // only now I'm sure it's not used any more
+            self.core
+                .device
+                .free_command_buffers(self.compute_setup.command_pool, &vec![self.command_buffer]);
         }
+
+        self.command_buffer = new_command_buffer;
 
         let wait_stages = [vk::PipelineStageFlags::COMPUTE_SHADER];
         let signal_semaphores = [snow_calculated_semaphore];

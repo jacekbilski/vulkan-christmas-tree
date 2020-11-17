@@ -5,6 +5,7 @@ use ash::vk;
 
 use crate::vulkan::core::VulkanCore;
 
+#[derive(Clone)]
 pub struct VulkanComputeSetup {
     core: VulkanCore,
 
@@ -75,12 +76,12 @@ impl VulkanComputeSetup {
 
         let set_layouts = [descriptor_set_layout];
 
-        let snow_velocity = vk::PushConstantRange {
+        let last_frame_time_secs = vk::PushConstantRange {
             stage_flags: vk::ShaderStageFlags::COMPUTE,
             size: 4,
             offset: 0,
         };
-        let push_constant_ranges = [snow_velocity];
+        let push_constant_ranges = [last_frame_time_secs];
 
         let pipeline_layout_create_info = vk::PipelineLayoutCreateInfo {
             flags: vk::PipelineLayoutCreateFlags::empty(),
