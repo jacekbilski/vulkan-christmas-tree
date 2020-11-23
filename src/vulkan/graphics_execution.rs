@@ -458,43 +458,7 @@ impl VulkanGraphicsExecution {
                     &render_pass_begin_info,
                     vk::SubpassContents::INLINE,
                 );
-                device.cmd_bind_pipeline(
-                    command_buffer,
-                    vk::PipelineBindPoint::GRAPHICS,
-                    graphics_setup.pipeline,
-                );
-
-                let descriptor_sets_to_bind = [self.descriptor_sets[i]];
-                device.cmd_bind_descriptor_sets(
-                    command_buffer,
-                    vk::PipelineBindPoint::GRAPHICS,
-                    graphics_setup.pipeline_layout,
-                    0,
-                    &descriptor_sets_to_bind,
-                    &[],
-                );
-
-                for mesh in self.meshes.iter() {
-                    let vertex_buffers = [mesh.vertex_buffer, mesh.instance_buffer];
-                    let offsets = [0_u64, 0_u64];
-
-                    device.cmd_bind_vertex_buffers(command_buffer, 0, &vertex_buffers, &offsets);
-                    device.cmd_bind_index_buffer(
-                        command_buffer,
-                        mesh.index_buffer,
-                        0,
-                        vk::IndexType::UINT32,
-                    );
-                    device.cmd_draw_indexed(
-                        command_buffer,
-                        mesh.indices_no,
-                        mesh.instances_no,
-                        0,
-                        0,
-                        0,
-                    );
-                }
-
+                self.execute_static_objects_pipeline(graphics_setup, i, command_buffer);
                 device.cmd_end_render_pass(command_buffer);
 
                 device
@@ -504,6 +468,53 @@ impl VulkanGraphicsExecution {
         }
 
         self.command_buffers = command_buffers;
+    }
+
+    fn execute_static_objects_pipeline(
+        &self,
+        graphics_setup: &VulkanGraphicsSetup,
+        frame_index: usize,
+        command_buffer: vk::CommandBuffer,
+    ) {
+        let device = &self.core.device;
+        unsafe {
+            device.cmd_bind_pipeline(
+                command_buffer,
+                vk::PipelineBindPoint::GRAPHICS,
+                graphics_setup.pipeline,
+            );
+
+            let descriptor_sets_to_bind = [self.descriptor_sets[frame_index]];
+            device.cmd_bind_descriptor_sets(
+                command_buffer,
+                vk::PipelineBindPoint::GRAPHICS,
+                graphics_setup.pipeline_layout,
+                0,
+                &descriptor_sets_to_bind,
+                &[],
+            );
+
+            for mesh in self.meshes.iter() {
+                let vertex_buffers = [mesh.vertex_buffer, mesh.instance_buffer];
+                let offsets = [0_u64, 0_u64];
+
+                device.cmd_bind_vertex_buffers(command_buffer, 0, &vertex_buffers, &offsets);
+                device.cmd_bind_index_buffer(
+                    command_buffer,
+                    mesh.index_buffer,
+                    0,
+                    vk::IndexType::UINT32,
+                );
+                device.cmd_draw_indexed(
+                    command_buffer,
+                    mesh.indices_no,
+                    mesh.instances_no,
+                    0,
+                    0,
+                    0,
+                );
+            }
+        }
     }
 
     pub(crate) fn draw_frame(
