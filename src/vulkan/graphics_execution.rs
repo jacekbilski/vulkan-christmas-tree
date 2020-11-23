@@ -29,6 +29,19 @@ struct VulkanMesh {
     instances_no: u32,
 }
 
+impl VulkanMesh {
+    fn drop(&self, device: &ash::Device) {
+        unsafe {
+            device.destroy_buffer(self.instance_buffer, None);
+            device.free_memory(self.instance_buffer_memory, None);
+            device.destroy_buffer(self.index_buffer, None);
+            device.free_memory(self.index_buffer_memory, None);
+            device.destroy_buffer(self.vertex_buffer, None);
+            device.free_memory(self.vertex_buffer_memory, None);
+        }
+    }
+}
+
 #[repr(C)]
 #[derive(Clone, Debug, Copy)]
 struct CameraUBO {
@@ -738,14 +751,7 @@ impl VulkanGraphicsExecution {
                 device.destroy_fence(self.in_flight_fences[i], None);
             }
 
-            for mesh in self.meshes.iter() {
-                device.destroy_buffer(mesh.instance_buffer, None);
-                device.free_memory(mesh.instance_buffer_memory, None);
-                device.destroy_buffer(mesh.index_buffer, None);
-                device.free_memory(mesh.index_buffer_memory, None);
-                device.destroy_buffer(mesh.vertex_buffer, None);
-                device.free_memory(mesh.vertex_buffer_memory, None);
-            }
+            self.meshes.iter().for_each(|m| m.drop(&device));
             for j in 0..self.uniform_buffers.len() {
                 for i in 0..self.uniform_buffers[j].buffers.len() {
                     device.destroy_buffer(self.uniform_buffers[j].buffers[i], None);
