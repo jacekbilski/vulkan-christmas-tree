@@ -6,6 +6,22 @@ This repo is purely "for fun", it's about messing around with drawing something 
 
 This thing is _way_ more complex than OpenGL or WebGL. It is much more low-level, gives far more power, but also requires much more knowledge about how the things actually work under the hood. Long story short:
 
+## Some basic ideas
+
+First of all, Vulkan is asynchronous (well, OpenGL and WebGL also were, but not that much in your face). What I basically will do all the time is to prepare commands that will be doing something interesting, like copying data or executing shaders, and submit them to queues for execution. The tricky part is, I have no guarantees when or in what order those commans will be executed. When a specific order is required, fences and semaphores come into play.
+
+## Higher-level ideas
+
+What does it take to draw a single frame on the screen.
+
+Well, quite a lot. It consists of two parts: producing the final image and the presenting it on the screen. Presenting is easy, merely one command, but it requires putting together a few things. Producing the image to present is what is really interesting and complex.
+
+Producing the image (drawing in short) is done in a render pass. This pass contains one or more subpasses. Each subpass can be responsible for some other aspect of rendering the scene, like geometry, shadows, ray-tracing, etc. They mostly define what their output will look like, for example save color result to an image, use 4 samples per pixel and ignore produced depth data.
+
+Next are the pipelines. They again combine a lot of things, but the most important thing is that they put together shader modules and actual memory buffers together.
+
+## Low-level gory details
+
 ### Initialization
 
 To start I need an instance. I can also declare here what extensions do I require, like "VK_KHR_surface".
