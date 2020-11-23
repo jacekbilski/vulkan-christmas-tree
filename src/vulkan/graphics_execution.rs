@@ -354,40 +354,10 @@ impl VulkanGraphicsExecution {
         meshes: &Vec<Mesh>,
         graphics_setup: &VulkanGraphicsSetup,
     ) -> (vk::Buffer, vk::DeviceMemory) {
-        let mut vulkan_meshes: Vec<VulkanMesh> = vec![];
-
-        for mesh in meshes.iter() {
-            let (vertex_buffer, vertex_buffer_memory) =
-                VulkanGraphicsExecution::create_vertex_buffer(
-                    &self.core,
-                    graphics_setup.command_pool,
-                    &mesh.vertices,
-                );
-            let (index_buffer, index_buffer_memory) = VulkanGraphicsExecution::create_index_buffer(
-                &self.core,
-                graphics_setup.command_pool,
-                &mesh.indices,
-            );
-            let indices_no = mesh.indices.len() as u32;
-            let (instance_buffer, instance_buffer_memory) =
-                VulkanGraphicsExecution::create_vertex_buffer(
-                    &self.core,
-                    graphics_setup.command_pool,
-                    &mesh.instances,
-                );
-            let instances_no = mesh.instances.len() as u32;
-            vulkan_meshes.push(VulkanMesh {
-                vertex_buffer,
-                vertex_buffer_memory,
-                index_buffer,
-                index_buffer_memory,
-                indices_no,
-                instance_buffer,
-                instance_buffer_memory,
-                instances_no,
-            });
-        }
-        self.meshes = vulkan_meshes;
+        self.meshes = meshes
+            .iter()
+            .map(|m| self.to_vulkan_mesh(graphics_setup, m))
+            .collect();
         self.create_command_buffers(&graphics_setup);
 
         // TODO - dirty hack, last one is the snow
@@ -396,6 +366,37 @@ impl VulkanGraphicsExecution {
             last_mesh.instance_buffer.clone(),
             last_mesh.instance_buffer_memory.clone(),
         )
+    }
+
+    fn to_vulkan_mesh(&self, graphics_setup: &VulkanGraphicsSetup, mesh: &Mesh) -> VulkanMesh {
+        let (vertex_buffer, vertex_buffer_memory) = VulkanGraphicsExecution::create_vertex_buffer(
+            &self.core,
+            graphics_setup.command_pool,
+            &mesh.vertices,
+        );
+        let (index_buffer, index_buffer_memory) = VulkanGraphicsExecution::create_index_buffer(
+            &self.core,
+            graphics_setup.command_pool,
+            &mesh.indices,
+        );
+        let indices_no = mesh.indices.len() as u32;
+        let (instance_buffer, instance_buffer_memory) =
+            VulkanGraphicsExecution::create_vertex_buffer(
+                &self.core,
+                graphics_setup.command_pool,
+                &mesh.instances,
+            );
+        let instances_no = mesh.instances.len() as u32;
+        VulkanMesh {
+            vertex_buffer,
+            vertex_buffer_memory,
+            index_buffer,
+            index_buffer_memory,
+            indices_no,
+            instance_buffer,
+            instance_buffer_memory,
+            instances_no,
+        }
     }
 
     fn create_command_buffers(&mut self, graphics_setup: &VulkanGraphicsSetup) {
