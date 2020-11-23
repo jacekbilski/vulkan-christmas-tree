@@ -122,7 +122,8 @@ pub(crate) struct VulkanGraphicsExecution {
     clear_value: [f32; 4],
 
     uniform_buffers: Vec<UniformBuffer>,
-    meshes: Vec<VulkanMesh>,
+    static_meshes: Vec<VulkanMesh>,
+    snow_mesh: Vec<VulkanMesh>,
     descriptor_sets: Vec<vk::DescriptorSet>,
     command_buffers: Vec<vk::CommandBuffer>,
 
@@ -155,7 +156,8 @@ impl VulkanGraphicsExecution {
             clear_value: [0.0, 0.0, 0.0, 0.0],
 
             uniform_buffers,
-            meshes: vec![],
+            static_meshes: vec![],
+            snow_mesh: vec![],
             descriptor_sets,
             command_buffers: vec![],
 
@@ -362,19 +364,28 @@ impl VulkanGraphicsExecution {
         self.clear_value = clear_value;
     }
 
-    pub(crate) fn set_meshes(
+    pub(crate) fn set_static_meshes(
+        &mut self,
+        meshes: &Vec<Mesh>,
+        graphics_setup: &VulkanGraphicsSetup,
+    ) {
+        self.static_meshes = meshes
+            .iter()
+            .map(|m| self.to_vulkan_mesh(graphics_setup, m))
+            .collect();
+    }
+
+    pub(crate) fn set_snow_mesh(
         &mut self,
         meshes: &Vec<Mesh>,
         graphics_setup: &VulkanGraphicsSetup,
     ) -> (vk::Buffer, vk::DeviceMemory) {
-        self.meshes = meshes
+        self.snow_mesh = meshes
             .iter()
             .map(|m| self.to_vulkan_mesh(graphics_setup, m))
             .collect();
-        self.create_command_buffers(&graphics_setup);
 
-        // TODO - dirty hack, last one is the snow
-        let last_mesh = self.meshes.last().unwrap();
+        let last_mesh = self.snow_mesh.last().unwrap();
         (
             last_mesh.instance_buffer.clone(),
             last_mesh.instance_buffer_memory.clone(),
@@ -412,7 +423,7 @@ impl VulkanGraphicsExecution {
         }
     }
 
-    fn create_command_buffers(&mut self, graphics_setup: &VulkanGraphicsSetup) {
+    pub(crate) fn create_command_buffers(&mut self, graphics_setup: &VulkanGraphicsSetup) {
         let device = &self.core.device;
         let command_buffer_allocate_info = vk::CommandBufferAllocateInfo {
             command_buffer_count: graphics_setup.swapchain_composite.framebuffers.len() as u32,
@@ -473,6 +484,7 @@ impl VulkanGraphicsExecution {
                     vk::SubpassContents::INLINE,
                 );
                 self.execute_static_objects_pipeline(graphics_setup, i, command_buffer);
+                self.execute_snow_pipeline(graphics_setup, i, command_buffer);
                 device.cmd_end_render_pass(command_buffer);
 
                 device
@@ -508,7 +520,54 @@ impl VulkanGraphicsExecution {
                 &[],
             );
 
-            for mesh in self.meshes.iter() {
+            for mesh in self.static_meshes.iter() {
+                let vertex_buffers = [mesh.vertex_buffer, mesh.instance_buffer];
+                let offsets = [0_u64, 0_u64];
+
+                device.cmd_bind_vertex_buffers(command_buffer, 0, &vertex_buffers, &offsets);
+                device.cmd_bind_index_buffer(
+                    command_buffer,
+                    mesh.index_buffer,
+                    0,
+                    vk::IndexType::UINT32,
+                );
+                device.cmd_draw_indexed(
+                    command_buffer,
+                    mesh.indices_no,
+                    mesh.instances_no,
+                    0,
+                    0,
+                    0,
+                );
+            }
+        }
+    }
+
+    fn execute_snow_pipeline(
+        &self,
+        graphics_setup: &VulkanGraphicsSetup,
+        frame_index: usize,
+        command_buffer: vk::CommandBuffer,
+    ) {
+        let device = &self.core.device;
+        unsafe {
+            device.cmd_bind_pipeline(
+                command_buffer,
+                vk::PipelineBindPoint::GRAPHICS,
+                graphics_setup.pipeline,
+            );
+
+            let descriptor_sets_to_bind = [self.descriptor_sets[frame_index]];
+            device.cmd_bind_descriptor_sets(
+                command_buffer,
+                vk::PipelineBindPoint::GRAPHICS,
+                graphics_setup.pipeline_layout,
+                0,
+                &descriptor_sets_to_bind,
+                &[],
+            );
+
+            for mesh in self.snow_mesh.iter() {
                 let vertex_buffers = [mesh.vertex_buffer, mesh.instance_buffer];
                 let offsets = [0_u64, 0_u64];
 
@@ -751,7 +810,8 @@ impl VulkanGraphicsExecution {
                 device.destroy_fence(self.in_flight_fences[i], None);
             }
 
-            self.meshes.iter().for_each(|m| m.drop(&device));
+            self.static_meshes.iter().for_each(|m| m.drop(&device));
+            self.snow_mesh.iter().for_each(|m| m.drop(&device));
             for j in 0..self.uniform_buffers.len() {
                 for i in 0..self.uniform_buffers[j].buffers.len() {
                     device.destroy_buffer(self.uniform_buffers[j].buffers[i], None);

@@ -113,10 +113,15 @@ impl Vulkan {
         }
     }
 
-    pub fn set_meshes(&mut self, meshes: &Vec<Mesh>) {
+    pub fn set_static_meshes(&mut self, meshes: &Vec<Mesh>) {
+        self.graphics_execution
+            .set_static_meshes(meshes, &mut self.graphics_setup);
+    }
+
+    pub fn set_snow_mesh(&mut self, meshes: &Vec<Mesh>) {
         let (buffer, _buffer_memory) = self
             .graphics_execution
-            .set_meshes(meshes, &mut self.graphics_setup);
+            .set_snow_mesh(meshes, &mut self.graphics_setup);
 
         self.compute_execution = Some(VulkanComputeExecution::new(
             self.core.clone(),
@@ -124,6 +129,11 @@ impl Vulkan {
             buffer,
             std::mem::size_of::<InstanceData>() * MAX_SNOWFLAKES,
         ));
+    }
+
+    pub fn scene_complete(&mut self) {
+        self.graphics_execution
+            .create_command_buffers(&self.graphics_setup);
     }
 
     pub fn set_clear_value(&mut self, clear_value: [f32; 4]) {

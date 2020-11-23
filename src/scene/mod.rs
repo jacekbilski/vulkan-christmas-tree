@@ -63,8 +63,9 @@ impl Scene {
         meshes.extend(ground::create_meshes());
         meshes.extend(baubles::create_meshes());
         meshes.extend(tree::create_meshes());
-        meshes.extend(snow::create_meshes());
-        vulkan.set_meshes(&meshes);
+        vulkan.set_static_meshes(&meshes);
+        vulkan.set_snow_mesh(&snow::create_meshes());
+        vulkan.scene_complete();
     }
 
     pub fn rotate_camera_horizontally(&mut self, angle: f32, vulkan: &mut Vulkan) {
