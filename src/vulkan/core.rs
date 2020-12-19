@@ -4,7 +4,11 @@ use std::os::raw::{c_char, c_void};
 use std::ptr;
 
 use ash::extensions::ext::DebugUtils;
-use ash::extensions::khr::{Surface, WaylandSurface, XlibSurface};
+#[cfg(all(unix, not(target_os = "android"), not(target_os = "macos")))]
+use ash::extensions::khr::{WaylandSurface, XlibSurface};
+use ash::extensions::khr::Surface;
+#[cfg(target_os = "windows")]
+use ash::extensions::khr::Win32Surface;
 use ash::version::{DeviceV1_0, EntryV1_0, InstanceV1_0};
 use ash::vk;
 
@@ -487,6 +491,39 @@ impl VulkanCore {
         }
     }
 
+    #[cfg(target_os = "windows")]
+    fn create_surface(
+        entry: &ash::Entry,
+        instance: &ash::Instance,
+        window: &winit::window::Window,
+    ) -> SurfaceComposite {
+        let surface = unsafe {
+            use winapi::shared::windef::HWND;
+            use winapi::um::libloaderapi::GetModuleHandleW;
+            use winit::platform::windows::WindowExtWindows;
+
+            let hwnd = window.hwnd() as HWND;
+            let hinstance = GetModuleHandleW(ptr::null()) as *const c_void;
+            let win32_create_info = vk::Win32SurfaceCreateInfoKHR {
+                s_type: vk::StructureType::WIN32_SURFACE_CREATE_INFO_KHR,
+                p_next: ptr::null(),
+                flags: Default::default(),
+                hinstance,
+                hwnd: hwnd as *const c_void,
+            };
+            let loader = Win32Surface::new(entry, instance);
+            loader
+                .create_win32_surface(&win32_create_info, None)
+                .expect("Failed to create surface.")
+        };
+        let surface_loader = ash::extensions::khr::Surface::new(entry, instance);
+
+        SurfaceComposite {
+            loader: surface_loader,
+            surface,
+        }
+    }
+
     fn pick_physical_device(
         instance: &ash::Instance,
         surface_composite: &SurfaceComposite,
@@ -675,11 +712,21 @@ impl VulkanCore {
         vec!["VK_LAYER_KHRONOS_validation"]
     }
 
+    #[cfg(all(unix, not(target_os = "android"), not(target_os = "macos")))]
     fn required_extension_names() -> Vec<&'static str> {
         vec![
             Surface::name().to_str().unwrap(),
             XlibSurface::name().to_str().unwrap(),
             WaylandSurface::name().to_str().unwrap(),
+            DebugUtils::name().to_str().unwrap(),
+        ]
+    }
+
+    #[cfg(all(windows))]
+    fn required_extension_names() -> Vec<&'static str> {
+        vec![
+            Surface::name().to_str().unwrap(),
+            Win32Surface::name().to_str().unwrap(),
             DebugUtils::name().to_str().unwrap(),
         ]
     }

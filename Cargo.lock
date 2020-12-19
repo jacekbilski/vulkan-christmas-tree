@@ -1141,6 +1141,7 @@ dependencies = [
  "rstest",
  "shaderc",
  "tobj",
+ "winapi 0.3.9",
  "winit",
 ]
 
