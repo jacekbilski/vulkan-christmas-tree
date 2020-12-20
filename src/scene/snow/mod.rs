@@ -21,6 +21,17 @@ pub const MAX_SNOWFLAKES: usize = 5_000;
 pub struct Snowflake {
     pub position: Point3<f32>,
     pub rotation: Vector3<Rad<f32>>,
+    pub padding: [f32; 2], // needed for std430 layout
+}
+
+impl Default for Snowflake {
+    fn default() -> Self {
+        Self {
+            position: Point3::new(0.0, 0.0, 0.0),
+            rotation: vec3(Rad(0.0), Rad(0.0), Rad(0.0)),
+            padding: [0.0, 0.0],
+        }
+    }
 }
 
 pub fn create_meshes() -> (Vec<Snowflake>, Vec<Mesh>) {
@@ -87,7 +98,11 @@ fn gen_snowflakes() -> Vec<Snowflake> {
         let z_rotation = Rad(rng.sample(angle_range));
         let position = Point3::new(x_position, y_position, z_position);
         let rotation = vec3(x_rotation, y_rotation, z_rotation);
-        snowflakes.push(Snowflake { position, rotation });
+        snowflakes.push(Snowflake {
+            position,
+            rotation,
+            ..Default::default()
+        });
     }
     snowflakes
 }

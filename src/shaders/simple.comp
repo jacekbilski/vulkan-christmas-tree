@@ -54,6 +54,37 @@ float randomFromRange(float min, float max) {
     return rnd * (max - min) + min;
 }
 
+void moveSnowflake() {
+    uint i = gl_GlobalInvocationID.x;
+
+    snowflakes[i].position.x += randomFromRange(-SNOW_RANDOM_MOVES, SNOW_RANDOM_MOVES);
+    snowflakes[i].position.y += constants.lastFrameTimeSecs * SNOW_FALL_VELOCITY + randomFromRange(-SNOW_RANDOM_MOVES, SNOW_RANDOM_MOVES);
+    snowflakes[i].position.z += randomFromRange(-SNOW_RANDOM_MOVES, SNOW_RANDOM_MOVES);
+    if (snowflakes[i].position.x < SNOW_X_MIN) {
+        snowflakes[i].position.x = SNOW_X_MIN;
+    }
+    if (snowflakes[i].position.x > SNOW_X_MAX) {
+        snowflakes[i].position.x = SNOW_X_MAX;
+    }
+    if (snowflakes[i].position.y > SNOW_Y_MAX) {
+        snowflakes[i].position.y -= (SNOW_Y_MAX - SNOW_Y_MIN);
+    }
+    if (snowflakes[i].position.z < SNOW_Z_MIN) {
+        snowflakes[i].position.z = SNOW_Z_MIN;
+    }
+    if (snowflakes[i].position.z > SNOW_Z_MAX) {
+        snowflakes[i].position.z = SNOW_Z_MAX;
+    }
+}
+
+void recalculateInstance() {
+    uint i = gl_GlobalInvocationID.x;
+
+    instances[i].model[3].x = snowflakes[i].position.x;
+    instances[i].model[3].y = snowflakes[i].position.y;
+    instances[i].model[3].z = snowflakes[i].position.z;
+}
+
 void main() {
     if (gl_GlobalInvocationID.x >= MAX_SNOWFLAKES) {
         return;
@@ -61,22 +92,6 @@ void main() {
 
     rng_state = gl_GlobalInvocationID.x + floatBitsToUint(constants.lastFrameTimeSecs);
 
-    instances[gl_GlobalInvocationID.x].model[3][0] += randomFromRange(-SNOW_RANDOM_MOVES, SNOW_RANDOM_MOVES);
-    instances[gl_GlobalInvocationID.x].model[3][1] += constants.lastFrameTimeSecs * SNOW_FALL_VELOCITY + randomFromRange(-SNOW_RANDOM_MOVES, SNOW_RANDOM_MOVES);
-    instances[gl_GlobalInvocationID.x].model[3][2] += randomFromRange(-SNOW_RANDOM_MOVES, SNOW_RANDOM_MOVES);
-    if (instances[gl_GlobalInvocationID.x].model[3][0] < SNOW_X_MIN) {
-        instances[gl_GlobalInvocationID.x].model[3][0] = SNOW_X_MIN;
-    }
-    if (instances[gl_GlobalInvocationID.x].model[3][0] > SNOW_X_MAX) {
-        instances[gl_GlobalInvocationID.x].model[3][0] = SNOW_X_MAX;
-    }
-    if (instances[gl_GlobalInvocationID.x].model[3][1] > SNOW_Y_MAX) {
-        instances[gl_GlobalInvocationID.x].model[3][1] -= (SNOW_Y_MAX - SNOW_Y_MIN);
-    }
-    if (instances[gl_GlobalInvocationID.x].model[3][2] < SNOW_Z_MIN) {
-        instances[gl_GlobalInvocationID.x].model[3][2] = SNOW_Z_MIN;
-    }
-    if (instances[gl_GlobalInvocationID.x].model[3][2] > SNOW_Z_MAX) {
-        instances[gl_GlobalInvocationID.x].model[3][2] = SNOW_Z_MAX;
-    }
+    moveSnowflake();
+    recalculateInstance();
 }
