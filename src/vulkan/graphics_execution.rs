@@ -716,6 +716,35 @@ impl VulkanGraphicsExecution {
         command_pool: vk::CommandPool,
         data: &[T],
     ) -> (vk::Buffer, vk::DeviceMemory) {
+        VulkanGraphicsExecution::create_buffer(
+            core,
+            command_pool,
+            vk::BufferUsageFlags::TRANSFER_DST
+                | vk::BufferUsageFlags::VERTEX_BUFFER
+                | vk::BufferUsageFlags::STORAGE_BUFFER,
+            data,
+        )
+    }
+
+    fn create_index_buffer(
+        core: &VulkanCore,
+        command_pool: vk::CommandPool,
+        data: &[u32],
+    ) -> (vk::Buffer, vk::DeviceMemory) {
+        VulkanGraphicsExecution::create_buffer(
+            core,
+            command_pool,
+            vk::BufferUsageFlags::TRANSFER_DST | vk::BufferUsageFlags::INDEX_BUFFER,
+            data,
+        )
+    }
+
+    fn create_buffer<T>(
+        core: &VulkanCore,
+        command_pool: vk::CommandPool,
+        usage: vk::BufferUsageFlags,
+        data: &[T],
+    ) -> (vk::Buffer, vk::DeviceMemory) {
         let buffer_size = std::mem::size_of_val(data) as vk::DeviceSize;
         let (staging_buffer, staging_buffer_memory) = core.create_buffer(
             buffer_size,
@@ -739,66 +768,17 @@ impl VulkanGraphicsExecution {
             core.device.unmap_memory(staging_buffer_memory);
         }
 
-        let (vertex_buffer, vertex_buffer_memory) = core.create_buffer(
-            buffer_size,
-            vk::BufferUsageFlags::TRANSFER_DST
-                | vk::BufferUsageFlags::VERTEX_BUFFER
-                | vk::BufferUsageFlags::STORAGE_BUFFER,
-            vk::MemoryPropertyFlags::DEVICE_LOCAL,
-        );
+        let (buffer, buffer_memory) =
+            core.create_buffer(buffer_size, usage, vk::MemoryPropertyFlags::DEVICE_LOCAL);
 
-        core.copy_buffer(command_pool, staging_buffer, vertex_buffer, buffer_size);
+        core.copy_buffer(command_pool, staging_buffer, buffer, buffer_size);
 
         unsafe {
             core.device.destroy_buffer(staging_buffer, None);
             core.device.free_memory(staging_buffer_memory, None);
         }
 
-        (vertex_buffer, vertex_buffer_memory)
-    }
-
-    fn create_index_buffer(
-        core: &VulkanCore,
-        command_pool: vk::CommandPool,
-        data: &[u32],
-    ) -> (vk::Buffer, vk::DeviceMemory) {
-        let buffer_size = std::mem::size_of_val(data) as vk::DeviceSize;
-        let (staging_buffer, staging_buffer_memory) = core.create_buffer(
-            buffer_size,
-            vk::BufferUsageFlags::TRANSFER_SRC,
-            vk::MemoryPropertyFlags::HOST_VISIBLE | vk::MemoryPropertyFlags::HOST_COHERENT,
-        );
-
-        unsafe {
-            let data_ptr = core
-                .device
-                .map_memory(
-                    staging_buffer_memory,
-                    0,
-                    buffer_size,
-                    vk::MemoryMapFlags::empty(),
-                )
-                .expect("Failed to Map Memory") as *mut u32;
-
-            data_ptr.copy_from_nonoverlapping(data.as_ptr(), data.len());
-
-            core.device.unmap_memory(staging_buffer_memory);
-        }
-
-        let (index_buffer, index_buffer_memory) = core.create_buffer(
-            buffer_size,
-            vk::BufferUsageFlags::TRANSFER_DST | vk::BufferUsageFlags::INDEX_BUFFER,
-            vk::MemoryPropertyFlags::DEVICE_LOCAL,
-        );
-
-        core.copy_buffer(command_pool, staging_buffer, index_buffer, buffer_size);
-
-        unsafe {
-            core.device.destroy_buffer(staging_buffer, None);
-            core.device.free_memory(staging_buffer_memory, None);
-        }
-
-        (index_buffer, index_buffer_memory)
+        (buffer, buffer_memory)
     }
 
     pub(crate) fn drop(&mut self) {
