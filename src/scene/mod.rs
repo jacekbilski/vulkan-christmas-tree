@@ -64,7 +64,8 @@ impl Scene {
         meshes.extend(baubles::create_meshes());
         meshes.extend(tree::create_meshes());
         vulkan.set_static_meshes(&meshes);
-        vulkan.set_snow_mesh(&snow::create_meshes());
+        let (snowflakes, snow_meshes) = snow::create_meshes();
+        vulkan.set_snow_mesh(&snowflakes, &snow_meshes);
         vulkan.scene_complete();
     }
 

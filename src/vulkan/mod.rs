@@ -5,7 +5,7 @@ use memoffset::offset_of;
 use crate::mesh::{InstanceData, Mesh};
 use crate::scene::camera::Camera;
 use crate::scene::lights::Lights;
-use crate::scene::snow::MAX_SNOWFLAKES;
+use crate::scene::snow::{Snowflake, MAX_SNOWFLAKES};
 use crate::vulkan::compute_execution::VulkanComputeExecution;
 use crate::vulkan::compute_setup::VulkanComputeSetup;
 use crate::vulkan::core::VulkanCore;
@@ -118,15 +118,16 @@ impl Vulkan {
             .set_static_meshes(meshes, &mut self.graphics_setup);
     }
 
-    pub fn set_snow_mesh(&mut self, meshes: &Vec<Mesh>) {
-        let (buffer, _buffer_memory) = self
+    pub fn set_snow_mesh(&mut self, snowflakes: &Vec<Snowflake>, meshes: &Vec<Mesh>) {
+        let (drawing_buffer, _buffer_memory) = self
             .graphics_execution
             .set_snow_mesh(meshes, &mut self.graphics_setup);
 
         self.compute_execution = Some(VulkanComputeExecution::new(
             self.core.clone(),
             self.compute_setup.clone(),
-            buffer,
+            snowflakes,
+            drawing_buffer,
             std::mem::size_of::<InstanceData>() * MAX_SNOWFLAKES,
         ));
     }

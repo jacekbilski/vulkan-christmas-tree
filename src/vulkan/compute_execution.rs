@@ -3,7 +3,7 @@ use std::ptr;
 use ash::version::DeviceV1_0;
 use ash::vk;
 
-use crate::scene::snow::MAX_SNOWFLAKES;
+use crate::scene::snow::{Snowflake, MAX_SNOWFLAKES};
 use crate::vulkan::compute_setup::VulkanComputeSetup;
 use crate::vulkan::core::VulkanCore;
 
@@ -16,6 +16,9 @@ pub struct VulkanComputeExecution {
     descriptor_set: vk::DescriptorSet,
     command_buffer: vk::CommandBuffer,
 
+    snowflakes_buffer: vk::Buffer,
+    snowflakes_buffer_memory: vk::DeviceMemory,
+
     fence: vk::Fence,
 }
 
@@ -23,15 +26,23 @@ impl VulkanComputeExecution {
     pub fn new(
         core: VulkanCore,
         compute_setup: VulkanComputeSetup,
-        buffer: vk::Buffer,
-        buffer_size: usize,
+        snowflakes: &Vec<Snowflake>,
+        drawing_buffer: vk::Buffer,
+        drawing_buffer_size: usize,
     ) -> Self {
+        let (snowflakes_buffer, snowflakes_buffer_memory) = core.create_data_buffer(
+            compute_setup.command_pool,
+            vk::BufferUsageFlags::STORAGE_BUFFER,
+            snowflakes,
+        );
         let descriptor_set = VulkanComputeExecution::create_descriptor_set(
             &core.device,
             compute_setup.descriptor_pool,
             compute_setup.descriptor_set_layout,
-            buffer,
-            buffer_size,
+            snowflakes_buffer,
+            std::mem::size_of::<Snowflake>() * snowflakes.len(),
+            drawing_buffer,
+            drawing_buffer_size,
         );
         let command_buffer = VulkanComputeExecution::create_command_buffer(
             &core,
@@ -48,6 +59,9 @@ impl VulkanComputeExecution {
             descriptor_set,
             command_buffer,
 
+            snowflakes_buffer,
+            snowflakes_buffer_memory,
+
             fence,
         }
     }
@@ -56,8 +70,10 @@ impl VulkanComputeExecution {
         device: &ash::Device,
         descriptor_pool: vk::DescriptorPool,
         descriptor_set_layout: vk::DescriptorSetLayout,
-        buffer: vk::Buffer,
-        buffer_size: usize,
+        snowflakes_buffer: vk::Buffer,
+        snowflakes_buffer_size: usize,
+        drawing_buffer: vk::Buffer,
+        drawing_buffer_size: usize,
     ) -> vk::DescriptorSet {
         let descriptor_set_layouts = [descriptor_set_layout];
         let descriptor_set_allocate_info = vk::DescriptorSetAllocateInfo {
@@ -74,11 +90,18 @@ impl VulkanComputeExecution {
         };
 
         for &descritptor_set in descriptor_sets.iter() {
-            let descriptor_buffer_info = [vk::DescriptorBufferInfo {
-                buffer,
-                offset: 0,
-                range: buffer_size as u64,
-            }];
+            let descriptor_buffer_info = [
+                vk::DescriptorBufferInfo {
+                    buffer: snowflakes_buffer,
+                    offset: 0,
+                    range: snowflakes_buffer_size as u64,
+                },
+                vk::DescriptorBufferInfo {
+                    buffer: drawing_buffer,
+                    offset: 0,
+                    range: drawing_buffer_size as u64,
+                },
+            ];
 
             let descriptor_write_sets = [vk::WriteDescriptorSet {
                 dst_set: descritptor_set,
@@ -226,10 +249,11 @@ impl VulkanComputeExecution {
 
     pub fn drop(&self, compute_setup: &VulkanComputeSetup) {
         unsafe {
-            self.core
-                .device
-                .free_command_buffers(compute_setup.command_pool, &vec![self.command_buffer]);
-            self.core.device.destroy_fence(self.fence, None);
+            let device = &self.core.device;
+            device.destroy_buffer(self.snowflakes_buffer, None);
+            device.free_memory(self.snowflakes_buffer_memory, None);
+            device.free_command_buffers(compute_setup.command_pool, &vec![self.command_buffer]);
+            device.destroy_fence(self.fence, None);
         }
     }
 }

@@ -17,6 +17,11 @@ layout (push_constant) uniform Constants {
     float lastFrameTimeSecs;
 } constants;
 
+struct Snowflake {
+    vec3 position;
+    vec3 rotation;
+};
+
 struct Color {
     vec3 ambient;
     vec3 diffuse;
@@ -29,7 +34,11 @@ struct InstanceData {
     Color color;
 };
 
-layout(std430, set = 0, binding = 0) buffer buf {
+layout(std430, set = 0, binding = 0) buffer snowflakesBuf {
+    Snowflake snowflakes[MAX_SNOWFLAKES];
+};
+
+layout(std430, set = 0, binding = 1) buffer instancesBuf {
     InstanceData instances[MAX_SNOWFLAKES];
 };
 

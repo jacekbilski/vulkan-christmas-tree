@@ -18,12 +18,12 @@ const SNOW_Z_MAX: f32 = 10.;
 
 pub const MAX_SNOWFLAKES: usize = 5_000;
 
-struct Snowflake {
-    position: Point3<f32>,
-    rotation: Vector3<Rad<f32>>,
+pub struct Snowflake {
+    pub position: Point3<f32>,
+    pub rotation: Vector3<Rad<f32>>,
 }
 
-pub fn create_meshes() -> Vec<Mesh> {
+pub fn create_meshes() -> (Vec<Snowflake>, Vec<Mesh>) {
     let color = Color {
         ambient: [1.0, 1.0, 1.0],
         diffuse: [0.623960, 0.686685, 0.693872],
@@ -33,11 +33,14 @@ pub fn create_meshes() -> Vec<Mesh> {
     let snowflakes = gen_snowflakes();
     let (vertices, indices) = gen_snowflake_mesh();
     let instances = gen_instances(&snowflakes, color);
-    vec![Mesh {
-        vertices,
-        indices,
-        instances,
-    }]
+    (
+        snowflakes,
+        vec![Mesh {
+            vertices,
+            indices,
+            instances,
+        }],
+    )
 }
 
 fn gen_snowflake_mesh() -> (Vec<Vertex>, Vec<u32>) {

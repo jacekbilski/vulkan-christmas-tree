@@ -186,6 +186,51 @@ impl VulkanCore {
         }
     }
 
+    pub fn create_data_buffer<T>(
+        &self,
+        command_pool: vk::CommandPool,
+        usage: vk::BufferUsageFlags,
+        data: &[T],
+    ) -> (vk::Buffer, vk::DeviceMemory) {
+        let buffer_size = std::mem::size_of_val(data) as vk::DeviceSize;
+        let (staging_buffer, staging_buffer_memory) = self.create_buffer(
+            buffer_size,
+            vk::BufferUsageFlags::TRANSFER_SRC,
+            vk::MemoryPropertyFlags::HOST_VISIBLE | vk::MemoryPropertyFlags::HOST_COHERENT,
+        );
+
+        unsafe {
+            let data_ptr = self
+                .device
+                .map_memory(
+                    staging_buffer_memory,
+                    0,
+                    buffer_size,
+                    vk::MemoryMapFlags::empty(),
+                )
+                .expect("Failed to Map Memory") as *mut T;
+
+            data_ptr.copy_from_nonoverlapping(data.as_ptr(), data.len());
+
+            self.device.unmap_memory(staging_buffer_memory);
+        }
+
+        let (buffer, buffer_memory) = self.create_buffer(
+            buffer_size,
+            usage | vk::BufferUsageFlags::TRANSFER_DST,
+            vk::MemoryPropertyFlags::DEVICE_LOCAL,
+        );
+
+        self.copy_buffer(command_pool, staging_buffer, buffer, buffer_size);
+
+        unsafe {
+            self.device.destroy_buffer(staging_buffer, None);
+            self.device.free_memory(staging_buffer_memory, None);
+        }
+
+        (buffer, buffer_memory)
+    }
+
     pub(crate) fn create_buffer(
         &self,
         size: vk::DeviceSize,

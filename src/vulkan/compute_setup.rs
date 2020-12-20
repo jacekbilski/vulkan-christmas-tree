@@ -38,13 +38,22 @@ impl VulkanComputeSetup {
     }
 
     fn create_descriptor_set_layout(device: &ash::Device) -> vk::DescriptorSetLayout {
-        let descriptor_set_layout_bindings = [vk::DescriptorSetLayoutBinding {
-            binding: 0,
-            descriptor_type: vk::DescriptorType::STORAGE_BUFFER,
-            descriptor_count: 1,
-            stage_flags: vk::ShaderStageFlags::COMPUTE,
-            ..Default::default()
-        }];
+        let descriptor_set_layout_bindings = [
+            vk::DescriptorSetLayoutBinding {
+                binding: 0,
+                descriptor_type: vk::DescriptorType::STORAGE_BUFFER,
+                descriptor_count: 1,
+                stage_flags: vk::ShaderStageFlags::COMPUTE,
+                ..Default::default()
+            },
+            vk::DescriptorSetLayoutBinding {
+                binding: 1,
+                descriptor_type: vk::DescriptorType::STORAGE_BUFFER,
+                descriptor_count: 1,
+                stage_flags: vk::ShaderStageFlags::COMPUTE,
+                ..Default::default()
+            },
+        ];
 
         let descriptor_set_layout_create_info = vk::DescriptorSetLayoutCreateInfo {
             binding_count: descriptor_set_layout_bindings.len() as u32,
@@ -123,10 +132,18 @@ impl VulkanComputeSetup {
     }
 
     fn create_descriptor_pool(device: &ash::Device) -> vk::DescriptorPool {
-        let pool_sizes = [vk::DescriptorPoolSize {
-            ty: vk::DescriptorType::STORAGE_BUFFER,
-            descriptor_count: 1,
-        }];
+        let pool_sizes = [
+            vk::DescriptorPoolSize {
+                // snowflakes
+                ty: vk::DescriptorType::STORAGE_BUFFER,
+                descriptor_count: 1,
+            },
+            vk::DescriptorPoolSize {
+                // drawing buffer
+                ty: vk::DescriptorType::STORAGE_BUFFER,
+                descriptor_count: 1,
+            },
+        ];
 
         let descriptor_pool_create_info = vk::DescriptorPoolCreateInfo {
             max_sets: 1,
