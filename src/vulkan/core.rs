@@ -1,14 +1,17 @@
 use std::collections::HashSet;
 use std::ffi::{CStr, CString};
-use std::os::raw::{c_char, c_void};
+use std::os::raw::c_char;
+#[cfg(feature = "validation-layers")]
+use std::os::raw::c_void;
 use std::ptr;
 
+#[cfg(feature = "validation-layers")]
 use ash::extensions::ext::DebugUtils;
-#[cfg(all(unix, not(target_os = "android"), not(target_os = "macos")))]
-use ash::extensions::khr::{WaylandSurface, XlibSurface};
 use ash::extensions::khr::Surface;
 #[cfg(target_os = "windows")]
 use ash::extensions::khr::Win32Surface;
+#[cfg(all(unix, not(target_os = "android"), not(target_os = "macos")))]
+use ash::extensions::khr::{WaylandSurface, XlibSurface};
 use ash::version::{DeviceV1_0, EntryV1_0, InstanceV1_0};
 use ash::vk;
 
@@ -24,7 +27,9 @@ pub struct VulkanCore {
     _entry: ash::Entry,
     pub instance: ash::Instance,
 
+    #[cfg(feature = "validation-layers")]
     debug_utils_loader: ash::extensions::ext::DebugUtils,
+    #[cfg(feature = "validation-layers")]
     debug_messenger: vk::DebugUtilsMessengerEXT,
 
     pub physical_device: vk::PhysicalDevice,
@@ -42,6 +47,7 @@ impl VulkanCore {
     pub fn new(window: &winit::window::Window, application_name: &str) -> (Self, SurfaceComposite) {
         let entry = ash::Entry::new().unwrap();
         let instance = VulkanCore::create_instance(&entry, application_name);
+        #[cfg(feature = "validation-layers")]
         let (debug_utils_loader, debug_messenger) =
             VulkanCore::setup_debug_utils(&entry, &instance);
         let surface_composite = VulkanCore::create_surface(&entry, &instance, &window);
@@ -63,7 +69,9 @@ impl VulkanCore {
                 _entry: entry,
                 instance,
 
+                #[cfg(feature = "validation-layers")]
                 debug_utils_loader,
+                #[cfg(feature = "validation-layers")]
                 debug_messenger,
 
                 physical_device,
@@ -393,10 +401,12 @@ impl VulkanCore {
             .map(|layer_name| layer_name.as_ptr())
             .collect();
 
+        #[cfg(feature = "validation-layers")]
         let debug_utils_messenger_ci = VulkanCore::build_messenger_create_info();
 
         let create_info = vk::InstanceCreateInfo {
             p_application_info: &app_info,
+            #[cfg(feature = "validation-layers")]
             p_next: &debug_utils_messenger_ci as *const vk::DebugUtilsMessengerCreateInfoEXT
                 as *const c_void,
             enabled_layer_count: enabled_layer_names.len() as u32,
@@ -415,6 +425,7 @@ impl VulkanCore {
         instance
     }
 
+    #[cfg(feature = "validation-layers")]
     fn setup_debug_utils(
         entry: &ash::Entry,
         instance: &ash::Instance,
@@ -432,6 +443,7 @@ impl VulkanCore {
         (debug_utils_loader, utils_messenger)
     }
 
+    #[cfg(feature = "validation-layers")]
     fn build_messenger_create_info() -> vk::DebugUtilsMessengerCreateInfoEXT {
         vk::DebugUtilsMessengerCreateInfoEXT {
             message_severity: vk::DebugUtilsMessageSeverityFlagsEXT::WARNING
@@ -709,7 +721,10 @@ impl VulkanCore {
     }
 
     fn required_layer_names() -> Vec<&'static str> {
-        vec!["VK_LAYER_KHRONOS_validation"]
+        vec![
+            #[cfg(feature = "validation-layers")]
+            "VK_LAYER_KHRONOS_validation",
+        ]
     }
 
     #[cfg(all(unix, not(target_os = "android"), not(target_os = "macos")))]
@@ -718,6 +733,7 @@ impl VulkanCore {
             Surface::name().to_str().unwrap(),
             XlibSurface::name().to_str().unwrap(),
             WaylandSurface::name().to_str().unwrap(),
+            #[cfg(feature = "validation-layers")]
             DebugUtils::name().to_str().unwrap(),
         ]
     }
@@ -727,6 +743,7 @@ impl VulkanCore {
         vec![
             Surface::name().to_str().unwrap(),
             Win32Surface::name().to_str().unwrap(),
+            #[cfg(feature = "validation-layers")]
             DebugUtils::name().to_str().unwrap(),
         ]
     }
@@ -738,6 +755,7 @@ impl VulkanCore {
     pub fn drop(&self) {
         unsafe {
             self.device.destroy_device(None);
+            #[cfg(feature = "validation-layers")]
             self.debug_utils_loader
                 .destroy_debug_utils_messenger(self.debug_messenger, None);
             self.instance.destroy_instance(None);
@@ -746,6 +764,7 @@ impl VulkanCore {
 }
 
 /// the callback function used in Debug Utils.
+#[cfg(feature = "validation-layers")]
 unsafe extern "system" fn vulkan_debug_utils_callback(
     message_severity: vk::DebugUtilsMessageSeverityFlagsEXT,
     message_type: vk::DebugUtilsMessageTypeFlagsEXT,

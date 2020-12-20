@@ -4,6 +4,10 @@ version = "0.1.0"
 authors = ["Jacek Bilski <jacek@bilski.tech>"]
 edition = "2018"
 
+[features]
+default = []
+validation-layers = []
+
 [dependencies]
 ash = "0.31.0"
 cgmath = "0.17.0"
