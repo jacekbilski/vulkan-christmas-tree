@@ -1,6 +1,6 @@
 #version 450
 #define WORKGROUP_SIZE 64
-#define MAX_SNOWFLAKES 5000
+#define MAX_SNOWFLAKES 10000
 #define SNOW_X_MIN -10
 #define SNOW_X_MAX 10
 #define SNOW_Y_MIN -10

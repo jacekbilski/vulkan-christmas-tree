@@ -16,7 +16,8 @@ const SNOW_Y_MAX: f32 = 5.;
 const SNOW_Z_MIN: f32 = -10.;
 const SNOW_Z_MAX: f32 = 10.;
 
-pub const MAX_SNOWFLAKES: usize = 5_000;
+pub const MAX_SNOWFLAKES: usize = 10_000;
+const SNOWFLAKE_RADIUS: f32 = 0.04;
 
 pub struct Snowflake {
     pub position: Point3<f32>,
@@ -55,7 +56,6 @@ pub fn create_meshes() -> (Vec<Snowflake>, Vec<Mesh>) {
 }
 
 fn gen_snowflake_mesh() -> (Vec<Vertex>, Vec<u32>) {
-    let radius: f32 = 0.05;
     let normal: Vector3<f32> = vec3(1., 0., 0.);
     let mut vertices: Vec<Vertex> = vec![];
 
@@ -65,12 +65,22 @@ fn gen_snowflake_mesh() -> (Vec<Vertex>, Vec<u32>) {
         let angle = i as f32 * angle_diff;
         // upper side
         vertices.push(Vertex {
-            pos: Point3::new(0., radius * angle.cos(), radius * angle.sin()).into(),
+            pos: Point3::new(
+                0.,
+                SNOWFLAKE_RADIUS * angle.cos(),
+                SNOWFLAKE_RADIUS * angle.sin(),
+            )
+            .into(),
             norm: normal.into(),
         });
         // bottom side
         vertices.push(Vertex {
-            pos: Point3::new(-0., -radius * angle.cos(), -radius * angle.sin()).into(),
+            pos: Point3::new(
+                -0.,
+                -SNOWFLAKE_RADIUS * angle.cos(),
+                -SNOWFLAKE_RADIUS * angle.sin(),
+            )
+            .into(),
             norm: normal.neg().into(),
         });
     }

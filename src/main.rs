@@ -27,8 +27,6 @@ const AUTO_ROTATION_SPEED_RAD_PER_SEC: f32 = TAU / 30.0;
 const APPLICATION_NAME: &'static str = "Vulkan Christmas Tree";
 
 fn main() {
-    #[cfg(feature = "validation-layers")]
-    println!("Running with validation layers enabled");
     let event_loop = EventLoop::new();
     let window = init_window(&event_loop);
     let mut vulkan = Vulkan::new(&window, APPLICATION_NAME);
