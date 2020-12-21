@@ -15,7 +15,6 @@ use ash::extensions::khr::{WaylandSurface, XlibSurface};
 use ash::version::{DeviceV1_0, EntryV1_0, InstanceV1_0};
 use ash::vk;
 
-use crate::fs::read_shader_code;
 use crate::vulkan::{QueueFamilyIndices, SurfaceComposite, VulkanGraphicsSetup};
 
 const APPLICATION_VERSION: u32 = vk::make_version(0, 1, 0);
@@ -346,12 +345,11 @@ impl VulkanCore {
         }
     }
 
-    pub(crate) fn create_shader_module(&self, file_name: &str) -> vk::ShaderModule {
-        let shader_code = read_shader_code(file_name);
+    pub(crate) fn create_shader_module(&self, shader_spv: &[u8]) -> vk::ShaderModule {
         let shader_module_create_info = vk::ShaderModuleCreateInfo {
             flags: vk::ShaderModuleCreateFlags::empty(),
-            code_size: shader_code.len(),
-            p_code: shader_code.as_ptr() as *const u32,
+            code_size: shader_spv.len(),
+            p_code: shader_spv.as_ptr() as *const u32,
             ..Default::default()
         };
 

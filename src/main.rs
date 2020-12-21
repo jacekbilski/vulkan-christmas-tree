@@ -14,7 +14,6 @@ mod vulkan;
 
 mod coords;
 mod fps_calculator;
-mod fs;
 mod mesh;
 mod scene;
 

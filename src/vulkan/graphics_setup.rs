@@ -478,8 +478,10 @@ impl VulkanGraphicsSetup {
         msaa_samples: vk::SampleCountFlags,
     ) -> (vk::Pipeline, vk::PipelineLayout) {
         let device = &core.device;
-        let vert_shader_module = core.create_shader_module("simple.vert.spv");
-        let frag_shader_module = core.create_shader_module("simple.frag.spv");
+        let vert_shader_module =
+            core.create_shader_module(include_bytes!("../../target/shaders/simple.vert.spv"));
+        let frag_shader_module =
+            core.create_shader_module(include_bytes!("../../target/shaders/simple.frag.spv"));
 
         let main_function_name = CString::new("main").unwrap(); // the beginning function name in shader code.
 

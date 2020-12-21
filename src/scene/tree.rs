@@ -1,13 +1,17 @@
 use std::f32::consts::PI;
 
 use cgmath::{vec3, Matrix4, Point3, Rad};
-use tobj::load_obj;
+use tobj::{load_mtl_buf, load_obj_buf};
 
 use crate::mesh::{Color, InstanceData, Mesh};
 use crate::vulkan::Vertex;
 
 pub fn create_meshes() -> Vec<Mesh> {
-    let tree = load_obj("models/tree.obj", false);
+    let object_source = include_str!("../../models/tree.obj");
+    let materials_source = include_str!("../../models/tree.mtl");
+    let tree = load_obj_buf(&mut object_source.as_bytes(), false, |_| {
+        load_mtl_buf(&mut materials_source.as_bytes())
+    });
     let (models, model_materials) = tree.unwrap();
     let mut meshes: Vec<Mesh> = vec![];
     for mi in 0..models.len() {
