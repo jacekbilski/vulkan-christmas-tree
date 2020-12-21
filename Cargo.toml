@@ -11,16 +11,16 @@ validation-layers = []
 [dependencies]
 ash = "0.31.0"
 cgmath = "0.17.0"
-winit = "0.23.0"
+winit = "0.24.0"
 memoffset = "0.6.1"
-rand = {version = "0.7.3", features = ["small_rng"]}
-tobj = "2.0.2"
+rand = {version = "0.8.0", features = ["small_rng"]}
+tobj = "2.0.3"
 
 [build-dependencies]
-shaderc = "0.6.2"
+shaderc = "0.7.0"
 
 [dev-dependencies]
-rstest = "0.6.3"
+rstest = "0.6.4"
 
 [target.'cfg(target_os = "windows")'.dependencies]
 winapi = { version = "0.3.9", features = ["windef", "libloaderapi"] }

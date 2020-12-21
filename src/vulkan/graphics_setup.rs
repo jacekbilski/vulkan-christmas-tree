@@ -75,7 +75,6 @@ impl VulkanGraphicsSetup {
         swapchain_composite.image_views =
             VulkanGraphicsSetup::create_image_views(&core.device, &swapchain_composite);
         let msaa_samples = VulkanGraphicsSetup::choose_msaa_samples(&core);
-        println!("msaa_samples: {:?}", msaa_samples);
         let render_pass = VulkanGraphicsSetup::create_render_pass(
             &core,
             swapchain_composite.format,

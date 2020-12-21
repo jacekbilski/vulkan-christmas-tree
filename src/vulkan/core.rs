@@ -513,7 +513,6 @@ impl VulkanCore {
             use winit::platform::unix::WindowExtUnix;
 
             if window.wayland_surface() != None {
-                println!("Using Wayland");
                 let wayland_surface = window.wayland_surface().unwrap();
                 let wayland_display = window.wayland_display().unwrap();
                 let wayland_create_info = vk::WaylandSurfaceCreateInfoKHR {
@@ -526,7 +525,6 @@ impl VulkanCore {
                     .create_wayland_surface(&wayland_create_info, None)
                     .expect("Failed to create surface.")
             } else {
-                println!("Using X11");
                 let x11_window = window.xlib_window().unwrap();
                 let x11_display = window.xlib_display().unwrap();
                 let x11_create_info = vk::XlibSurfaceCreateInfoKHR {
