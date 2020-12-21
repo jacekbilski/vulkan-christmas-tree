@@ -1,6 +1,8 @@
 use std::f32::consts::{FRAC_PI_8, TAU};
 
-use winit::event::{ElementState, Event, KeyboardInput, VirtualKeyCode, WindowEvent};
+use winit::dpi::PhysicalPosition;
+use winit::event::ElementState::Pressed;
+use winit::event::{ElementState, Event, KeyboardInput, MouseButton, VirtualKeyCode, WindowEvent};
 use winit::event_loop::{ControlFlow, EventLoop};
 
 use vulkan::Vulkan;
@@ -49,7 +51,9 @@ fn main_loop(
     event_loop: EventLoop<()>,
 ) {
     let mut fps_calculator = FpsCalculator::new();
-    let mut rotate = true;
+    let mut autorotate = false;
+    let mut mouse_rotating = false;
+    let mut last_cursor_position: PhysicalPosition<f64> = PhysicalPosition::new(0.0, 0.0);
     event_loop.run(move |event, _, control_flow| match event {
         Event::WindowEvent {
             event: WindowEvent::CloseRequested,
@@ -76,30 +80,55 @@ fn main_loop(
                 *control_flow = ControlFlow::Exit;
             }
             VirtualKeyCode::Up => {
-                rotate = false;
+                autorotate = false;
                 let angle_change = FRAC_PI_8 / 4.;
                 scene.rotate_camera_vertically(angle_change, &mut vulkan);
             }
             VirtualKeyCode::Down => {
-                rotate = false;
+                autorotate = false;
                 let angle_change = FRAC_PI_8 / 4.;
                 scene.rotate_camera_vertically(-angle_change, &mut vulkan);
             }
             VirtualKeyCode::Left => {
-                rotate = false;
+                autorotate = false;
                 let angle_change = FRAC_PI_8 / 4.;
                 scene.rotate_camera_horizontally(-angle_change, &mut vulkan);
             }
             VirtualKeyCode::Right => {
-                rotate = false;
+                autorotate = false;
                 let angle_change = FRAC_PI_8 / 4.;
                 scene.rotate_camera_horizontally(angle_change, &mut vulkan);
             }
             VirtualKeyCode::R => {
-                rotate = !rotate;
+                autorotate = !autorotate;
             }
             _ => (),
         },
+        Event::WindowEvent {
+            event:
+                WindowEvent::MouseInput {
+                    button: MouseButton::Left,
+                    state,
+                    ..
+                },
+            ..
+        } => {
+            mouse_rotating = state == Pressed;
+        }
+        Event::WindowEvent {
+            event: WindowEvent::CursorMoved { position, .. },
+            ..
+        } => {
+            if mouse_rotating {
+                let x_diff = position.x - last_cursor_position.x;
+                let y_diff = position.y - last_cursor_position.y;
+
+                let angle_change = FRAC_PI_8 / 128.;
+                scene.rotate_camera_horizontally(-angle_change * x_diff as f32, &mut vulkan);
+                scene.rotate_camera_vertically(angle_change * y_diff as f32, &mut vulkan);
+            }
+            last_cursor_position = position;
+        }
         Event::WindowEvent {
             event: WindowEvent::Resized(_new_size),
             ..
@@ -113,7 +142,7 @@ fn main_loop(
         Event::RedrawRequested(_window_id) => {
             fps_calculator.tick();
             let last_frame_time_secs = fps_calculator.last_frame_time_secs();
-            if rotate {
+            if autorotate {
                 scene.rotate_camera_horizontally(
                     AUTO_ROTATION_SPEED_RAD_PER_SEC * last_frame_time_secs,
                     &mut vulkan,
