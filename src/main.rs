@@ -1,6 +1,6 @@
 use std::f32::consts::{FRAC_PI_8, TAU};
 
-use winit::dpi::PhysicalPosition;
+use winit::dpi::{PhysicalPosition, PhysicalSize};
 use winit::event::ElementState::Pressed;
 use winit::event::{ElementState, Event, KeyboardInput, MouseButton, VirtualKeyCode, WindowEvent};
 use winit::event_loop::{ControlFlow, EventLoop};
@@ -17,10 +17,6 @@ mod fps_calculator;
 mod mesh;
 mod scene;
 
-// settings
-const SCR_WIDTH: u32 = 1920;
-const SCR_HEIGHT: u32 = 1080;
-
 const AUTO_ROTATION_SPEED_RAD_PER_SEC: f32 = TAU / 30.0;
 
 const APPLICATION_NAME: &'static str = "Vulkan Christmas Tree";
@@ -34,11 +30,16 @@ fn main() {
 }
 
 fn init_window(event_loop: &EventLoop<()>) -> winit::window::Window {
-    winit::window::WindowBuilder::new()
+    let window = winit::window::WindowBuilder::new()
         .with_title(APPLICATION_NAME)
-        .with_inner_size(winit::dpi::PhysicalSize::new(SCR_WIDTH, SCR_HEIGHT))
+        .with_inner_size(winit::dpi::PhysicalSize::new(1, 1))
         .build(event_loop)
-        .expect("Failed to create window.")
+        .expect("Failed to create window.");
+    let screen_size = window.current_monitor().unwrap().size();
+    let quarter_size = PhysicalSize::new(screen_size.width / 2, screen_size.height / 2);
+    window.set_inner_size(quarter_size);
+
+    window
 }
 
 fn main_loop(
