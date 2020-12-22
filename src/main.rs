@@ -127,11 +127,12 @@ fn main_loop(
             last_cursor_position = position;
         }
         Event::WindowEvent {
-            event: WindowEvent::Resized(_new_size),
+            event: WindowEvent::Resized(new_size),
             ..
         } => {
             vulkan.wait_device_idle();
-            vulkan.framebuffer_resized(window.inner_size().width, window.inner_size().height);
+            scene.framebuffer_resized(new_size, &mut vulkan);
+            vulkan.framebuffer_resized(new_size.width, new_size.height);
         }
         Event::MainEventsCleared => {
             window.request_redraw();
