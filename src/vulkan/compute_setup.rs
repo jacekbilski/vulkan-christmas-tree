@@ -73,7 +73,7 @@ impl VulkanComputeSetup {
         descriptor_set_layout: vk::DescriptorSetLayout,
     ) -> (vk::Pipeline, vk::PipelineLayout) {
         let comp_shader_module =
-            core.create_shader_module(include_bytes!("../../target/shaders/simple.comp.spv"));
+            core.create_shader_module(include_bytes!("../../target/shaders/snow.comp.spv"));
 
         let main_function_name = CString::new("main").unwrap(); // the beginning function name in shader code.
 
