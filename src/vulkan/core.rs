@@ -19,7 +19,7 @@ use crate::vulkan::{QueueFamilyIndices, SurfaceComposite, VulkanGraphicsSetup};
 
 const APPLICATION_VERSION: u32 = vk::make_version(0, 1, 0);
 const ENGINE_VERSION: u32 = vk::make_version(0, 1, 0);
-const VULKAN_API_VERSION: u32 = vk::make_version(1, 2, 154);
+const VULKAN_API_VERSION: u32 = vk::make_version(1, 1, 0);
 
 #[derive(Clone)]
 pub struct VulkanCore {
