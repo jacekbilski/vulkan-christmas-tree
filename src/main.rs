@@ -1,8 +1,10 @@
+#![windows_subsystem = "windows"]
+
 use std::f32::consts::{FRAC_PI_8, TAU};
 
 use winit::dpi::{PhysicalPosition, PhysicalSize};
-use winit::event::ElementState::Pressed;
 use winit::event::{ElementState, Event, KeyboardInput, MouseButton, VirtualKeyCode, WindowEvent};
+use winit::event::ElementState::Pressed;
 use winit::event_loop::{ControlFlow, EventLoop};
 
 use vulkan::Vulkan;
