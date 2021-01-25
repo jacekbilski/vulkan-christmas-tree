@@ -37,9 +37,15 @@ fn init_window(event_loop: &EventLoop<()>) -> winit::window::Window {
         .with_inner_size(winit::dpi::PhysicalSize::new(1, 1))
         .build(event_loop)
         .expect("Failed to create window.");
-    let screen_size = window.current_monitor().unwrap().size();
-    let quarter_size = PhysicalSize::new(screen_size.width / 2, screen_size.height / 2);
-    window.set_inner_size(quarter_size);
+    let monitor = window
+        .current_monitor()
+        .or(window.primary_monitor())
+        .or(window.available_monitors().next());
+    let screen_size = monitor
+        .map(|monitor| monitor.size())
+        .map(|size| PhysicalSize::new(size.width / 2, size.height / 2))
+        .unwrap_or(PhysicalSize::new(1600, 900));
+    window.set_inner_size(screen_size);
 
     window
 }
