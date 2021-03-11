@@ -15,8 +15,14 @@ pub struct VulkanComputeExecution {
     descriptor_set: vk::DescriptorSet,
     command_buffer: vk::CommandBuffer,
 
-    snowflakes_buffer: vk::Buffer,
-    snowflakes_buffer_memory: vk::DeviceMemory,
+    snowflake_positions_buffer: vk::Buffer,
+    snowflake_positions_buffer_memory: vk::DeviceMemory,
+
+    snowflake_velocities_buffer: vk::Buffer,
+    snowflake_velocities_buffer_memory: vk::DeviceMemory,
+
+    snowflake_accelerations_buffer: vk::Buffer,
+    snowflake_accelerations_buffer_memory: vk::DeviceMemory,
 
     fence: vk::Fence,
 }
@@ -29,17 +35,34 @@ impl VulkanComputeExecution {
         drawing_buffer: vk::Buffer,
         drawing_buffer_size: usize,
     ) -> Self {
-        let (snowflakes_buffer, snowflakes_buffer_memory) = core.create_data_buffer(
-            compute_setup.command_pool,
-            vk::BufferUsageFlags::STORAGE_BUFFER,
-            snowflakes,
-        );
+        let (snowflake_positions_buffer, snowflake_positions_buffer_memory) = core
+            .create_data_buffer(
+                compute_setup.command_pool,
+                vk::BufferUsageFlags::STORAGE_BUFFER,
+                snowflakes,
+            );
+        let snowflakes_buffer_size = std::mem::size_of::<Snowflake>() * snowflakes.len();
+        let zero_vec = vec![0u8; snowflakes_buffer_size];
+        let (snowflake_velocities_buffer, snowflake_velocities_buffer_memory) = core
+            .create_data_buffer(
+                compute_setup.command_pool,
+                vk::BufferUsageFlags::STORAGE_BUFFER,
+                &zero_vec,
+            );
+        let (snowflake_accelerations_buffer, snowflake_accelerations_buffer_memory) = core
+            .create_data_buffer(
+                compute_setup.command_pool,
+                vk::BufferUsageFlags::STORAGE_BUFFER,
+                &zero_vec,
+            );
         let descriptor_set = VulkanComputeExecution::create_descriptor_set(
             &core.device,
             compute_setup.descriptor_pool,
             compute_setup.descriptor_set_layout,
-            snowflakes_buffer,
-            std::mem::size_of::<Snowflake>() * snowflakes.len(),
+            snowflakes_buffer_size,
+            snowflake_positions_buffer,
+            snowflake_velocities_buffer,
+            snowflake_accelerations_buffer,
             drawing_buffer,
             drawing_buffer_size,
         );
@@ -58,8 +81,14 @@ impl VulkanComputeExecution {
             descriptor_set,
             command_buffer,
 
-            snowflakes_buffer,
-            snowflakes_buffer_memory,
+            snowflake_positions_buffer,
+            snowflake_positions_buffer_memory,
+
+            snowflake_velocities_buffer,
+            snowflake_velocities_buffer_memory,
+
+            snowflake_accelerations_buffer,
+            snowflake_accelerations_buffer_memory,
 
             fence,
         }
@@ -69,8 +98,10 @@ impl VulkanComputeExecution {
         device: &ash::Device,
         descriptor_pool: vk::DescriptorPool,
         descriptor_set_layout: vk::DescriptorSetLayout,
-        snowflakes_buffer: vk::Buffer,
         snowflakes_buffer_size: usize,
+        snowflake_positions_buffer: vk::Buffer,
+        snowflake_velocities_buffer: vk::Buffer,
+        snowflake_accelerations_buffer: vk::Buffer,
         drawing_buffer: vk::Buffer,
         drawing_buffer_size: usize,
     ) -> vk::DescriptorSet {
@@ -91,7 +122,17 @@ impl VulkanComputeExecution {
         for &descritptor_set in descriptor_sets.iter() {
             let descriptor_buffer_info = [
                 vk::DescriptorBufferInfo {
-                    buffer: snowflakes_buffer,
+                    buffer: snowflake_positions_buffer,
+                    offset: 0,
+                    range: snowflakes_buffer_size as u64,
+                },
+                vk::DescriptorBufferInfo {
+                    buffer: snowflake_velocities_buffer,
+                    offset: 0,
+                    range: snowflakes_buffer_size as u64,
+                },
+                vk::DescriptorBufferInfo {
+                    buffer: snowflake_accelerations_buffer,
                     offset: 0,
                     range: snowflakes_buffer_size as u64,
                 },
@@ -249,8 +290,12 @@ impl VulkanComputeExecution {
     pub fn drop(&self, compute_setup: &VulkanComputeSetup) {
         unsafe {
             let device = &self.core.device;
-            device.destroy_buffer(self.snowflakes_buffer, None);
-            device.free_memory(self.snowflakes_buffer_memory, None);
+            device.destroy_buffer(self.snowflake_accelerations_buffer, None);
+            device.free_memory(self.snowflake_accelerations_buffer_memory, None);
+            device.destroy_buffer(self.snowflake_velocities_buffer, None);
+            device.free_memory(self.snowflake_velocities_buffer_memory, None);
+            device.destroy_buffer(self.snowflake_positions_buffer, None);
+            device.free_memory(self.snowflake_positions_buffer_memory, None);
             device.free_command_buffers(compute_setup.command_pool, &vec![self.command_buffer]);
             device.destroy_fence(self.fence, None);
         }

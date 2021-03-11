@@ -35,11 +35,19 @@ struct InstanceData {
     Color color;
 };
 
-layout(std430, set = 0, binding = 0) buffer snowflakesBuf {
+layout(std430, set = 0, binding = 0) buffer snowflakePositionsBuf {
     Snowflake snowflakes[MAX_SNOWFLAKES];
 };
 
-layout(std430, set = 0, binding = 1) buffer instancesBuf {
+layout(std430, set = 0, binding = 1) buffer snowflakeVelocitiesBuf {
+    Snowflake snowflakeX[MAX_SNOWFLAKES];
+};
+
+layout(std430, set = 0, binding = 2) buffer snowflakeAccelerationsBuf {
+    Snowflake snowflakeY[MAX_SNOWFLAKES];
+};
+
+layout(std430, set = 0, binding = 3) buffer instancesBuf {
     InstanceData instances[MAX_SNOWFLAKES];
 };
 

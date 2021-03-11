@@ -52,6 +52,20 @@ impl VulkanComputeSetup {
                 stage_flags: vk::ShaderStageFlags::COMPUTE,
                 ..Default::default()
             },
+            vk::DescriptorSetLayoutBinding {
+                binding: 2,
+                descriptor_type: vk::DescriptorType::STORAGE_BUFFER,
+                descriptor_count: 1,
+                stage_flags: vk::ShaderStageFlags::COMPUTE,
+                ..Default::default()
+            },
+            vk::DescriptorSetLayoutBinding {
+                binding: 3,
+                descriptor_type: vk::DescriptorType::STORAGE_BUFFER,
+                descriptor_count: 1,
+                stage_flags: vk::ShaderStageFlags::COMPUTE,
+                ..Default::default()
+            },
         ];
 
         let descriptor_set_layout_create_info = vk::DescriptorSetLayoutCreateInfo {
@@ -134,7 +148,17 @@ impl VulkanComputeSetup {
     fn create_descriptor_pool(device: &ash::Device) -> vk::DescriptorPool {
         let pool_sizes = [
             vk::DescriptorPoolSize {
-                // snowflakes
+                // snowflake positions
+                ty: vk::DescriptorType::STORAGE_BUFFER,
+                descriptor_count: 1,
+            },
+            vk::DescriptorPoolSize {
+                // snowflake velocities
+                ty: vk::DescriptorType::STORAGE_BUFFER,
+                descriptor_count: 1,
+            },
+            vk::DescriptorPoolSize {
+                // snowflake accelerations
                 ty: vk::DescriptorType::STORAGE_BUFFER,
                 descriptor_count: 1,
             },
