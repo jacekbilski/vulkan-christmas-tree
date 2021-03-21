@@ -1,6 +1,6 @@
 #version 450
 #define WORKGROUP_SIZE 64
-#define MAX_SNOWFLAKES 10000
+#define MAX_SNOWFLAKES 20000
 #define SNOW_X_MIN -10
 #define SNOW_X_MAX 10
 #define SNOW_Y_MIN -10
@@ -9,8 +9,8 @@
 #define SNOW_Z_MAX 10
 
 #define SNOW_FALL_VELOCITY 0.15
-#define SNOW_RANDOM_MOVES 0.002
-#define SNOW_RANDOM_ROTATIONS 2.0
+#define SNOW_RANDOM_MOVES 0.005
+#define SNOW_RANDOM_ROTATIONS 5.0
 
 layout (local_size_x = WORKGROUP_SIZE, local_size_y = 1, local_size_z = 1) in;
 
@@ -61,20 +61,10 @@ void moveSnowflake() {
     snowflakes[i].position.x += randomFromRange(-SNOW_RANDOM_MOVES, SNOW_RANDOM_MOVES);
     snowflakes[i].position.y += constants.lastFrameTimeSecs * SNOW_FALL_VELOCITY + randomFromRange(-SNOW_RANDOM_MOVES, SNOW_RANDOM_MOVES);
     snowflakes[i].position.z += randomFromRange(-SNOW_RANDOM_MOVES, SNOW_RANDOM_MOVES);
-    if (snowflakes[i].position.x < SNOW_X_MIN) {
-        snowflakes[i].position.x = SNOW_X_MIN;
-    }
-    if (snowflakes[i].position.x > SNOW_X_MAX) {
-        snowflakes[i].position.x = SNOW_X_MAX;
-    }
     if (snowflakes[i].position.y > SNOW_Y_MAX) {
+        snowflakes[i].position.x = randomFromRange(SNOW_X_MIN, SNOW_X_MAX);
         snowflakes[i].position.y -= (SNOW_Y_MAX - SNOW_Y_MIN);
-    }
-    if (snowflakes[i].position.z < SNOW_Z_MIN) {
-        snowflakes[i].position.z = SNOW_Z_MIN;
-    }
-    if (snowflakes[i].position.z > SNOW_Z_MAX) {
-        snowflakes[i].position.z = SNOW_Z_MAX;
+        snowflakes[i].position.z = randomFromRange(SNOW_Z_MIN, SNOW_Z_MAX);
     }
 
     snowflakes[i].rotation.x += constants.lastFrameTimeSecs * randomFromRange(-SNOW_RANDOM_ROTATIONS, SNOW_RANDOM_ROTATIONS);
