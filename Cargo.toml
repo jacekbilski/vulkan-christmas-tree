@@ -9,15 +9,15 @@ default = []
 validation-layers = []
 
 [dependencies]
-ash = "0.31.0"
-cgmath = "0.17.0"
+ash = "0.32.0"
+cgmath = "0.18.0"
 winit = "0.24.0"
 memoffset = "0.6.1"
-rand = {version = "0.8.0", features = ["small_rng"]}
-tobj = "2.0.3"
+rand = {version = "0.8.3", features = ["small_rng"]}
+tobj = "2.0.4"
 
 [build-dependencies]
-shaderc = "0.7.0"
+shaderc = "0.7.2"
 
 [dev-dependencies]
 rstest = "0.6.4"

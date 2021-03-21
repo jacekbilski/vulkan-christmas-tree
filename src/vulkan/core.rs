@@ -1,17 +1,17 @@
 use std::collections::HashSet;
 use std::ffi::{CStr, CString};
 use std::os::raw::c_char;
-#[cfg(any(feature = "validation-layers",target_os = "windows"))]
+#[cfg(any(feature = "validation-layers", target_os = "windows"))]
 use std::os::raw::c_void;
 use std::ptr;
 
 #[cfg(feature = "validation-layers")]
 use ash::extensions::ext::DebugUtils;
-#[cfg(all(unix, not(target_os = "android"), not(target_os = "macos")))]
-use ash::extensions::khr::{WaylandSurface, XlibSurface};
 use ash::extensions::khr::Surface;
 #[cfg(target_os = "windows")]
 use ash::extensions::khr::Win32Surface;
+#[cfg(all(unix, not(target_os = "android"), not(target_os = "macos")))]
+use ash::extensions::khr::{WaylandSurface, XlibSurface};
 use ash::version::{DeviceV1_0, EntryV1_0, InstanceV1_0};
 use ash::vk;
 
@@ -44,7 +44,7 @@ pub struct VulkanCore {
 
 impl VulkanCore {
     pub fn new(window: &winit::window::Window, application_name: &str) -> (Self, SurfaceComposite) {
-        let entry = ash::Entry::new().unwrap();
+        let entry = unsafe { ash::Entry::new().unwrap() };
         let instance = VulkanCore::create_instance(&entry, application_name);
         #[cfg(feature = "validation-layers")]
         let (debug_utils_loader, debug_messenger) =
