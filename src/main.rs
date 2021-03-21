@@ -1,10 +1,12 @@
 #![windows_subsystem = "windows"]
 
 use std::f32::consts::{FRAC_PI_8, TAU};
+use std::thread;
+use std::time::{Duration, Instant};
 
 use winit::dpi::{PhysicalPosition, PhysicalSize};
-use winit::event::{ElementState, Event, KeyboardInput, MouseButton, VirtualKeyCode, WindowEvent};
 use winit::event::ElementState::Pressed;
+use winit::event::{ElementState, Event, KeyboardInput, MouseButton, VirtualKeyCode, WindowEvent};
 use winit::event_loop::{ControlFlow, EventLoop};
 
 use vulkan::Vulkan;
@@ -20,6 +22,8 @@ mod mesh;
 mod scene;
 
 const AUTO_ROTATION_SPEED_RAD_PER_SEC: f32 = TAU / 30.0;
+
+const MAX_FPS: u8 = 60;
 
 const APPLICATION_NAME: &'static str = "Vulkan Christmas Tree";
 
@@ -147,6 +151,7 @@ fn main_loop(
             window.request_redraw();
         }
         Event::RedrawRequested(_window_id) => {
+            let frame_start = Instant::now();
             fps_calculator.tick();
             let last_frame_time_secs = fps_calculator.last_frame_time_secs();
             if autorotate {
@@ -156,6 +161,10 @@ fn main_loop(
                 );
             }
             vulkan.draw_frame(last_frame_time_secs);
+            let frame_end = Instant::now();
+            thread::sleep(
+                Duration::from_secs_f32(1.0 / MAX_FPS as f32) - (frame_end - frame_start),
+            );
         }
         Event::LoopDestroyed => {
             vulkan.wait_device_idle();
