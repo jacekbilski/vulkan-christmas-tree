@@ -19,8 +19,18 @@ layout (push_constant) uniform Constants {
 } constants;
 
 struct Snowflake {
-    vec3 position;
-    vec3 rotation;
+    vec3 pos;
+    vec3 rot;
+};
+
+struct SnowflakeVelocity {
+    vec3 posVel;
+    vec3 rotVel;
+};
+
+struct SnowflakeAcceleration {
+    vec3 posAcc;
+    vec3 rotAcc;
 };
 
 struct Color {
@@ -36,15 +46,15 @@ struct InstanceData {
 };
 
 layout(std430, set = 0, binding = 0) buffer snowflakePositionsBuf {
-    Snowflake snowflakes[MAX_SNOWFLAKES];
+    Snowflake sf[MAX_SNOWFLAKES];
 };
 
 layout(std430, set = 0, binding = 1) buffer snowflakeVelocitiesBuf {
-    Snowflake snowflakeX[MAX_SNOWFLAKES];
+    SnowflakeVelocity sfVel[MAX_SNOWFLAKES];
 };
 
 layout(std430, set = 0, binding = 2) buffer snowflakeAccelerationsBuf {
-    Snowflake snowflakeY[MAX_SNOWFLAKES];
+    SnowflakeAcceleration sfAcc[MAX_SNOWFLAKES];
 };
 
 layout(std430, set = 0, binding = 3) buffer instancesBuf {
@@ -66,25 +76,25 @@ float randomFromRange(float min, float max) {
 void moveSnowflake() {
     uint i = gl_GlobalInvocationID.x;
 
-    snowflakes[i].position.x += randomFromRange(-SNOW_RANDOM_MOVES, SNOW_RANDOM_MOVES);
-    snowflakes[i].position.y += constants.lastFrameTimeSecs * SNOW_FALL_VELOCITY + randomFromRange(-SNOW_RANDOM_MOVES, SNOW_RANDOM_MOVES);
-    snowflakes[i].position.z += randomFromRange(-SNOW_RANDOM_MOVES, SNOW_RANDOM_MOVES);
-    if (snowflakes[i].position.y > SNOW_Y_MAX) {
-        snowflakes[i].position.x = randomFromRange(SNOW_X_MIN, SNOW_X_MAX);
-        snowflakes[i].position.y -= (SNOW_Y_MAX - SNOW_Y_MIN);
-        snowflakes[i].position.z = randomFromRange(SNOW_Z_MIN, SNOW_Z_MAX);
+    sf[i].pos.x += randomFromRange(-SNOW_RANDOM_MOVES, SNOW_RANDOM_MOVES);
+    sf[i].pos.y += randomFromRange(-SNOW_RANDOM_MOVES, SNOW_RANDOM_MOVES) + constants.lastFrameTimeSecs * SNOW_FALL_VELOCITY;
+    sf[i].pos.z += randomFromRange(-SNOW_RANDOM_MOVES, SNOW_RANDOM_MOVES);
+    if (sf[i].pos.y > SNOW_Y_MAX) {
+        sf[i].pos.x = randomFromRange(SNOW_X_MIN, SNOW_X_MAX);
+        sf[i].pos.y -= (SNOW_Y_MAX - SNOW_Y_MIN);
+        sf[i].pos.z = randomFromRange(SNOW_Z_MIN, SNOW_Z_MAX);
     }
 
-    snowflakes[i].rotation.x += constants.lastFrameTimeSecs * randomFromRange(-SNOW_RANDOM_ROTATIONS, SNOW_RANDOM_ROTATIONS);
-    snowflakes[i].rotation.y += constants.lastFrameTimeSecs * randomFromRange(-SNOW_RANDOM_ROTATIONS, SNOW_RANDOM_ROTATIONS);
-    snowflakes[i].rotation.z += constants.lastFrameTimeSecs * randomFromRange(-SNOW_RANDOM_ROTATIONS, SNOW_RANDOM_ROTATIONS);
+    sf[i].rot.x += constants.lastFrameTimeSecs * randomFromRange(-SNOW_RANDOM_ROTATIONS, SNOW_RANDOM_ROTATIONS);
+    sf[i].rot.y += constants.lastFrameTimeSecs * randomFromRange(-SNOW_RANDOM_ROTATIONS, SNOW_RANDOM_ROTATIONS);
+    sf[i].rot.z += constants.lastFrameTimeSecs * randomFromRange(-SNOW_RANDOM_ROTATIONS, SNOW_RANDOM_ROTATIONS);
 }
 
 void recalculateInstance() {
     uint i = gl_GlobalInvocationID.x;
-    float alpha = snowflakes[i].rotation.x;
-    float beta = snowflakes[i].rotation.y;
-    float gamma = snowflakes[i].rotation.z;
+    float alpha = sf[i].rot.x;
+    float beta = sf[i].rot.y;
+    float gamma = sf[i].rot.z;
 
     instances[i].model[0].x = cos(beta) * cos(gamma);
     instances[i].model[0].y = cos(beta) * sin(gamma);
@@ -98,9 +108,9 @@ void recalculateInstance() {
     instances[i].model[2].y = cos(alpha) * sin(beta) * sin(gamma) - sin(alpha) * cos(gamma);
     instances[i].model[2].z = cos(alpha) * cos(beta);
 
-    instances[i].model[3].x = snowflakes[i].position.x;
-    instances[i].model[3].y = snowflakes[i].position.y;
-    instances[i].model[3].z = snowflakes[i].position.z;
+    instances[i].model[3].x = sf[i].pos.x;
+    instances[i].model[3].y = sf[i].pos.y;
+    instances[i].model[3].z = sf[i].pos.z;
 }
 
 void main() {
