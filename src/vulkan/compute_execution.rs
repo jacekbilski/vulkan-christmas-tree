@@ -71,6 +71,7 @@ impl VulkanComputeExecution {
             &core,
             &compute_setup,
             descriptor_set,
+            0,
             0.0,
         );
         let fence = core.create_fence();
@@ -168,6 +169,7 @@ impl VulkanComputeExecution {
         core: &VulkanCore,
         compute_setup: &VulkanComputeSetup,
         descriptor_set: vk::DescriptorSet,
+        frame_no: u32,
         last_frame_time_secs: f32,
     ) -> vk::CommandBuffer {
         let device = &core.device;
@@ -211,13 +213,19 @@ impl VulkanComputeExecution {
                 &[],
             );
 
-            let constants = last_frame_time_secs.to_le_bytes();
             device.cmd_push_constants(
                 command_buffer,
                 compute_setup.pipeline_layout,
                 vk::ShaderStageFlags::COMPUTE,
                 0,
-                &constants,
+                &frame_no.to_le_bytes(),
+            );
+            device.cmd_push_constants(
+                command_buffer,
+                compute_setup.pipeline_layout,
+                vk::ShaderStageFlags::COMPUTE,
+                4,
+                &last_frame_time_secs.to_le_bytes(),
             );
 
             device.cmd_dispatch(
@@ -238,12 +246,14 @@ impl VulkanComputeExecution {
     pub fn do_calculations(
         &mut self,
         snow_calculated_semaphore: vk::Semaphore,
+        frame_no: u32,
         last_frame_time_secs: f32,
     ) {
         let new_command_buffer = VulkanComputeExecution::create_command_buffer(
             &self.core,
             &self.compute_setup,
             self.descriptor_set,
+            frame_no,
             last_frame_time_secs,
         );
         let command_buffers = [new_command_buffer];

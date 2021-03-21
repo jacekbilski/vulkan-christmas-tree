@@ -64,6 +64,7 @@ fn main_loop(
     let mut autorotate = false;
     let mut mouse_rotating = false;
     let mut last_cursor_position: PhysicalPosition<f64> = PhysicalPosition::new(0.0, 0.0);
+    let mut frame_no = 0u32;
     event_loop.run(move |event, _, control_flow| match event {
         Event::WindowEvent {
             event: WindowEvent::CloseRequested,
@@ -160,7 +161,8 @@ fn main_loop(
                     &mut vulkan,
                 );
             }
-            vulkan.draw_frame(last_frame_time_secs);
+            vulkan.draw_frame(frame_no, last_frame_time_secs);
+            frame_no = frame_no + 1;
             let frame_end = Instant::now();
             thread::sleep(
                 Duration::from_secs_f32(1.0 / MAX_FPS as f32) - (frame_end - frame_start),
