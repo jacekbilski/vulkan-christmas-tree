@@ -76,9 +76,18 @@ float randomFromRange(float min, float max) {
 void moveSnowflake() {
     uint i = gl_GlobalInvocationID.x;
 
-    sf[i].pos.x += randomFromRange(-SNOW_RANDOM_MOVES, SNOW_RANDOM_MOVES);
-    sf[i].pos.y += randomFromRange(-SNOW_RANDOM_MOVES, SNOW_RANDOM_MOVES) + constants.lastFrameTimeSecs * SNOW_FALL_VELOCITY;
-    sf[i].pos.z += randomFromRange(-SNOW_RANDOM_MOVES, SNOW_RANDOM_MOVES);
+    sfAcc[i].posAcc.x += constants.lastFrameTimeSecs * randomFromRange(-SNOW_RANDOM_MOVES, SNOW_RANDOM_MOVES);
+    sfAcc[i].posAcc.y += constants.lastFrameTimeSecs * randomFromRange(-SNOW_RANDOM_MOVES, SNOW_RANDOM_MOVES);
+    sfAcc[i].posAcc.z += constants.lastFrameTimeSecs * randomFromRange(-SNOW_RANDOM_MOVES, SNOW_RANDOM_MOVES);
+
+    sfVel[i].posVel.x += constants.lastFrameTimeSecs * sfAcc[i].posAcc.x;
+    sfVel[i].posVel.y += constants.lastFrameTimeSecs * sfAcc[i].posAcc.y;
+    sfVel[i].posVel.z += constants.lastFrameTimeSecs * sfAcc[i].posAcc.z;
+
+    sf[i].pos.x += constants.lastFrameTimeSecs * sfVel[i].posVel.x;
+    sf[i].pos.y += constants.lastFrameTimeSecs * sfVel[i].posVel.y + constants.lastFrameTimeSecs * SNOW_FALL_VELOCITY;
+    sf[i].pos.z += constants.lastFrameTimeSecs * sfVel[i].posVel.z;
+
     if (sf[i].pos.y > SNOW_Y_MAX) {
         sf[i].pos.x = randomFromRange(SNOW_X_MIN, SNOW_X_MAX);
         sf[i].pos.y -= (SNOW_Y_MAX - SNOW_Y_MIN);
