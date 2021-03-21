@@ -1,4 +1,7 @@
 #version 450
+#extension GL_EXT_shader_explicit_arithmetic_types_int32 : enable
+#extension GL_EXT_shader_explicit_arithmetic_types_int64 : enable
+
 #define WORKGROUP_SIZE 64
 #define MAX_SNOWFLAKES 20000
 #define SNOW_X_MIN -10
@@ -12,9 +15,12 @@
 #define SNOW_RANDOM_MOVES 0.005
 #define SNOW_RANDOM_ROTATIONS 5.0
 
+#define K1 vec2(23.14069263277926, 2.665144142690225)
+
 layout (local_size_x = WORKGROUP_SIZE, local_size_y = 1, local_size_z = 1) in;
 
 layout (push_constant) uniform Constants {
+    uint frameNo;
     float lastFrameTimeSecs;
 } constants;
 
@@ -68,8 +74,21 @@ uint rand_lcg() {
     return rng_state;
 }
 
+uint squares(uint64_t ctr) {
+
+    uint64_t key = (0x63acbfe2U << 32) | 0x13f5d867U;
+    uint64_t x, y, z;
+
+    y = x = ctr * key; z = y + key;
+    x = x*x + y; x = (x>>32) | (x<<32);       /* round 1 */
+    x = x*x + z; x = (x>>32) | (x<<32);       /* round 2 */
+    x = x*x + y; x = (x>>32) | (x<<32);       /* round 3 */
+    return uint((x*x + z) >> 32);         /* round 4 */
+}
+
 float randomFromRange(float min, float max) {
-    float rnd = fract(float(rand_lcg()) * (1.0 / 4294967295.0));   // [0; 1)
+//    float rnd = fract(float(rand_lcg()) * (1.0 / 4294967295.0));   // [0; 1)
+    float rnd = fract(float(squares(constants.frameNo << 8 | gl_GlobalInvocationID.x)) * (1.0 / 4294967295.0));   // [0; 1)
     return rnd * (max - min) + min;
 }
 

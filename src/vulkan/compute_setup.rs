@@ -99,12 +99,17 @@ impl VulkanComputeSetup {
 
         let set_layouts = [descriptor_set_layout];
 
-        let last_frame_time_secs = vk::PushConstantRange {
+        let frame_no = vk::PushConstantRange {
             stage_flags: vk::ShaderStageFlags::COMPUTE,
             size: 4,
             offset: 0,
         };
-        let push_constant_ranges = [last_frame_time_secs];
+        let last_frame_time_secs = vk::PushConstantRange {
+            stage_flags: vk::ShaderStageFlags::COMPUTE,
+            size: 4,
+            offset: 4,
+        };
+        let push_constant_ranges = [frame_no, last_frame_time_secs];
 
         let pipeline_layout_create_info = vk::PipelineLayoutCreateInfo {
             flags: vk::PipelineLayoutCreateFlags::empty(),

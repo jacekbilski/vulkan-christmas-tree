@@ -150,11 +150,12 @@ impl Vulkan {
             .update_lights(lights, &self.graphics_setup);
     }
 
-    pub fn draw_frame(&mut self, last_frame_time_secs: f32) {
-        self.compute_execution
-            .as_mut()
-            .unwrap()
-            .do_calculations(self.snow_calculated_semaphore, last_frame_time_secs);
+    pub fn draw_frame(&mut self, frame_no: u32, last_frame_time_secs: f32) {
+        self.compute_execution.as_mut().unwrap().do_calculations(
+            self.snow_calculated_semaphore,
+            frame_no,
+            last_frame_time_secs,
+        );
         self.graphics_execution
             .draw_frame(&mut self.graphics_setup, self.snow_calculated_semaphore);
     }
