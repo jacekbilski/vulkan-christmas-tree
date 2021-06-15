@@ -4,6 +4,7 @@ use memoffset::offset_of;
 
 use crate::vulkan::Vertex;
 
+#[derive(Debug)]
 pub struct Mesh {
     pub vertices: Vec<Vertex>,
     pub indices: Vec<u32>,
@@ -11,6 +12,7 @@ pub struct Mesh {
 }
 
 #[repr(C)]
+#[derive(Debug)]
 pub struct InstanceData {
     pub model: Matrix4<f32>,
     pub color: Color,
@@ -94,7 +96,7 @@ impl Default for InstanceData {
 }
 
 #[repr(C)]
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug)]
 pub struct Color {
     pub ambient: [f32; 3],
     pub diffuse: [f32; 3],
