@@ -9,7 +9,9 @@ default = []
 validation-layers = []
 
 [dependencies]
-ash = "0.33.3+1.2.191"
+ash = "0.34.0+1.2.203"
+ash-window = "0.8.0"
+raw-window-handle = "0.4.2"
 cgmath = "0.18.0"
 winit = "0.25.0"
 memoffset = "0.6.4"

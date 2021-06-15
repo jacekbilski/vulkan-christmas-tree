@@ -44,7 +44,7 @@ pub struct VulkanCore {
 
 impl VulkanCore {
     pub fn new(window: &winit::window::Window, application_name: &str) -> (Self, SurfaceComposite) {
-        let entry = unsafe { ash::Entry::new().unwrap() };
+        let entry = ash::Entry::new();
         let instance = VulkanCore::create_instance(&entry, application_name);
         #[cfg(feature = "validation-layers")]
         let (debug_utils_loader, debug_messenger) =
@@ -501,79 +501,21 @@ impl VulkanCore {
         }
     }
 
-    #[cfg(all(unix, not(target_os = "android"), not(target_os = "macos")))]
     fn create_surface(
         entry: &ash::Entry,
         instance: &ash::Instance,
         window: &winit::window::Window,
     ) -> SurfaceComposite {
-        let surface = unsafe {
-            use winit::platform::unix::WindowExtUnix;
+        unsafe {
+            let surface =
+                ash_window::create_surface(entry, instance, window, None)
+                    .expect("Unable to create surface");
+            let surface_loader = ash::extensions::khr::Surface::new(entry, instance);
 
-            if window.wayland_surface() != None {
-                let wayland_surface = window.wayland_surface().unwrap();
-                let wayland_display = window.wayland_display().unwrap();
-                let wayland_create_info = vk::WaylandSurfaceCreateInfoKHR {
-                    surface: wayland_surface,
-                    display: wayland_display,
-                    ..Default::default()
-                };
-                let wayland_surface_loader = WaylandSurface::new(entry, instance);
-                wayland_surface_loader
-                    .create_wayland_surface(&wayland_create_info, None)
-                    .expect("Failed to create surface.")
-            } else {
-                let x11_window = window.xlib_window().unwrap();
-                let x11_display = window.xlib_display().unwrap();
-                let x11_create_info = vk::XlibSurfaceCreateInfoKHR {
-                    window: x11_window,
-                    dpy: x11_display as *mut vk::Display,
-                    ..Default::default()
-                };
-                let xlib_surface_loader = XlibSurface::new(entry, instance);
-                xlib_surface_loader
-                    .create_xlib_surface(&x11_create_info, None)
-                    .expect("Failed to create surface.")
+            SurfaceComposite {
+                loader: surface_loader,
+                surface,
             }
-        };
-        let surface_loader = ash::extensions::khr::Surface::new(entry, instance);
-
-        SurfaceComposite {
-            loader: surface_loader,
-            surface,
-        }
-    }
-
-    #[cfg(target_os = "windows")]
-    fn create_surface(
-        entry: &ash::Entry,
-        instance: &ash::Instance,
-        window: &winit::window::Window,
-    ) -> SurfaceComposite {
-        let surface = unsafe {
-            use winapi::shared::windef::HWND;
-            use winapi::um::libloaderapi::GetModuleHandleW;
-            use winit::platform::windows::WindowExtWindows;
-
-            let hwnd = window.hwnd() as HWND;
-            let hinstance = GetModuleHandleW(ptr::null()) as *const c_void;
-            let win32_create_info = vk::Win32SurfaceCreateInfoKHR {
-                s_type: vk::StructureType::WIN32_SURFACE_CREATE_INFO_KHR,
-                p_next: ptr::null(),
-                flags: Default::default(),
-                hinstance,
-                hwnd: hwnd as *const c_void,
-            };
-            let loader = Win32Surface::new(entry, instance);
-            loader
-                .create_win32_surface(&win32_create_info, None)
-                .expect("Failed to create surface.")
-        };
-        let surface_loader = ash::extensions::khr::Surface::new(entry, instance);
-
-        SurfaceComposite {
-            loader: surface_loader,
-            surface,
         }
     }
 
