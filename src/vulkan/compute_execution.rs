@@ -1,6 +1,5 @@
 use std::ptr;
 
-use ash::version::DeviceV1_0;
 use ash::vk;
 
 use crate::scene::snow::{Snowflake, MAX_SNOWFLAKES};

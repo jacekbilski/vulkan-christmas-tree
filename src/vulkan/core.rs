@@ -12,14 +12,13 @@ use ash::extensions::khr::Surface;
 use ash::extensions::khr::Win32Surface;
 #[cfg(all(unix, not(target_os = "android"), not(target_os = "macos")))]
 use ash::extensions::khr::{WaylandSurface, XlibSurface};
-use ash::version::{DeviceV1_0, EntryV1_0, InstanceV1_0};
 use ash::vk;
 
 use crate::vulkan::{QueueFamilyIndices, SurfaceComposite, VulkanGraphicsSetup};
 
-const APPLICATION_VERSION: u32 = vk::make_version(0, 1, 0);
-const ENGINE_VERSION: u32 = vk::make_version(0, 1, 0);
-const VULKAN_API_VERSION: u32 = vk::make_version(1, 1, 0);
+const APPLICATION_VERSION: u32 = vk::make_api_version(0, 0, 1, 0);
+const ENGINE_VERSION: u32 = vk::make_api_version(0, 0, 1, 0);
+const VULKAN_API_VERSION: u32 = vk::make_api_version(0, 1, 1, 0);
 
 #[derive(Clone)]
 pub struct VulkanCore {
