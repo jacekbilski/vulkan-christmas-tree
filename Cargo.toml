@@ -2,7 +2,7 @@
 name = "vulkan-christmas-tree"
 version = "0.1.0"
 authors = ["Jacek Bilski <jacek@bilski.tech>"]
-edition = "2018"
+edition = "2021"
 
 [features]
 default = []
