@@ -28,6 +28,7 @@ const MAX_FPS: u8 = 60;
 const APPLICATION_NAME: &'static str = "Vulkan Christmas Tree";
 
 fn main() {
+    std::env::set_var("WINIT_UNIX_BACKEND", "x11"); // even on Wayland -> use X11
     let event_loop = EventLoop::new();
     let window = init_window(&event_loop);
     let mut vulkan = Vulkan::new(&window, APPLICATION_NAME);
