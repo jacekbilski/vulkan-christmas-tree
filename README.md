@@ -6,6 +6,10 @@ This repo is purely "for fun", it's about messing around with drawing something 
 
 This thing is _way_ more complex than OpenGL or WebGL. It is much more low-level, gives far more power, but also requires much more knowledge about how the things actually work under the hood. Long story short:
 
+## Validation layers
+
+They help understand Vulkan and avoid mistakes when using it. To enable them, just add `"validation-layers"` to a default features in `Cargo.toml`.
+
 ## Some basic ideas
 
 First of all, Vulkan is asynchronous (well, OpenGL and WebGL also were, but not that much in your face). What I basically will do all the time is to prepare commands that will be doing something interesting, like copying data or executing shaders, and submit them to queues for execution. The tricky part is, I have no guarantees when or in what order those commans will be executed. When a specific order is required, fences and semaphores come into play.
