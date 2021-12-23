@@ -13,6 +13,7 @@ use ash::extensions::khr::Win32Surface;
 #[cfg(all(unix, not(target_os = "android"), not(target_os = "macos")))]
 use ash::extensions::khr::{WaylandSurface, XlibSurface};
 use ash::vk;
+use ash::vk::PhysicalDeviceType;
 
 use crate::vulkan::{QueueFamilyIndices, SurfaceComposite, VulkanGraphicsSetup};
 
@@ -615,9 +616,15 @@ impl VulkanCore {
             false
         };
 
+        let is_discrete_gpu = unsafe {
+            let props = instance.get_physical_device_properties(physical_device);
+            props.device_type == PhysicalDeviceType::DISCRETE_GPU
+        };
+
         return is_queue_family_supported
             && is_device_extension_supported
-            && is_swapchain_supported;
+            && is_swapchain_supported
+            && is_discrete_gpu;
     }
 
     fn find_queue_family(
