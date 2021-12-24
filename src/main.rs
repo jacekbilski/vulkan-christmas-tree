@@ -6,7 +6,7 @@ use std::time::{Duration, Instant};
 
 use winit::dpi::{PhysicalPosition, PhysicalSize};
 use winit::event::ElementState::Pressed;
-use winit::event::{ElementState, Event, KeyboardInput, MouseButton, VirtualKeyCode, WindowEvent};
+use winit::event::{ElementState, Event, KeyboardInput, MouseButton, MouseScrollDelta, VirtualKeyCode, WindowEvent};
 use winit::event_loop::{ControlFlow, EventLoop};
 
 use vulkan::Vulkan;
@@ -73,7 +73,7 @@ fn main_loop(
         } => {
             vulkan.wait_device_idle();
             *control_flow = ControlFlow::Exit;
-        }
+        },
         Event::WindowEvent {
             event:
                 WindowEvent::KeyboardInput {
@@ -126,7 +126,17 @@ fn main_loop(
             ..
         } => {
             mouse_rotating = state == Pressed;
-        }
+        },
+        Event::WindowEvent {
+            event:
+            WindowEvent::MouseWheel {
+                delta: MouseScrollDelta::LineDelta(_, vertical),
+                ..
+            },
+            ..
+        } => {
+            scene.change_camera_distance(-0.5 * vertical, &mut vulkan);
+        },
         Event::WindowEvent {
             event: WindowEvent::CursorMoved { position, .. },
             ..
@@ -140,7 +150,7 @@ fn main_loop(
                 scene.rotate_camera_vertically(angle_change * y_diff as f32, &mut vulkan);
             }
             last_cursor_position = position;
-        }
+        },
         Event::WindowEvent {
             event: WindowEvent::Resized(new_size),
             ..
@@ -148,10 +158,10 @@ fn main_loop(
             vulkan.wait_device_idle();
             scene.framebuffer_resized(new_size, &mut vulkan);
             vulkan.framebuffer_resized(new_size.width, new_size.height);
-        }
+        },
         Event::MainEventsCleared => {
             window.request_redraw();
-        }
+        },
         Event::RedrawRequested(_window_id) => {
             let frame_start = Instant::now();
             fps_calculator.tick();
@@ -168,10 +178,10 @@ fn main_loop(
             if actual_frame_duration < desired_frame_duration {
                 thread::sleep(desired_frame_duration - actual_frame_duration);
             }
-        }
+        },
         Event::LoopDestroyed => {
             vulkan.wait_device_idle();
-        }
+        },
         _ => (),
     });
 }

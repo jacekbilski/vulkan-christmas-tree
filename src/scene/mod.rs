@@ -74,6 +74,10 @@ impl Scene {
         self.camera.rotate_vertically(angle, vulkan);
     }
 
+    pub fn change_camera_distance(&mut self, distance: f32, vulkan: &mut Vulkan) {
+        self.camera.change_distance(distance, vulkan);
+    }
+
     pub(crate) fn framebuffer_resized(&mut self, new_size: PhysicalSize<u32>, vulkan: &mut Vulkan) {
         self.camera.framebuffer_resized(new_size, vulkan);
     }

@@ -50,6 +50,12 @@ impl Camera {
         vulkan.update_camera(&self);
     }
 
+    pub fn change_distance(&mut self, distance: f32, vulkan: &mut Vulkan) {
+        self.position.r += distance;
+        self.view = Camera::view(self.position, self.look_at);
+        vulkan.update_camera(&self);
+    }
+
     pub(crate) fn framebuffer_resized(&mut self, new_size: PhysicalSize<u32>, vulkan: &mut Vulkan) {
         self.projection = Camera::set_projection(new_size);
         vulkan.update_camera(&self);
