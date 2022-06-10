@@ -290,7 +290,7 @@ impl VulkanGraphicsSetup {
         window_width: u32,
         window_height: u32,
     ) -> vk::Extent2D {
-        if capabilities.current_extent.width != u32::max_value() {
+        if capabilities.current_extent.width != u32::MAX {
             capabilities.current_extent
         } else {
             vk::Extent2D {

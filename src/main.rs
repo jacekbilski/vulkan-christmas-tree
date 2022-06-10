@@ -6,7 +6,7 @@ use std::time::{Duration, Instant};
 
 use winit::dpi::{PhysicalPosition, PhysicalSize};
 use winit::event::ElementState::Pressed;
-use winit::event::{ElementState, Event, KeyboardInput, MouseButton, MouseScrollDelta, VirtualKeyCode, WindowEvent};
+use winit::event::{Event, KeyboardInput, MouseButton, MouseScrollDelta, VirtualKeyCode, WindowEvent};
 use winit::event_loop::{ControlFlow, EventLoop};
 
 use vulkan::Vulkan;
@@ -39,7 +39,7 @@ fn main() {
 fn init_window(event_loop: &EventLoop<()>) -> winit::window::Window {
     let window = winit::window::WindowBuilder::new()
         .with_title(APPLICATION_NAME)
-        .with_inner_size(winit::dpi::PhysicalSize::new(1, 1))
+        .with_inner_size(PhysicalSize::new(1, 1))
         .build(event_loop)
         .expect("Failed to create window.");
     let monitor = window
@@ -56,7 +56,7 @@ fn init_window(event_loop: &EventLoop<()>) -> winit::window::Window {
 }
 
 fn main_loop(
-    mut vulkan: vulkan::Vulkan,
+    mut vulkan: Vulkan,
     window: winit::window::Window,
     mut scene: Scene,
     event_loop: EventLoop<()>,
@@ -80,7 +80,7 @@ fn main_loop(
                     input:
                         KeyboardInput {
                             virtual_keycode: Some(virtual_code),
-                            state: ElementState::Pressed,
+                            state: Pressed,
                             ..
                         },
                     ..

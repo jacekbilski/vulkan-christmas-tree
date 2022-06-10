@@ -599,7 +599,7 @@ impl VulkanGraphicsExecution {
 
         unsafe {
             device
-                .wait_for_fences(&wait_fences, true, std::u64::MAX)
+                .wait_for_fences(&wait_fences, true, u64::MAX)
                 .expect("Failed to wait for Fence!");
         }
 
@@ -609,7 +609,7 @@ impl VulkanGraphicsExecution {
                 .loader
                 .acquire_next_image(
                     graphics_setup.swapchain_composite.swapchain,
-                    std::u64::MAX,
+                    u64::MAX,
                     self.image_available_semaphores[self.current_frame],
                     vk::Fence::null(),
                 );

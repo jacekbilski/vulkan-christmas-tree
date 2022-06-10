@@ -210,7 +210,7 @@ impl VulkanComputeExecution {
         unsafe {
             self.core
                 .device
-                .wait_for_fences(&wait_fences, true, std::u64::MAX)
+                .wait_for_fences(&wait_fences, true, u64::MAX)
                 .expect("Failed to wait for Fence!");
 
             // only now I'm sure it's not used any more

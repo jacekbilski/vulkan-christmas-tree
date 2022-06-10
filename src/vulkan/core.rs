@@ -27,7 +27,7 @@ pub struct VulkanCore {
     pub instance: ash::Instance,
 
     #[cfg(feature = "validation-layers")]
-    debug_utils_loader: ash::extensions::ext::DebugUtils,
+    debug_utils_loader: DebugUtils,
     #[cfg(feature = "validation-layers")]
     debug_messenger: vk::DebugUtilsMessengerEXT,
 
@@ -472,8 +472,8 @@ impl VulkanCore {
     fn setup_debug_utils(
         entry: &ash::Entry,
         instance: &ash::Instance,
-    ) -> (ash::extensions::ext::DebugUtils, vk::DebugUtilsMessengerEXT) {
-        let debug_utils_loader = ash::extensions::ext::DebugUtils::new(entry, instance);
+    ) -> (DebugUtils, vk::DebugUtilsMessengerEXT) {
+        let debug_utils_loader = DebugUtils::new(entry, instance);
 
         let messenger_ci = VulkanCore::build_messenger_create_info();
 
@@ -510,7 +510,7 @@ impl VulkanCore {
             let surface =
                 ash_window::create_surface(entry, instance, window, None)
                     .expect("Unable to create surface");
-            let surface_loader = ash::extensions::khr::Surface::new(entry, instance);
+            let surface_loader = Surface::new(entry, instance);
 
             SurfaceComposite {
                 loader: surface_loader,
