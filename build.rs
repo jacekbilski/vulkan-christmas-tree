@@ -6,7 +6,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     // Tell the build script to only run again if we change our source shaders
     println!("cargo:rerun-if-changed=src/shaders");
 
-    let mut compiler = shaderc::Compiler::new().unwrap();
+    let compiler = shaderc::Compiler::new().unwrap();
     let mut options = shaderc::CompileOptions::new().unwrap();
     options.add_macro_definition("EP", Some("main"));
 

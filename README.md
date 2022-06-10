@@ -90,3 +90,7 @@ Third, creating the pipeline changes a bit. In `vertex_input` call I need to say
 Fourth, to the `draw` call I'm passing in instances buffer as a second vertex buffer.
 
 As a last step I need to adapt the shader. Simply adding more `layout(location = x) in vec3 y;` is enough, just make sure locations are correct that is `x` is greater by one than last location taken from vertex buffer. 
+
+## Tree model
+
+The tree model is taken from Internet: https://www.turbosquid.com/3d-models/forest-pack-obj-free/917762

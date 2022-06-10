@@ -44,7 +44,7 @@ pub struct VulkanCore {
 
 impl VulkanCore {
     pub fn new(window: &winit::window::Window, application_name: &str) -> (Self, SurfaceComposite) {
-        let entry = ash::Entry::new();
+        let entry = ash::Entry::linked();
         let instance = VulkanCore::create_instance(&entry, application_name);
         #[cfg(feature = "validation-layers")]
         let (debug_utils_loader, debug_messenger) =
