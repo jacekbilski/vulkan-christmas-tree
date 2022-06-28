@@ -507,9 +507,8 @@ impl VulkanCore {
         window: &winit::window::Window,
     ) -> SurfaceComposite {
         unsafe {
-            let surface =
-                ash_window::create_surface(entry, instance, window, None)
-                    .expect("Unable to create surface");
+            let surface = ash_window::create_surface(entry, instance, window, None)
+                .expect("Unable to create surface");
             let surface_loader = Surface::new(entry, instance);
 
             SurfaceComposite {

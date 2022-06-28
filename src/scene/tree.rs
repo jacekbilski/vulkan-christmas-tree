@@ -32,10 +32,7 @@ pub fn create_meshes() -> Vec<Mesh> {
                 mesh.positions[pi + 2],
             );
             let ni = 3 * mesh.normal_indices[i] as usize;
-            let normal = vec3(
-                mesh.normals[ni],
-                mesh.normals[ni + 1],
-                mesh.normals[ni + 2]);
+            let normal = vec3(mesh.normals[ni], mesh.normals[ni + 1], mesh.normals[ni + 2]);
 
             vertices.push(Vertex {
                 pos: position.into(),

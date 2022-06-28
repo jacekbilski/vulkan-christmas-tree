@@ -6,7 +6,7 @@ use crate::coords::CylindricalPoint3;
 use crate::mesh::{Color, InstanceData, Mesh};
 use crate::vulkan::{Vertex, VertexIndexType};
 
-const PRECISION: VertexIndexType = 8;
+const PRECISION: VertexIndexType = 16;
 const RADIUS: f32 = 0.2;
 
 struct Bauble {
