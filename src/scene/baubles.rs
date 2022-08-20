@@ -2,8 +2,8 @@ use std::f32::consts::{FRAC_PI_2, FRAC_PI_4, FRAC_PI_6, FRAC_PI_8, PI};
 
 use cgmath::{vec3, EuclideanSpace, Matrix4, Point3};
 
+use crate::color_mesh::{Color, ColorMesh, InstanceData};
 use crate::coords::CylindricalPoint3;
-use crate::mesh::{Color, InstanceData, Mesh};
 use crate::vulkan::{Vertex, VertexIndexType};
 
 const PRECISION: VertexIndexType = 16;
@@ -14,7 +14,7 @@ struct Bauble {
     color: Color,
 }
 
-pub fn create_meshes() -> Vec<Mesh> {
+pub fn create_meshes() -> Vec<ColorMesh> {
     let (vertices, indices) = gen_sphere();
 
     let red = Color {
@@ -183,7 +183,7 @@ pub fn create_meshes() -> Vec<Mesh> {
         })
         .collect();
 
-    vec![Mesh {
+    vec![ColorMesh {
         vertices,
         indices,
         instances,

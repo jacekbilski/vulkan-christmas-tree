@@ -1,7 +1,7 @@
 use ash::vk;
 use memoffset::offset_of;
 
-use crate::mesh::{InstanceData, Mesh};
+use crate::color_mesh::{ColorMesh, InstanceData};
 use crate::scene::camera::Camera;
 use crate::scene::lights::Lights;
 use crate::scene::snow::{Snowflake, MAX_SNOWFLAKES};
@@ -112,12 +112,12 @@ impl Vulkan {
         }
     }
 
-    pub fn set_static_meshes(&mut self, meshes: &Vec<Mesh>) {
+    pub fn set_static_meshes(&mut self, meshes: &Vec<ColorMesh>) {
         self.graphics_execution
             .set_static_meshes(meshes, &mut self.graphics_setup);
     }
 
-    pub fn set_snow_mesh(&mut self, snowflakes: &Vec<Snowflake>, meshes: &Vec<Mesh>) {
+    pub fn set_snow_mesh(&mut self, snowflakes: &Vec<Snowflake>, meshes: &Vec<ColorMesh>) {
         let (drawing_buffer, _buffer_memory) = self
             .graphics_execution
             .set_snow_mesh(meshes, &mut self.graphics_setup);

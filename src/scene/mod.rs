@@ -1,8 +1,8 @@
 use cgmath::Point3;
 use winit::dpi::PhysicalSize;
 
+use crate::color_mesh::ColorMesh;
 use crate::coords::SphericalPoint3;
-use crate::mesh::Mesh;
 use crate::scene::camera::Camera;
 use crate::scene::lights::Lights;
 use crate::vulkan::Vulkan;
@@ -56,7 +56,7 @@ impl Scene {
     }
 
     fn setup_meshes(vulkan: &mut Vulkan) {
-        let mut meshes: Vec<Mesh> = Vec::new();
+        let mut meshes: Vec<ColorMesh> = Vec::new();
         meshes.extend(ground::create_meshes());
         meshes.extend(baubles::create_meshes());
         meshes.extend(tree::create_meshes());

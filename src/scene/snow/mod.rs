@@ -6,7 +6,7 @@ use rand::distributions::Uniform;
 use rand::rngs::SmallRng;
 use rand::{Rng, SeedableRng};
 
-use crate::mesh::{Color, InstanceData, Mesh};
+use crate::color_mesh::{Color, ColorMesh, InstanceData};
 use crate::vulkan::Vertex;
 
 const SNOW_X_MIN: f32 = -10.;
@@ -35,7 +35,7 @@ impl Default for Snowflake {
     }
 }
 
-pub fn create_meshes() -> (Vec<Snowflake>, Vec<Mesh>) {
+pub fn create_meshes() -> (Vec<Snowflake>, Vec<ColorMesh>) {
     let color = Color {
         ambient: [1.0, 1.0, 1.0],
         diffuse: [0.623960, 0.686685, 0.693872],
@@ -47,7 +47,7 @@ pub fn create_meshes() -> (Vec<Snowflake>, Vec<Mesh>) {
     let instances = gen_instances(&snowflakes, color);
     (
         snowflakes,
-        vec![Mesh {
+        vec![ColorMesh {
             vertices,
             indices,
             instances,

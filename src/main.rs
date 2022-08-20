@@ -18,9 +18,9 @@ use crate::scene::Scene;
 
 mod vulkan;
 
+mod color_mesh;
 mod coords;
 mod fps_calculator;
-mod mesh;
 mod scene;
 
 const AUTO_ROTATION_SPEED_RAD_PER_SEC: f32 = TAU / 30.0;

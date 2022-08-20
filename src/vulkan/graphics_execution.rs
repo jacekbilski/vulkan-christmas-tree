@@ -3,7 +3,7 @@ use std::ptr;
 use ash::vk;
 use cgmath::{Matrix4, Point3};
 
-use crate::mesh::Mesh;
+use crate::color_mesh::ColorMesh;
 use crate::scene::camera::Camera;
 use crate::scene::lights::{Light, Lights};
 use crate::vulkan::core::VulkanCore;
@@ -365,7 +365,7 @@ impl VulkanGraphicsExecution {
 
     pub(crate) fn set_static_meshes(
         &mut self,
-        meshes: &Vec<Mesh>,
+        meshes: &Vec<ColorMesh>,
         graphics_setup: &VulkanGraphicsSetup,
     ) {
         self.static_meshes = meshes
@@ -376,7 +376,7 @@ impl VulkanGraphicsExecution {
 
     pub(crate) fn set_snow_mesh(
         &mut self,
-        meshes: &Vec<Mesh>,
+        meshes: &Vec<ColorMesh>,
         graphics_setup: &VulkanGraphicsSetup,
     ) -> (vk::Buffer, vk::DeviceMemory) {
         self.snow_mesh = meshes
@@ -391,7 +391,7 @@ impl VulkanGraphicsExecution {
         )
     }
 
-    fn to_vulkan_mesh(&self, graphics_setup: &VulkanGraphicsSetup, mesh: &Mesh) -> VulkanMesh {
+    fn to_vulkan_mesh(&self, graphics_setup: &VulkanGraphicsSetup, mesh: &ColorMesh) -> VulkanMesh {
         let (vertex_buffer, vertex_buffer_memory) = VulkanGraphicsExecution::create_vertex_buffer(
             &self.core,
             graphics_setup.command_pool,

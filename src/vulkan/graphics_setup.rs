@@ -3,7 +3,7 @@ use std::ptr;
 
 use ash::vk;
 
-use crate::mesh::InstanceData;
+use crate::color_mesh::InstanceData;
 use crate::vulkan::core::VulkanCore;
 use crate::vulkan::{SurfaceComposite, Vertex};
 
@@ -478,9 +478,9 @@ impl VulkanGraphicsSetup {
     ) -> (vk::Pipeline, vk::PipelineLayout) {
         let device = &core.device;
         let vert_shader_module =
-            core.create_shader_module(include_bytes!("../../target/shaders/simple.vert.spv"));
+            core.create_shader_module(include_bytes!("../../target/shaders/color.vert.spv"));
         let frag_shader_module =
-            core.create_shader_module(include_bytes!("../../target/shaders/simple.frag.spv"));
+            core.create_shader_module(include_bytes!("../../target/shaders/color.frag.spv"));
 
         let main_function_name = CString::new("main").unwrap(); // the beginning function name in shader code.
 

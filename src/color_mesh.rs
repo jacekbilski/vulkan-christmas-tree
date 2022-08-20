@@ -5,7 +5,7 @@ use memoffset::offset_of;
 use crate::vulkan::Vertex;
 
 #[derive(Debug)]
-pub struct Mesh {
+pub struct ColorMesh {
     pub vertices: Vec<Vertex>,
     pub indices: Vec<u32>,
     pub instances: Vec<InstanceData>,

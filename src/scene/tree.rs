@@ -3,10 +3,10 @@ use std::f32::consts::PI;
 use cgmath::{vec3, Matrix4, Point3, Rad};
 use tobj::{load_mtl_buf, load_obj_buf};
 
-use crate::mesh::{Color, InstanceData, Mesh};
+use crate::color_mesh::{Color, ColorMesh, InstanceData};
 use crate::vulkan::Vertex;
 
-pub fn create_meshes() -> Vec<Mesh> {
+pub fn create_meshes() -> Vec<ColorMesh> {
     let object_source = include_str!("../../models/tree.obj");
     let materials_source = include_str!("../../models/tree.mtl");
     let load_options = tobj::LoadOptions {
@@ -18,7 +18,7 @@ pub fn create_meshes() -> Vec<Mesh> {
     });
     let (models, model_materials) = tree.unwrap();
     let materials = model_materials.unwrap();
-    let mut meshes: Vec<Mesh> = vec![];
+    let mut meshes: Vec<ColorMesh> = vec![];
     for mi in 0..models.len() {
         let mut vertices: Vec<Vertex> = vec![];
         let mut indices: Vec<u32> = vec![];
@@ -54,7 +54,7 @@ pub fn create_meshes() -> Vec<Mesh> {
             model,
             ..Default::default()
         };
-        let mesh = Mesh {
+        let mesh = ColorMesh {
             vertices,
             indices,
             instances: vec![instance],
