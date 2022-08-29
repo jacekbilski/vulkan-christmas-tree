@@ -6,6 +6,7 @@ use cgmath::{Matrix4, Point3};
 use crate::color_mesh::ColorMesh;
 use crate::scene::camera::Camera;
 use crate::scene::lights::{Light, Lights};
+use crate::textured_mesh::TexturedMesh;
 use crate::vulkan::core::VulkanCore;
 use crate::vulkan::graphics_setup::{VulkanGraphicsSetup, CAMERA_UBO_INDEX, LIGHTS_UBO_INDEX};
 
@@ -76,11 +77,72 @@ impl VulkanColorMesh {
     }
 }
 
+#[derive(Clone, Copy)]
+struct VulkanTexturedMesh {
+    vertex_buffer: vk::Buffer,
+    vertex_buffer_memory: vk::DeviceMemory,
+    index_buffer: vk::Buffer,
+    index_buffer_memory: vk::DeviceMemory,
+    indices_no: u32,
+    instance_buffer: vk::Buffer,
+    instance_buffer_memory: vk::DeviceMemory,
+    instances_no: u32,
+}
+
+impl VulkanTexturedMesh {
+    fn drop(&self, device: &ash::Device) {
+        unsafe {
+            device.destroy_buffer(self.instance_buffer, None);
+            device.free_memory(self.instance_buffer_memory, None);
+            device.destroy_buffer(self.index_buffer, None);
+            device.free_memory(self.index_buffer_memory, None);
+            device.destroy_buffer(self.vertex_buffer, None);
+            device.free_memory(self.vertex_buffer_memory, None);
+        }
+    }
+
+    fn from_textured_mesh(
+        mesh: &TexturedMesh,
+        graphics_setup: &VulkanGraphicsSetup,
+        graphics_execution: &VulkanGraphicsExecution,
+    ) -> Self {
+        let (vertex_buffer, vertex_buffer_memory) = VulkanGraphicsExecution::create_vertex_buffer(
+            &graphics_execution.core,
+            graphics_setup.command_pool,
+            &mesh.vertices,
+        );
+        let (index_buffer, index_buffer_memory) = VulkanGraphicsExecution::create_index_buffer(
+            &graphics_execution.core,
+            graphics_setup.command_pool,
+            &mesh.indices,
+        );
+        let indices_no = mesh.indices.len() as u32;
+        let (instance_buffer, instance_buffer_memory) =
+            VulkanGraphicsExecution::create_vertex_buffer(
+                &graphics_execution.core,
+                graphics_setup.command_pool,
+                &mesh.instances,
+            );
+        let instances_no = mesh.instances.len() as u32;
+        Self {
+            vertex_buffer,
+            vertex_buffer_memory,
+            index_buffer,
+            index_buffer_memory,
+            indices_no,
+            instance_buffer,
+            instance_buffer_memory,
+            instances_no,
+        }
+    }
+}
+
 #[repr(C)]
 #[derive(Clone, Debug, Copy)]
 struct CameraUBO {
     position: Point3<f32>,
-    alignment_fix: f32, // see https://vulkan-tutorial.com/en/Uniform_buffers/Descriptor_pool_and_sets#page_Alignment-requirements
+    alignment_fix: f32,
+    // see https://vulkan-tutorial.com/en/Uniform_buffers/Descriptor_pool_and_sets#page_Alignment-requirements
     view: Matrix4<f32>,
     proj: Matrix4<f32>,
 }
@@ -402,12 +464,17 @@ impl VulkanGraphicsExecution {
 
     pub(crate) fn set_static_meshes(
         &mut self,
-        meshes: &Vec<ColorMesh>,
+        color_meshes: &Vec<ColorMesh>,
+        textured_meshes: &Vec<TexturedMesh>,
         graphics_setup: &VulkanGraphicsSetup,
     ) {
-        self.color_meshes = meshes
+        self.color_meshes = color_meshes
             .iter()
             .map(|m| VulkanColorMesh::from_color_mesh(m, graphics_setup, self))
+            .collect();
+        self.textured_meshes = textured_meshes
+            .iter()
+            .map(|m| VulkanTexturedMesh::from_textured_mesh(m, graphics_setup, self))
             .collect();
     }
 
@@ -494,6 +561,12 @@ impl VulkanGraphicsExecution {
                     command_buffer,
                     self.color_meshes.clone(),
                 );
+                self.execute_textured_pipeline(
+                    graphics_setup,
+                    i,
+                    command_buffer,
+                    self.textured_meshes.clone(),
+                );
                 self.execute_color_pipeline(
                     graphics_setup,
                     i,
@@ -517,6 +590,54 @@ impl VulkanGraphicsExecution {
         frame_index: usize,
         command_buffer: vk::CommandBuffer,
         meshes: Vec<VulkanColorMesh>,
+    ) {
+        let device = &self.core.device;
+        unsafe {
+            device.cmd_bind_pipeline(
+                command_buffer,
+                vk::PipelineBindPoint::GRAPHICS,
+                graphics_setup.pipeline,
+            );
+
+            let descriptor_sets_to_bind = [self.descriptor_sets[frame_index]];
+            device.cmd_bind_descriptor_sets(
+                command_buffer,
+                vk::PipelineBindPoint::GRAPHICS,
+                graphics_setup.pipeline_layout,
+                0,
+                &descriptor_sets_to_bind,
+                &[],
+            );
+
+            for mesh in meshes.iter() {
+                let vertex_buffers = [mesh.vertex_buffer, mesh.instance_buffer];
+                let offsets = [0_u64, 0_u64];
+
+                device.cmd_bind_vertex_buffers(command_buffer, 0, &vertex_buffers, &offsets);
+                device.cmd_bind_index_buffer(
+                    command_buffer,
+                    mesh.index_buffer,
+                    0,
+                    vk::IndexType::UINT32,
+                );
+                device.cmd_draw_indexed(
+                    command_buffer,
+                    mesh.indices_no,
+                    mesh.instances_no,
+                    0,
+                    0,
+                    0,
+                );
+            }
+        }
+    }
+
+    fn execute_textured_pipeline(
+        &self,
+        graphics_setup: &VulkanGraphicsSetup,
+        frame_index: usize,
+        command_buffer: vk::CommandBuffer,
+        meshes: Vec<VulkanTexturedMesh>,
     ) {
         let device = &self.core.device;
         unsafe {
@@ -710,6 +831,7 @@ impl VulkanGraphicsExecution {
             }
 
             self.color_meshes.iter().for_each(|m| m.drop(&device));
+            self.textured_meshes.iter().for_each(|m| m.drop(&device));
             self.snow_mesh.iter().for_each(|m| m.drop(&device));
             for j in 0..self.uniform_buffers.len() {
                 for i in 0..self.uniform_buffers[j].buffers.len() {

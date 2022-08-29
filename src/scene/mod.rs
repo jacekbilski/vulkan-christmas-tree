@@ -5,6 +5,7 @@ use crate::color_mesh::ColorMesh;
 use crate::coords::SphericalPoint3;
 use crate::scene::camera::Camera;
 use crate::scene::lights::Lights;
+use crate::textured_mesh::TexturedMesh;
 use crate::vulkan::Vulkan;
 
 mod baubles;
@@ -56,11 +57,12 @@ impl Scene {
     }
 
     fn setup_meshes(vulkan: &mut Vulkan) {
-        let mut meshes: Vec<ColorMesh> = Vec::new();
-        meshes.extend(ground::create_meshes());
-        meshes.extend(baubles::create_meshes());
-        meshes.extend(tree::create_meshes());
-        vulkan.set_static_meshes(&meshes);
+        let mut color_meshes: Vec<ColorMesh> = Vec::new();
+        color_meshes.extend(baubles::create_meshes());
+        color_meshes.extend(tree::create_meshes());
+        let mut textured_meshes: Vec<TexturedMesh> = Vec::new();
+        textured_meshes.extend(ground::create_meshes());
+        vulkan.set_static_meshes(&color_meshes, &textured_meshes);
         let (snowflakes, snow_meshes) = snow::create_meshes();
         vulkan.set_snow_mesh(&snowflakes, &snow_meshes);
         vulkan.scene_complete();

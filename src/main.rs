@@ -22,6 +22,7 @@ mod color_mesh;
 mod coords;
 mod fps_calculator;
 mod scene;
+mod textured_mesh;
 
 const AUTO_ROTATION_SPEED_RAD_PER_SEC: f32 = TAU / 30.0;
 

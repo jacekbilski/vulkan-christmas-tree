@@ -5,6 +5,7 @@ use crate::color_mesh::{ColorMesh, InstanceData};
 use crate::scene::camera::Camera;
 use crate::scene::lights::Lights;
 use crate::scene::snow::{Snowflake, MAX_SNOWFLAKES};
+use crate::textured_mesh::TexturedMesh;
 use crate::vulkan::compute_execution::VulkanComputeExecution;
 use crate::vulkan::compute_setup::VulkanComputeSetup;
 use crate::vulkan::core::VulkanCore;
@@ -112,9 +113,16 @@ impl Vulkan {
         }
     }
 
-    pub fn set_static_meshes(&mut self, meshes: &Vec<ColorMesh>) {
-        self.graphics_execution
-            .set_static_meshes(meshes, &mut self.graphics_setup);
+    pub fn set_static_meshes(
+        &mut self,
+        color_meshes: &Vec<ColorMesh>,
+        textured_meshes: &Vec<TexturedMesh>,
+    ) {
+        self.graphics_execution.set_static_meshes(
+            color_meshes,
+            textured_meshes,
+            &mut self.graphics_setup,
+        );
     }
 
     pub fn set_snow_mesh(&mut self, snowflakes: &Vec<Snowflake>, meshes: &Vec<ColorMesh>) {
