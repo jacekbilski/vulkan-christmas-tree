@@ -37,8 +37,8 @@ pub struct VulkanGraphicsSetup {
 
     pub render_pass: vk::RenderPass,
     pub descriptor_set_layout: vk::DescriptorSetLayout,
-    pub pipeline_layout: vk::PipelineLayout,
-    pub pipeline: vk::Pipeline,
+    pub color_pipeline_layout: vk::PipelineLayout,
+    pub color_pipeline: vk::Pipeline,
 
     msaa_samples: vk::SampleCountFlags,
 
@@ -80,7 +80,7 @@ impl VulkanGraphicsSetup {
             msaa_samples,
         );
         let descriptor_set_layout = VulkanGraphicsSetup::create_descriptor_set_layout(&core.device);
-        let (pipeline, pipeline_layout) = VulkanGraphicsSetup::create_pipeline(
+        let (color_pipeline, color_pipeline_layout) = VulkanGraphicsSetup::create_pipeline(
             &core,
             render_pass,
             swapchain_composite.extent,
@@ -121,8 +121,8 @@ impl VulkanGraphicsSetup {
 
             render_pass,
             descriptor_set_layout,
-            pipeline_layout,
-            pipeline,
+            color_pipeline_layout,
+            color_pipeline,
 
             msaa_samples,
 
@@ -903,15 +903,15 @@ impl VulkanGraphicsSetup {
             self.swapchain_composite.format,
             self.msaa_samples,
         );
-        let (graphics_pipeline, pipeline_layout) = VulkanGraphicsSetup::create_pipeline(
+        let (color_pipeline, color_pipeline_layout) = VulkanGraphicsSetup::create_pipeline(
             &self.core,
             self.render_pass,
             self.swapchain_composite.extent,
             self.descriptor_set_layout,
             self.msaa_samples,
         );
-        self.pipeline = graphics_pipeline;
-        self.pipeline_layout = pipeline_layout;
+        self.color_pipeline = color_pipeline;
+        self.color_pipeline_layout = color_pipeline_layout;
 
         let (color_image, color_image_view, color_image_memory) =
             VulkanGraphicsSetup::create_color_resources(
@@ -955,8 +955,8 @@ impl VulkanGraphicsSetup {
             for &framebuffer in self.swapchain_composite.framebuffers.iter() {
                 device.destroy_framebuffer(framebuffer, None);
             }
-            device.destroy_pipeline(self.pipeline, None);
-            device.destroy_pipeline_layout(self.pipeline_layout, None);
+            device.destroy_pipeline(self.color_pipeline, None);
+            device.destroy_pipeline_layout(self.color_pipeline_layout, None);
             device.destroy_render_pass(self.render_pass, None);
             for &image_view in self.swapchain_composite.image_views.iter() {
                 device.destroy_image_view(image_view, None);
