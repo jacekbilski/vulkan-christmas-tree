@@ -3,7 +3,7 @@ use std::ptr;
 
 use ash::vk;
 
-use crate::color_mesh::InstanceData;
+use crate::color_mesh;
 use crate::vulkan::core::VulkanCore;
 use crate::vulkan::{SurfaceComposite, Vertex};
 
@@ -82,6 +82,8 @@ impl VulkanGraphicsSetup {
         let descriptor_set_layout = VulkanGraphicsSetup::create_descriptor_set_layout(&core.device);
         let (color_pipeline, color_pipeline_layout) = VulkanGraphicsSetup::create_pipeline(
             &core,
+            color_mesh::InstanceData::get_binding_descriptions(),
+            color_mesh::InstanceData::get_attribute_descriptions(),
             render_pass,
             swapchain_composite.extent,
             descriptor_set_layout,
@@ -471,6 +473,8 @@ impl VulkanGraphicsSetup {
 
     fn create_pipeline(
         core: &VulkanCore,
+        additional_binding_descriptions: Vec<vk::VertexInputBindingDescription>,
+        additional_attribute_descriptions: Vec<vk::VertexInputAttributeDescription>,
         render_pass: vk::RenderPass,
         swapchain_extent: vk::Extent2D,
         descriptor_set_layout: vk::DescriptorSetLayout,
@@ -499,27 +503,20 @@ impl VulkanGraphicsSetup {
             },
         ];
 
-        let mut binding_description: Vec<vk::VertexInputBindingDescription> = vec![];
-        for &bd in Vertex::get_binding_descriptions().iter() {
-            binding_description.push(bd);
-        }
-        for &bd in InstanceData::get_binding_descriptions().iter() {
-            binding_description.push(bd);
-        }
-        let mut attribute_description: Vec<vk::VertexInputAttributeDescription> = vec![];
-        for &ad in Vertex::get_attribute_descriptions().iter() {
-            attribute_description.push(ad);
-        }
-        for &ad in InstanceData::get_attribute_descriptions().iter() {
-            attribute_description.push(ad);
-        }
+        let mut binding_descriptions: Vec<vk::VertexInputBindingDescription> = vec![];
+        binding_descriptions.extend(Vertex::get_binding_descriptions());
+        binding_descriptions.extend(additional_binding_descriptions);
+
+        let mut attribute_descriptions: Vec<vk::VertexInputAttributeDescription> = vec![];
+        attribute_descriptions.extend(Vertex::get_attribute_descriptions());
+        attribute_descriptions.extend(additional_attribute_descriptions);
 
         let vertex_input_state_create_info = vk::PipelineVertexInputStateCreateInfo {
             flags: vk::PipelineVertexInputStateCreateFlags::empty(),
-            vertex_attribute_description_count: attribute_description.len() as u32,
-            p_vertex_attribute_descriptions: attribute_description.as_ptr(),
-            vertex_binding_description_count: binding_description.len() as u32,
-            p_vertex_binding_descriptions: binding_description.as_ptr(),
+            vertex_attribute_description_count: attribute_descriptions.len() as u32,
+            p_vertex_attribute_descriptions: attribute_descriptions.as_ptr(),
+            vertex_binding_description_count: binding_descriptions.len() as u32,
+            p_vertex_binding_descriptions: binding_descriptions.as_ptr(),
             ..Default::default()
         };
         let vertex_input_assembly_state_info = vk::PipelineInputAssemblyStateCreateInfo {
@@ -905,6 +902,8 @@ impl VulkanGraphicsSetup {
         );
         let (color_pipeline, color_pipeline_layout) = VulkanGraphicsSetup::create_pipeline(
             &self.core,
+            color_mesh::InstanceData::get_binding_descriptions(),
+            color_mesh::InstanceData::get_attribute_descriptions(),
             self.render_pass,
             self.swapchain_composite.extent,
             self.descriptor_set_layout,

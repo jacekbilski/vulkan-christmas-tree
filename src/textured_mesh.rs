@@ -20,18 +20,18 @@ pub struct InstanceData {
 }
 
 impl InstanceData {
-    pub fn get_binding_descriptions() -> [vk::VertexInputBindingDescription; 1] {
-        [vk::VertexInputBindingDescription {
+    pub fn get_binding_descriptions() -> Vec<vk::VertexInputBindingDescription> {
+        vec![vk::VertexInputBindingDescription {
             binding: 1,
             stride: std::mem::size_of::<Self>() as u32,
             input_rate: vk::VertexInputRate::INSTANCE,
         }]
     }
 
-    pub fn get_attribute_descriptions() -> [vk::VertexInputAttributeDescription; 8] {
+    pub fn get_attribute_descriptions() -> Vec<vk::VertexInputAttributeDescription> {
         let matrix_quarter = (std::mem::size_of::<Matrix4<f32>>() / 4) as u32;
         let color_part = (std::mem::size_of::<[f32; 3]>()) as u32;
-        [
+        vec![
             vk::VertexInputAttributeDescription {
                 binding: 1,
                 location: 2,
