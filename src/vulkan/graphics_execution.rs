@@ -39,6 +39,41 @@ impl VulkanColorMesh {
             device.free_memory(self.vertex_buffer_memory, None);
         }
     }
+
+    fn from_color_mesh(
+        mesh: &ColorMesh,
+        graphics_setup: &VulkanGraphicsSetup,
+        graphics_execution: &VulkanGraphicsExecution,
+    ) -> Self {
+        let (vertex_buffer, vertex_buffer_memory) = VulkanGraphicsExecution::create_vertex_buffer(
+            &graphics_execution.core,
+            graphics_setup.command_pool,
+            &mesh.vertices,
+        );
+        let (index_buffer, index_buffer_memory) = VulkanGraphicsExecution::create_index_buffer(
+            &graphics_execution.core,
+            graphics_setup.command_pool,
+            &mesh.indices,
+        );
+        let indices_no = mesh.indices.len() as u32;
+        let (instance_buffer, instance_buffer_memory) =
+            VulkanGraphicsExecution::create_vertex_buffer(
+                &graphics_execution.core,
+                graphics_setup.command_pool,
+                &mesh.instances,
+            );
+        let instances_no = mesh.instances.len() as u32;
+        Self {
+            vertex_buffer,
+            vertex_buffer_memory,
+            index_buffer,
+            index_buffer_memory,
+            indices_no,
+            instance_buffer,
+            instance_buffer_memory,
+            instances_no,
+        }
+    }
 }
 
 #[repr(C)]
@@ -122,6 +157,7 @@ pub(crate) struct VulkanGraphicsExecution {
 
     uniform_buffers: Vec<UniformBuffer>,
     color_meshes: Vec<VulkanColorMesh>,
+    textured_meshes: Vec<VulkanTexturedMesh>,
     snow_mesh: Vec<VulkanColorMesh>,
     descriptor_sets: Vec<vk::DescriptorSet>,
     command_buffers: Vec<vk::CommandBuffer>,
@@ -156,6 +192,7 @@ impl VulkanGraphicsExecution {
 
             uniform_buffers,
             color_meshes: vec![],
+            textured_meshes: vec![],
             snow_mesh: vec![],
             descriptor_sets,
             command_buffers: vec![],
@@ -370,7 +407,7 @@ impl VulkanGraphicsExecution {
     ) {
         self.color_meshes = meshes
             .iter()
-            .map(|m| self.to_vulkan_mesh(graphics_setup, m))
+            .map(|m| VulkanColorMesh::from_color_mesh(m, graphics_setup, self))
             .collect();
     }
 
@@ -381,7 +418,7 @@ impl VulkanGraphicsExecution {
     ) -> (vk::Buffer, vk::DeviceMemory) {
         self.snow_mesh = meshes
             .iter()
-            .map(|m| self.to_vulkan_mesh(graphics_setup, m))
+            .map(|m| VulkanColorMesh::from_color_mesh(m, graphics_setup, self))
             .collect();
 
         let last_mesh = self.snow_mesh.last().unwrap();
@@ -389,41 +426,6 @@ impl VulkanGraphicsExecution {
             last_mesh.instance_buffer.clone(),
             last_mesh.instance_buffer_memory.clone(),
         )
-    }
-
-    fn to_vulkan_mesh(
-        &self,
-        graphics_setup: &VulkanGraphicsSetup,
-        mesh: &ColorMesh,
-    ) -> VulkanColorMesh {
-        let (vertex_buffer, vertex_buffer_memory) = VulkanGraphicsExecution::create_vertex_buffer(
-            &self.core,
-            graphics_setup.command_pool,
-            &mesh.vertices,
-        );
-        let (index_buffer, index_buffer_memory) = VulkanGraphicsExecution::create_index_buffer(
-            &self.core,
-            graphics_setup.command_pool,
-            &mesh.indices,
-        );
-        let indices_no = mesh.indices.len() as u32;
-        let (instance_buffer, instance_buffer_memory) =
-            VulkanGraphicsExecution::create_vertex_buffer(
-                &self.core,
-                graphics_setup.command_pool,
-                &mesh.instances,
-            );
-        let instances_no = mesh.instances.len() as u32;
-        VulkanColorMesh {
-            vertex_buffer,
-            vertex_buffer_memory,
-            index_buffer,
-            index_buffer_memory,
-            indices_no,
-            instance_buffer,
-            instance_buffer_memory,
-            instances_no,
-        }
     }
 
     pub(crate) fn create_command_buffers(&mut self, graphics_setup: &VulkanGraphicsSetup) {
