@@ -644,14 +644,14 @@ impl VulkanGraphicsExecution {
             device.cmd_bind_pipeline(
                 command_buffer,
                 vk::PipelineBindPoint::GRAPHICS,
-                graphics_setup.color_pipeline,
+                graphics_setup.textured_pipeline,
             );
 
             let descriptor_sets_to_bind = [self.descriptor_sets[frame_index]];
             device.cmd_bind_descriptor_sets(
                 command_buffer,
                 vk::PipelineBindPoint::GRAPHICS,
-                graphics_setup.color_pipeline_layout,
+                graphics_setup.textured_pipeline_layout,
                 0,
                 &descriptor_sets_to_bind,
                 &[],

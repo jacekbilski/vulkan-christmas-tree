@@ -4,6 +4,7 @@ use std::ptr;
 use ash::vk;
 
 use crate::color_mesh;
+use crate::textured_mesh;
 use crate::vulkan::core::VulkanCore;
 use crate::vulkan::{SurfaceComposite, Vertex};
 
@@ -12,6 +13,9 @@ pub const LIGHTS_UBO_INDEX: usize = 1;
 
 const COLOR_VERTEX_SHADER_SPV: &[u8] = include_bytes!("../../target/shaders/color.vert.spv");
 const COLOR_FRAGMENT_SHADER_SPV: &[u8] = include_bytes!("../../target/shaders/color.frag.spv");
+const TEXTURED_VERTEX_SHADER_SPV: &[u8] = include_bytes!("../../target/shaders/textured.vert.spv");
+const TEXTURED_FRAGMENT_SHADER_SPV: &[u8] =
+    include_bytes!("../../target/shaders/textured.frag.spv");
 
 const COLOR_FORMAT: vk::Format = vk::Format::B8G8R8A8_UNORM;
 
@@ -42,6 +46,8 @@ pub struct VulkanGraphicsSetup {
     pub descriptor_set_layout: vk::DescriptorSetLayout,
     pub color_pipeline_layout: vk::PipelineLayout,
     pub color_pipeline: vk::Pipeline,
+    pub textured_pipeline_layout: vk::PipelineLayout,
+    pub textured_pipeline: vk::Pipeline,
 
     msaa_samples: vk::SampleCountFlags,
 
@@ -94,6 +100,17 @@ impl VulkanGraphicsSetup {
             descriptor_set_layout,
             msaa_samples,
         );
+        let (textured_pipeline, textured_pipeline_layout) = VulkanGraphicsSetup::create_pipeline(
+            &core,
+            TEXTURED_VERTEX_SHADER_SPV,
+            TEXTURED_FRAGMENT_SHADER_SPV,
+            textured_mesh::InstanceData::get_binding_descriptions(),
+            textured_mesh::InstanceData::get_attribute_descriptions(),
+            render_pass,
+            swapchain_composite.extent,
+            descriptor_set_layout,
+            msaa_samples,
+        );
         let (color_image, color_image_view, color_image_memory) =
             VulkanGraphicsSetup::create_color_resources(
                 &core,
@@ -130,6 +147,8 @@ impl VulkanGraphicsSetup {
             descriptor_set_layout,
             color_pipeline_layout,
             color_pipeline,
+            textured_pipeline_layout,
+            textured_pipeline,
 
             msaa_samples,
 
@@ -918,6 +937,19 @@ impl VulkanGraphicsSetup {
         );
         self.color_pipeline = color_pipeline;
         self.color_pipeline_layout = color_pipeline_layout;
+        let (textured_pipeline, textured_pipeline_layout) = VulkanGraphicsSetup::create_pipeline(
+            &self.core,
+            TEXTURED_VERTEX_SHADER_SPV,
+            TEXTURED_FRAGMENT_SHADER_SPV,
+            textured_mesh::InstanceData::get_binding_descriptions(),
+            textured_mesh::InstanceData::get_attribute_descriptions(),
+            self.render_pass,
+            self.swapchain_composite.extent,
+            self.descriptor_set_layout,
+            self.msaa_samples,
+        );
+        self.textured_pipeline = textured_pipeline;
+        self.textured_pipeline_layout = textured_pipeline_layout;
 
         let (color_image, color_image_view, color_image_memory) =
             VulkanGraphicsSetup::create_color_resources(
@@ -961,6 +993,8 @@ impl VulkanGraphicsSetup {
             for &framebuffer in self.swapchain_composite.framebuffers.iter() {
                 device.destroy_framebuffer(framebuffer, None);
             }
+            device.destroy_pipeline(self.textured_pipeline, None);
+            device.destroy_pipeline_layout(self.textured_pipeline_layout, None);
             device.destroy_pipeline(self.color_pipeline, None);
             device.destroy_pipeline_layout(self.color_pipeline_layout, None);
             device.destroy_render_pass(self.render_pass, None);
