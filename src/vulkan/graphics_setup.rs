@@ -10,6 +10,9 @@ use crate::vulkan::{SurfaceComposite, Vertex};
 pub const CAMERA_UBO_INDEX: usize = 0;
 pub const LIGHTS_UBO_INDEX: usize = 1;
 
+const COLOR_VERTEX_SHADER_SPV: &[u8] = include_bytes!("../../target/shaders/color.vert.spv");
+const COLOR_FRAGMENT_SHADER_SPV: &[u8] = include_bytes!("../../target/shaders/color.frag.spv");
+
 const COLOR_FORMAT: vk::Format = vk::Format::B8G8R8A8_UNORM;
 
 #[derive(Clone)]
@@ -82,6 +85,8 @@ impl VulkanGraphicsSetup {
         let descriptor_set_layout = VulkanGraphicsSetup::create_descriptor_set_layout(&core.device);
         let (color_pipeline, color_pipeline_layout) = VulkanGraphicsSetup::create_pipeline(
             &core,
+            COLOR_VERTEX_SHADER_SPV,
+            COLOR_FRAGMENT_SHADER_SPV,
             color_mesh::InstanceData::get_binding_descriptions(),
             color_mesh::InstanceData::get_attribute_descriptions(),
             render_pass,
@@ -473,6 +478,8 @@ impl VulkanGraphicsSetup {
 
     fn create_pipeline(
         core: &VulkanCore,
+        vertex_shader_spv: &[u8],
+        fragment_shader_spv: &[u8],
         additional_binding_descriptions: Vec<vk::VertexInputBindingDescription>,
         additional_attribute_descriptions: Vec<vk::VertexInputAttributeDescription>,
         render_pass: vk::RenderPass,
@@ -481,10 +488,8 @@ impl VulkanGraphicsSetup {
         msaa_samples: vk::SampleCountFlags,
     ) -> (vk::Pipeline, vk::PipelineLayout) {
         let device = &core.device;
-        let vert_shader_module =
-            core.create_shader_module(include_bytes!("../../target/shaders/color.vert.spv"));
-        let frag_shader_module =
-            core.create_shader_module(include_bytes!("../../target/shaders/color.frag.spv"));
+        let vert_shader_module = core.create_shader_module(vertex_shader_spv);
+        let frag_shader_module = core.create_shader_module(fragment_shader_spv);
 
         let main_function_name = CString::new("main").unwrap(); // the beginning function name in shader code.
 
@@ -902,6 +907,8 @@ impl VulkanGraphicsSetup {
         );
         let (color_pipeline, color_pipeline_layout) = VulkanGraphicsSetup::create_pipeline(
             &self.core,
+            COLOR_VERTEX_SHADER_SPV,
+            COLOR_FRAGMENT_SHADER_SPV,
             color_mesh::InstanceData::get_binding_descriptions(),
             color_mesh::InstanceData::get_attribute_descriptions(),
             self.render_pass,
