@@ -14,6 +14,7 @@ use ash::extensions::khr::Win32Surface;
 use ash::extensions::khr::{WaylandSurface, XlibSurface};
 use ash::vk;
 use ash::vk::PhysicalDeviceType;
+use raw_window_handle::{HasRawDisplayHandle, HasRawWindowHandle};
 
 use crate::vulkan::{QueueFamilyIndices, SurfaceComposite, VulkanGraphicsSetup};
 
@@ -507,8 +508,14 @@ impl VulkanCore {
         window: &winit::window::Window,
     ) -> SurfaceComposite {
         unsafe {
-            let surface = ash_window::create_surface(entry, instance, window, None)
-                .expect("Unable to create surface");
+            let surface = ash_window::create_surface(
+                entry,
+                instance,
+                window.raw_display_handle(),
+                window.raw_window_handle(),
+                None,
+            )
+            .expect("Unable to create surface");
             let surface_loader = Surface::new(entry, instance);
 
             SurfaceComposite {
