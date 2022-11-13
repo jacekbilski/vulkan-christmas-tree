@@ -22,10 +22,6 @@ layout(set = 0, binding = 1) uniform LightsUBO {
 
 layout(location = 0) in vec3 fragPosition;
 layout(location = 1) in vec3 fragNormal;
-layout(location = 2) in vec3 fragAmbient;
-layout(location = 3) in vec3 fragDiffuse;
-layout(location = 4) in vec3 fragSpecular;
-layout(location = 5) in float fragShininess;
 
 layout(location = 0) out vec4 outColor;
 
@@ -40,17 +36,16 @@ void main() {
 }
 
 vec3 calcLight(Light light) {
-    vec3 ambient = light.ambient * fragAmbient;
+    vec3 ambient = light.ambient;
 
-    vec3 norm = normalize(fragNormal);
     vec3 lightDir = normalize(light.position - fragPosition);
-    float diff = max(dot(norm, lightDir), 0.0);
-    vec3 diffuse = diff * light.diffuse * fragDiffuse;
+    float diff = max(dot(fragNormal, lightDir), 0.0);
+    vec3 diffuse = diff * light.diffuse;
 
     vec3 viewDir = normalize(camera.position - fragPosition);
     vec3 halfwayDir = normalize(lightDir + viewDir);
-    float spec = pow(max(dot(norm, halfwayDir), 0.0), fragShininess);
-    vec3 specular = spec * light.specular * fragSpecular;
+    float spec = max(dot(fragNormal, halfwayDir), 0.0);
+    vec3 specular = spec * light.specular;
 
     return ambient + diffuse + specular;
 }

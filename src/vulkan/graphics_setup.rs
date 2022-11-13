@@ -5,6 +5,7 @@ use ash::vk;
 
 use crate::color_mesh;
 use crate::textured_mesh;
+use crate::textured_mesh::TexturedVertex;
 use crate::vulkan::core::VulkanCore;
 use crate::vulkan::{SurfaceComposite, Vertex};
 
@@ -93,6 +94,8 @@ impl VulkanGraphicsSetup {
             &core,
             COLOR_VERTEX_SHADER_SPV,
             COLOR_FRAGMENT_SHADER_SPV,
+            Vertex::get_binding_descriptions(),
+            Vertex::get_attribute_descriptions(),
             color_mesh::InstanceData::get_binding_descriptions(),
             color_mesh::InstanceData::get_attribute_descriptions(),
             render_pass,
@@ -104,6 +107,8 @@ impl VulkanGraphicsSetup {
             &core,
             TEXTURED_VERTEX_SHADER_SPV,
             TEXTURED_FRAGMENT_SHADER_SPV,
+            TexturedVertex::get_binding_descriptions(),
+            TexturedVertex::get_attribute_descriptions(),
             textured_mesh::InstanceData::get_binding_descriptions(),
             textured_mesh::InstanceData::get_attribute_descriptions(),
             render_pass,
@@ -499,8 +504,10 @@ impl VulkanGraphicsSetup {
         core: &VulkanCore,
         vertex_shader_spv: &[u8],
         fragment_shader_spv: &[u8],
-        additional_binding_descriptions: Vec<vk::VertexInputBindingDescription>,
-        additional_attribute_descriptions: Vec<vk::VertexInputAttributeDescription>,
+        vertex_binding_descriptions: Vec<vk::VertexInputBindingDescription>,
+        vertex_attribute_descriptions: Vec<vk::VertexInputAttributeDescription>,
+        instance_binding_descriptions: Vec<vk::VertexInputBindingDescription>,
+        instance_attribute_descriptions: Vec<vk::VertexInputAttributeDescription>,
         render_pass: vk::RenderPass,
         swapchain_extent: vk::Extent2D,
         descriptor_set_layout: vk::DescriptorSetLayout,
@@ -528,12 +535,12 @@ impl VulkanGraphicsSetup {
         ];
 
         let mut binding_descriptions: Vec<vk::VertexInputBindingDescription> = vec![];
-        binding_descriptions.extend(Vertex::get_binding_descriptions());
-        binding_descriptions.extend(additional_binding_descriptions);
+        binding_descriptions.extend(vertex_binding_descriptions);
+        binding_descriptions.extend(instance_binding_descriptions);
 
         let mut attribute_descriptions: Vec<vk::VertexInputAttributeDescription> = vec![];
-        attribute_descriptions.extend(Vertex::get_attribute_descriptions());
-        attribute_descriptions.extend(additional_attribute_descriptions);
+        attribute_descriptions.extend(vertex_attribute_descriptions);
+        attribute_descriptions.extend(instance_attribute_descriptions);
 
         let vertex_input_state_create_info = vk::PipelineVertexInputStateCreateInfo {
             flags: vk::PipelineVertexInputStateCreateFlags::empty(),
@@ -928,6 +935,8 @@ impl VulkanGraphicsSetup {
             &self.core,
             COLOR_VERTEX_SHADER_SPV,
             COLOR_FRAGMENT_SHADER_SPV,
+            Vertex::get_binding_descriptions(),
+            Vertex::get_attribute_descriptions(),
             color_mesh::InstanceData::get_binding_descriptions(),
             color_mesh::InstanceData::get_attribute_descriptions(),
             self.render_pass,
@@ -941,6 +950,8 @@ impl VulkanGraphicsSetup {
             &self.core,
             TEXTURED_VERTEX_SHADER_SPV,
             TEXTURED_FRAGMENT_SHADER_SPV,
+            TexturedVertex::get_binding_descriptions(),
+            TexturedVertex::get_attribute_descriptions(),
             textured_mesh::InstanceData::get_binding_descriptions(),
             textured_mesh::InstanceData::get_attribute_descriptions(),
             self.render_pass,
