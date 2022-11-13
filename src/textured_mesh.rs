@@ -7,6 +7,7 @@ use memoffset::offset_of;
 pub struct TexturedVertex {
     pub pos: [f32; 3],
     pub norm: [f32; 3],
+    pub texture_coordinates: [f32; 2],
 }
 
 impl TexturedVertex {
@@ -31,6 +32,12 @@ impl TexturedVertex {
                 location: 1,
                 format: vk::Format::R32G32B32_SFLOAT, // aka vec3
                 offset: offset_of!(Self, norm) as u32,
+            },
+            vk::VertexInputAttributeDescription {
+                binding: 0,
+                location: 2,
+                format: vk::Format::R32G32_SFLOAT, // aka vec2
+                offset: offset_of!(Self, texture_coordinates) as u32,
             },
         ]
     }
@@ -64,25 +71,25 @@ impl InstanceData {
             // need four because I'm sending a 4x4 matrix
             vk::VertexInputAttributeDescription {
                 binding: 1,
-                location: 2,
+                location: 3,
                 format: vk::Format::R32G32B32A32_SFLOAT, // aka vec4
                 offset: offset_of!(Self, model) as u32 + 0 * matrix_quarter,
             },
             vk::VertexInputAttributeDescription {
                 binding: 1,
-                location: 3,
+                location: 4,
                 format: vk::Format::R32G32B32A32_SFLOAT, // aka vec4
                 offset: offset_of!(Self, model) as u32 + 1 * matrix_quarter,
             },
             vk::VertexInputAttributeDescription {
                 binding: 1,
-                location: 4,
+                location: 5,
                 format: vk::Format::R32G32B32A32_SFLOAT, // aka vec4
                 offset: offset_of!(Self, model) as u32 + 2 * matrix_quarter,
             },
             vk::VertexInputAttributeDescription {
                 binding: 1,
-                location: 5,
+                location: 6,
                 format: vk::Format::R32G32B32A32_SFLOAT, // aka vec4
                 offset: offset_of!(Self, model) as u32 + 3 * matrix_quarter,
             },

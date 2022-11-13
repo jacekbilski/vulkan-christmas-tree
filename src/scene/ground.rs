@@ -7,18 +7,22 @@ const VERTICES_DATA: [TexturedVertex; 4] = [
     TexturedVertex {
         pos: [-10., 5., -10.],
         norm: [0., -1., 0.],
+        texture_coordinates: [0., 0.],
     },
     TexturedVertex {
         pos: [-10., 5., 10.],
         norm: [0., -1., 0.],
+        texture_coordinates: [0., 1.],
     },
     TexturedVertex {
         pos: [10., 5., -10.],
         norm: [0., -1., 0.],
+        texture_coordinates: [1., 0.],
     },
     TexturedVertex {
         pos: [10., 5., 10.],
         norm: [0., -1., 0.],
+        texture_coordinates: [1., 1.],
     },
 ];
 const INDICES_DATA: [VertexIndexType; 6] = [0, 2, 1, 1, 2, 3];
