@@ -1,22 +1,22 @@
 use cgmath::{Matrix4, SquareMatrix};
 
-use crate::textured_mesh::{Color, InstanceData, TexturedMesh};
-use crate::vulkan::{Vertex, VertexIndexType};
+use crate::textured_mesh::{Color, InstanceData, TexturedMesh, TexturedVertex};
+use crate::vulkan::VertexIndexType;
 
-const VERTICES_DATA: [Vertex; 4] = [
-    Vertex {
+const VERTICES_DATA: [TexturedVertex; 4] = [
+    TexturedVertex {
         pos: [-10., 5., -10.],
         norm: [0., -1., 0.],
     },
-    Vertex {
+    TexturedVertex {
         pos: [-10., 5., 10.],
         norm: [0., -1., 0.],
     },
-    Vertex {
+    TexturedVertex {
         pos: [10., 5., -10.],
         norm: [0., -1., 0.],
     },
-    Vertex {
+    TexturedVertex {
         pos: [10., 5., 10.],
         norm: [0., -1., 0.],
     },

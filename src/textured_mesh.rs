@@ -2,11 +2,16 @@ use ash::vk;
 use cgmath::{Matrix4, SquareMatrix};
 use memoffset::offset_of;
 
-use crate::vulkan::Vertex;
+#[repr(C)]
+#[derive(Debug, Clone, Copy)]
+pub struct TexturedVertex {
+    pub pos: [f32; 3],
+    pub norm: [f32; 3],
+}
 
 #[derive(Debug)]
 pub struct TexturedMesh {
-    pub vertices: Vec<Vertex>,
+    pub vertices: Vec<TexturedVertex>,
     pub indices: Vec<u32>,
     pub instances: Vec<InstanceData>,
 }
