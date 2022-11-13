@@ -37,5 +37,5 @@ void main() {
     fragDiffuse = diffuse;
     fragSpecular = specular;
     fragShininess = shininess;
-    fragNormal = mat3(transpose(inverse(model))) * normal;
+    fragNormal = normalize(mat3(transpose(inverse(model))) * normal);
 }
