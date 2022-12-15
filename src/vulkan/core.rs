@@ -301,6 +301,26 @@ impl VulkanCore {
         dst_buffer: vk::Buffer,
         size: vk::DeviceSize,
     ) {
+        let (command_buffers, command_buffer) = self.begin_one_time_commands(command_pool);
+
+        unsafe {
+            let copy_regions = [vk::BufferCopy {
+                src_offset: 0,
+                dst_offset: 0,
+                size,
+            }];
+
+            self.device
+                .cmd_copy_buffer(command_buffer, src_buffer, dst_buffer, &copy_regions);
+        }
+
+        self.end_one_time_commands(command_pool, &command_buffers, command_buffer);
+    }
+
+    fn begin_one_time_commands(
+        &self,
+        command_pool: vk::CommandPool,
+    ) -> (Vec<vk::CommandBuffer>, vk::CommandBuffer) {
         let allocate_info = vk::CommandBufferAllocateInfo {
             command_buffer_count: 1,
             command_pool,
@@ -324,16 +344,17 @@ impl VulkanCore {
             self.device
                 .begin_command_buffer(command_buffer, &begin_info)
                 .expect("Failed to begin Command Buffer");
+        }
+        (command_buffers, command_buffer)
+    }
 
-            let copy_regions = [vk::BufferCopy {
-                src_offset: 0,
-                dst_offset: 0,
-                size,
-            }];
-
-            self.device
-                .cmd_copy_buffer(command_buffer, src_buffer, dst_buffer, &copy_regions);
-
+    fn end_one_time_commands(
+        &self,
+        command_pool: vk::CommandPool,
+        command_buffers: &Vec<vk::CommandBuffer>,
+        command_buffer: vk::CommandBuffer,
+    ) {
+        unsafe {
             self.device
                 .end_command_buffer(command_buffer)
                 .expect("Failed to end Command Buffer");
@@ -343,7 +364,7 @@ impl VulkanCore {
             wait_semaphore_count: 0,
             p_wait_dst_stage_mask: ptr::null(),
             command_buffer_count: 1,
-            p_command_buffers: &command_buffer,
+            p_command_buffers: command_buffers.as_ptr(),
             signal_semaphore_count: 0,
             ..Default::default()
         }];
