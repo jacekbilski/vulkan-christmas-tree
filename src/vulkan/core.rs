@@ -14,7 +14,6 @@ use ash::extensions::khr::Win32Surface;
 use ash::extensions::khr::{WaylandSurface, XlibSurface};
 use ash::vk;
 use ash::vk::PhysicalDeviceType;
-use image::RgbaImage;
 use raw_window_handle::{HasRawDisplayHandle, HasRawWindowHandle};
 
 use crate::vulkan::{QueueFamilyIndices, SurfaceComposite, VulkanGraphicsSetup};
@@ -99,7 +98,6 @@ impl VulkanCore {
         tiling: vk::ImageTiling,
         usage: vk::ImageUsageFlags,
         required_memory_properties: vk::MemoryPropertyFlags,
-        device_memory_properties: &vk::PhysicalDeviceMemoryProperties,
     ) -> (vk::Image, vk::DeviceMemory) {
         let image_create_info = vk::ImageCreateInfo {
             image_type: vk::ImageType::TYPE_2D,
@@ -133,7 +131,7 @@ impl VulkanCore {
             memory_type_index: VulkanCore::find_memory_type(
                 image_memory_requirement.memory_type_bits,
                 required_memory_properties,
-                device_memory_properties,
+                &self.physical_device_memory_properties,
             ),
             ..Default::default()
         };
@@ -151,20 +149,6 @@ impl VulkanCore {
         }
 
         (image, image_memory)
-    }
-
-    pub fn create_texture(&self, data: RgbaImage) -> (vk::Image, vk::DeviceMemory) {
-        return self.create_image(
-            data.width(),
-            data.height(),
-            1,
-            vk::SampleCountFlags::TYPE_1,
-            vk::Format::R8G8B8A8_SRGB,
-            vk::ImageTiling::OPTIMAL,
-            vk::ImageUsageFlags::TRANSFER_DST | vk::ImageUsageFlags::SAMPLED,
-            vk::MemoryPropertyFlags::DEVICE_LOCAL,
-            &self.physical_device_memory_properties,
-        );
     }
 
     pub(crate) fn create_image_view(

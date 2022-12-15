@@ -758,7 +758,6 @@ impl VulkanGraphicsSetup {
             vk::ImageTiling::OPTIMAL,
             vk::ImageUsageFlags::TRANSIENT_ATTACHMENT | vk::ImageUsageFlags::COLOR_ATTACHMENT,
             vk::MemoryPropertyFlags::DEVICE_LOCAL,
-            &core.physical_device_memory_properties,
         );
         let color_image_view =
             core.create_image_view(color_image, color_format, vk::ImageAspectFlags::COLOR, 1);
@@ -782,7 +781,6 @@ impl VulkanGraphicsSetup {
             vk::ImageTiling::OPTIMAL,
             vk::ImageUsageFlags::DEPTH_STENCIL_ATTACHMENT,
             vk::MemoryPropertyFlags::DEVICE_LOCAL,
-            &core.physical_device_memory_properties,
         );
         let depth_image_view =
             core.create_image_view(depth_image, depth_format, vk::ImageAspectFlags::DEPTH, 1);

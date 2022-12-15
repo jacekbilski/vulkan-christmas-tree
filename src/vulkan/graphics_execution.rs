@@ -2,6 +2,7 @@ use std::ptr;
 
 use ash::vk;
 use cgmath::{Matrix4, Point3};
+use image::RgbaImage;
 
 use crate::color_mesh::ColorMesh;
 use crate::scene::camera::Camera;
@@ -128,10 +129,8 @@ impl VulkanTexturedMesh {
                 &mesh.instances,
             );
         let instances_no = mesh.instances.len() as u32;
-        let (texture_buffer, texture_buffer_memory) = VulkanCore::create_texture(
-            &graphics_execution.core,
-            mesh.texture.clone()
-        );
+        let (texture_buffer, texture_buffer_memory) =
+            VulkanGraphicsExecution::create_texture(&graphics_execution.core, mesh.texture.clone());
         Self {
             vertex_buffer,
             vertex_buffer_memory,
@@ -829,6 +828,19 @@ impl VulkanGraphicsExecution {
         data: &[u32],
     ) -> (vk::Buffer, vk::DeviceMemory) {
         core.create_data_buffer(command_pool, vk::BufferUsageFlags::INDEX_BUFFER, data)
+    }
+
+    fn create_texture(core: &VulkanCore, data: RgbaImage) -> (vk::Image, vk::DeviceMemory) {
+        return core.create_image(
+            data.width(),
+            data.height(),
+            1,
+            vk::SampleCountFlags::TYPE_1,
+            vk::Format::R8G8B8A8_SRGB,
+            vk::ImageTiling::OPTIMAL,
+            vk::ImageUsageFlags::TRANSFER_DST | vk::ImageUsageFlags::SAMPLED,
+            vk::MemoryPropertyFlags::DEVICE_LOCAL,
+        );
     }
 
     pub(crate) fn drop(&mut self) {
