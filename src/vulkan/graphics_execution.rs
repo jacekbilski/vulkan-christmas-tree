@@ -130,7 +130,7 @@ impl VulkanTexturedMesh {
             );
         let instances_no = mesh.instances.len() as u32;
         let (texture_buffer, texture_buffer_memory) =
-            VulkanGraphicsExecution::create_texture(&graphics_execution.core, mesh.texture.clone());
+            graphics_execution.create_texture(graphics_setup.command_pool, mesh.texture.clone());
         Self {
             vertex_buffer,
             vertex_buffer_memory,
@@ -830,8 +830,36 @@ impl VulkanGraphicsExecution {
         core.create_data_buffer(command_pool, vk::BufferUsageFlags::INDEX_BUFFER, data)
     }
 
-    fn create_texture(core: &VulkanCore, data: RgbaImage) -> (vk::Image, vk::DeviceMemory) {
-        return core.create_image(
+    fn create_texture(
+        &self,
+        command_pool: vk::CommandPool,
+        data: RgbaImage,
+    ) -> (vk::Image, vk::DeviceMemory) {
+        let image_size = (data.width() * data.height() * 4) as vk::DeviceSize;
+        let (staging_buffer, staging_buffer_memory) = self.core.create_buffer(
+            image_size,
+            vk::BufferUsageFlags::TRANSFER_SRC,
+            vk::MemoryPropertyFlags::HOST_VISIBLE | vk::MemoryPropertyFlags::HOST_COHERENT,
+        );
+
+        unsafe {
+            let data_ptr = self
+                .core
+                .device
+                .map_memory(
+                    staging_buffer_memory,
+                    0,
+                    image_size,
+                    vk::MemoryMapFlags::empty(),
+                )
+                .expect("Failed to Map Memory") as *mut u8;
+
+            data_ptr.copy_from_nonoverlapping(data.as_ptr(), data.len());
+
+            self.core.device.unmap_memory(staging_buffer_memory);
+        }
+
+        let (image, image_memory) = self.core.create_image(
             data.width(),
             data.height(),
             1,
@@ -841,6 +869,35 @@ impl VulkanGraphicsExecution {
             vk::ImageUsageFlags::TRANSFER_DST | vk::ImageUsageFlags::SAMPLED,
             vk::MemoryPropertyFlags::DEVICE_LOCAL,
         );
+
+        self.transition_image_layout(
+            command_pool,
+            image,
+            vk::ImageLayout::UNDEFINED,
+            vk::ImageLayout::TRANSFER_DST_OPTIMAL,
+        );
+
+        self.copy_buffer_to_image(
+            command_pool,
+            staging_buffer,
+            image,
+            data.width(),
+            data.height(),
+        );
+
+        self.transition_image_layout(
+            command_pool,
+            image,
+            vk::ImageLayout::TRANSFER_DST_OPTIMAL,
+            vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
+        );
+
+        unsafe {
+            self.core.device.destroy_buffer(staging_buffer, None);
+            self.core.device.free_memory(staging_buffer_memory, None);
+        }
+
+        (image, image_memory)
     }
 
     fn transition_image_layout(
@@ -851,6 +908,29 @@ impl VulkanGraphicsExecution {
         new_layout: vk::ImageLayout,
     ) {
         let (command_buffers, command_buffer) = self.core.begin_one_time_commands(command_pool);
+
+        let src_access_mask: vk::AccessFlags;
+        let dst_access_mask: vk::AccessFlags;
+        let src_stage_mask: vk::PipelineStageFlags;
+        let dst_stage_mask: vk::PipelineStageFlags;
+
+        if old_layout == vk::ImageLayout::UNDEFINED
+            && new_layout == vk::ImageLayout::TRANSFER_DST_OPTIMAL
+        {
+            src_access_mask = vk::AccessFlags::empty();
+            dst_access_mask = vk::AccessFlags::TRANSFER_WRITE;
+            src_stage_mask = vk::PipelineStageFlags::TOP_OF_PIPE;
+            dst_stage_mask = vk::PipelineStageFlags::TRANSFER;
+        } else if old_layout == vk::ImageLayout::TRANSFER_DST_OPTIMAL
+            && new_layout == vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL
+        {
+            src_access_mask = vk::AccessFlags::TRANSFER_WRITE;
+            dst_access_mask = vk::AccessFlags::SHADER_READ;
+            src_stage_mask = vk::PipelineStageFlags::TRANSFER;
+            dst_stage_mask = vk::PipelineStageFlags::FRAGMENT_SHADER;
+        } else {
+            panic!("Unsupported layout transition");
+        }
 
         let barrier = vk::ImageMemoryBarrier {
             image,
@@ -864,8 +944,8 @@ impl VulkanGraphicsExecution {
                 layer_count: 1,
                 ..Default::default()
             },
-            src_access_mask: vk::AccessFlags::empty(), // TODO
-            dst_access_mask: vk::AccessFlags::empty(), // TODO
+            src_access_mask,
+            dst_access_mask,
             src_queue_family_index: vk::QUEUE_FAMILY_IGNORED,
             dst_queue_family_index: vk::QUEUE_FAMILY_IGNORED,
             ..Default::default()
@@ -874,8 +954,8 @@ impl VulkanGraphicsExecution {
         unsafe {
             self.core.device.cmd_pipeline_barrier(
                 command_buffer,
-                vk::PipelineStageFlags::empty(), // TODO
-                vk::PipelineStageFlags::empty(), // TODO
+                src_stage_mask,
+                dst_stage_mask,
                 vk::DependencyFlags::BY_REGION,
                 &[],
                 &[],
