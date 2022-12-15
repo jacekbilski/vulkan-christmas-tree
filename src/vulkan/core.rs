@@ -14,6 +14,7 @@ use ash::extensions::khr::Win32Surface;
 use ash::extensions::khr::{WaylandSurface, XlibSurface};
 use ash::vk;
 use ash::vk::PhysicalDeviceType;
+use image::RgbaImage;
 use raw_window_handle::{HasRawDisplayHandle, HasRawWindowHandle};
 
 use crate::vulkan::{QueueFamilyIndices, SurfaceComposite, VulkanGraphicsSetup};
@@ -151,6 +152,60 @@ impl VulkanCore {
 
         (image, image_memory)
     }
+
+    pub fn create_texture(
+        &self,
+        data: RgbaImage,
+        ) -> (vk::Image, vk::DeviceMemory) {
+            let image_create_info = vk::ImageCreateInfo {
+                image_type: vk::ImageType::TYPE_2D,
+                format: vk::Format::R8G8B8A8_SRGB,
+                mip_levels: 1,
+                array_layers: 1,
+                samples: vk::SampleCountFlags::TYPE_1,
+                tiling: vk::ImageTiling::OPTIMAL,
+                usage: vk::ImageUsageFlags::TRANSFER_DST | vk::ImageUsageFlags::SAMPLED,
+                sharing_mode: vk::SharingMode::EXCLUSIVE,
+                initial_layout: vk::ImageLayout::UNDEFINED,
+                extent: vk::Extent3D {
+                    width: data.width(),
+                    height: data.height(),
+                    depth: 1,
+                },
+                ..Default::default()
+            };
+
+            let image = unsafe {
+                self.device
+                    .create_image(&image_create_info, None)
+                    .expect("Failed to create Texture Image!")
+            };
+
+            let image_memory_requirement = unsafe { self.device.get_image_memory_requirements(image) };
+            let memory_allocate_info = vk::MemoryAllocateInfo {
+                allocation_size: image_memory_requirement.size,
+                memory_type_index: VulkanCore::find_memory_type(
+                    image_memory_requirement.memory_type_bits,
+                    vk::MemoryPropertyFlags::DEVICE_LOCAL,
+                    &self.physical_device_memory_properties,
+                ),
+                ..Default::default()
+            };
+
+            let image_memory = unsafe {
+                self.device
+                    .allocate_memory(&memory_allocate_info, None)
+                    .expect("Failed to allocate Texture Image memory!")
+            };
+
+            unsafe {
+                self.device
+                    .bind_image_memory(image, image_memory, 0)
+                    .expect("Failed to bind Image Memmory!");
+            }
+
+            (image, image_memory)
+        }
 
     pub(crate) fn create_image_view(
         &self,

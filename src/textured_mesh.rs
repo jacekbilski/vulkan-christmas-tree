@@ -1,5 +1,6 @@
 use ash::vk;
 use cgmath::{Matrix4, SquareMatrix};
+use image::RgbaImage;
 use memoffset::offset_of;
 
 #[repr(C)]
@@ -48,6 +49,7 @@ pub struct TexturedMesh {
     pub vertices: Vec<TexturedVertex>,
     pub indices: Vec<u32>,
     pub instances: Vec<InstanceData>,
+    pub texture: RgbaImage, // TODO: do not use external structures
 }
 
 #[repr(C)]

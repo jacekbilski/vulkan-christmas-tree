@@ -87,11 +87,15 @@ struct VulkanTexturedMesh {
     instance_buffer: vk::Buffer,
     instance_buffer_memory: vk::DeviceMemory,
     instances_no: u32,
+    texture_buffer: vk::Image,
+    texture_buffer_memory: vk::DeviceMemory,
 }
 
 impl VulkanTexturedMesh {
     fn drop(&self, device: &ash::Device) {
         unsafe {
+            device.destroy_image(self.texture_buffer, None);
+            device.free_memory(self.texture_buffer_memory, None);
             device.destroy_buffer(self.instance_buffer, None);
             device.free_memory(self.instance_buffer_memory, None);
             device.destroy_buffer(self.index_buffer, None);
@@ -124,6 +128,10 @@ impl VulkanTexturedMesh {
                 &mesh.instances,
             );
         let instances_no = mesh.instances.len() as u32;
+        let (texture_buffer, texture_buffer_memory) = VulkanCore::create_texture(
+            &graphics_execution.core,
+            mesh.texture.clone()
+        );
         Self {
             vertex_buffer,
             vertex_buffer_memory,
@@ -133,6 +141,8 @@ impl VulkanTexturedMesh {
             instance_buffer,
             instance_buffer_memory,
             instances_no,
+            texture_buffer,
+            texture_buffer_memory,
         }
     }
 }
