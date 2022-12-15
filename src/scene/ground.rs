@@ -28,7 +28,7 @@ const VERTICES_DATA: [TexturedVertex; 4] = [
 const INDICES_DATA: [VertexIndexType; 6] = [0, 2, 1, 1, 2, 3];
 
 pub fn create_meshes() -> Vec<TexturedMesh> {
-    let texture = image::open("textures/christmas-g04b4b34ca_512.jpg").unwrap().into_rgba8();
+    let texture = image::open("textures/snow.jpg").unwrap().into_rgba8();
     vec![TexturedMesh {
         vertices: Vec::from(VERTICES_DATA),
         indices: Vec::from(INDICES_DATA),
