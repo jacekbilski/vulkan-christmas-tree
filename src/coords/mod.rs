@@ -174,7 +174,7 @@ mod tests {
     case(CylindricalPoint3::new(3., 3. * FRAC_PI_4, 0.), Point3::new(- (4.5 as f32).sqrt(), 0., (4.5 as f32).sqrt())),
     )]
 
-    fn cylindrical_spoint3_into_point(cp: CylindricalPoint3<f32>, expected: Point3<f32>) {
+    fn cylindrical_point3_into_point(cp: CylindricalPoint3<f32>, expected: Point3<f32>) {
         let result: Point3<f32> = cp.into();
         let x_diff = (result.x - expected.x).abs();
         let y_diff = (result.y - expected.y).abs();
