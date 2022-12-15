@@ -843,6 +843,50 @@ impl VulkanGraphicsExecution {
         );
     }
 
+    fn transition_image_layout(
+        &self,
+        command_pool: vk::CommandPool,
+        image: vk::Image,
+        old_layout: vk::ImageLayout,
+        new_layout: vk::ImageLayout,
+    ) {
+        let (command_buffers, command_buffer) = self.core.begin_one_time_commands(command_pool);
+
+        let barrier = vk::ImageMemoryBarrier {
+            image,
+            old_layout,
+            new_layout,
+            subresource_range: vk::ImageSubresourceRange {
+                aspect_mask: vk::ImageAspectFlags::COLOR,
+                base_mip_level: 0,
+                level_count: 1,
+                base_array_layer: 0,
+                layer_count: 1,
+                ..Default::default()
+            },
+            src_access_mask: vk::AccessFlags::empty(), // TODO
+            dst_access_mask: vk::AccessFlags::empty(), // TODO
+            src_queue_family_index: vk::QUEUE_FAMILY_IGNORED,
+            dst_queue_family_index: vk::QUEUE_FAMILY_IGNORED,
+            ..Default::default()
+        };
+
+        unsafe {
+            self.core.device.cmd_pipeline_barrier(
+                command_buffer,
+                vk::PipelineStageFlags::empty(), // TODO
+                vk::PipelineStageFlags::empty(), // TODO
+                vk::DependencyFlags::BY_REGION,
+                &[],
+                &[],
+                &[barrier],
+            );
+        }
+
+        self.core
+            .end_one_time_commands(command_pool, &command_buffers, command_buffer);
+    }
+
     pub(crate) fn drop(&mut self) {
         unsafe {
             let device = &self.core.device;

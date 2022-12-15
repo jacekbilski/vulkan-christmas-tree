@@ -301,7 +301,7 @@ impl VulkanCore {
         self.end_one_time_commands(command_pool, &command_buffers, command_buffer);
     }
 
-    fn begin_one_time_commands(
+    pub fn begin_one_time_commands(
         &self,
         command_pool: vk::CommandPool,
     ) -> (Vec<vk::CommandBuffer>, vk::CommandBuffer) {
@@ -332,7 +332,7 @@ impl VulkanCore {
         (command_buffers, command_buffer)
     }
 
-    fn end_one_time_commands(
+    pub fn end_one_time_commands(
         &self,
         command_pool: vk::CommandPool,
         command_buffers: &Vec<vk::CommandBuffer>,
