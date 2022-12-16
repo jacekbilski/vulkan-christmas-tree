@@ -6,8 +6,8 @@ use ash::vk;
 use crate::color_mesh;
 use crate::textured_mesh;
 use crate::textured_mesh::TexturedVertex;
-use crate::vulkan::core::VulkanCore;
 use crate::vulkan::{SurfaceComposite, Vertex};
+use crate::vulkan::core::VulkanCore;
 
 pub const CAMERA_UBO_INDEX: usize = 0;
 pub const LIGHTS_UBO_INDEX: usize = 1;
@@ -44,9 +44,10 @@ pub struct VulkanGraphicsSetup {
     pub swapchain_composite: SwapChainComposite,
 
     pub render_pass: vk::RenderPass,
-    pub descriptor_set_layout: vk::DescriptorSetLayout,
+    pub color_descriptor_set_layout: vk::DescriptorSetLayout,
     pub color_pipeline_layout: vk::PipelineLayout,
     pub color_pipeline: vk::Pipeline,
+    pub textured_descriptor_set_layout: vk::DescriptorSetLayout,
     pub textured_pipeline_layout: vk::PipelineLayout,
     pub textured_pipeline: vk::Pipeline,
 
@@ -61,7 +62,8 @@ pub struct VulkanGraphicsSetup {
     depth_image_memory: vk::DeviceMemory,
 
     pub command_pool: vk::CommandPool,
-    pub descriptor_pool: vk::DescriptorPool,
+    pub color_descriptor_pool: vk::DescriptorPool,
+    pub textured_descriptor_pool: vk::DescriptorPool,
 
     window_width: u32,
     window_height: u32,
@@ -89,7 +91,7 @@ impl VulkanGraphicsSetup {
             swapchain_composite.format,
             msaa_samples,
         );
-        let descriptor_set_layout = VulkanGraphicsSetup::create_descriptor_set_layout(&core.device);
+        let color_descriptor_set_layout = VulkanGraphicsSetup::create_color_descriptor_set_layout(&core.device);
         let (color_pipeline, color_pipeline_layout) = VulkanGraphicsSetup::create_pipeline(
             &core,
             COLOR_VERTEX_SHADER_SPV,
@@ -100,9 +102,10 @@ impl VulkanGraphicsSetup {
             color_mesh::InstanceData::get_attribute_descriptions(),
             render_pass,
             swapchain_composite.extent,
-            descriptor_set_layout,
+            color_descriptor_set_layout,
             msaa_samples,
         );
+        let textured_descriptor_set_layout = VulkanGraphicsSetup::create_textured_descriptor_set_layout(&core.device);
         let (textured_pipeline, textured_pipeline_layout) = VulkanGraphicsSetup::create_pipeline(
             &core,
             TEXTURED_VERTEX_SHADER_SPV,
@@ -113,7 +116,7 @@ impl VulkanGraphicsSetup {
             textured_mesh::InstanceData::get_attribute_descriptions(),
             render_pass,
             swapchain_composite.extent,
-            descriptor_set_layout,
+            textured_descriptor_set_layout,
             msaa_samples,
         );
         let (color_image, color_image_view, color_image_memory) =
@@ -137,7 +140,11 @@ impl VulkanGraphicsSetup {
             &swapchain_composite.extent,
         );
         let command_pool = core.create_command_pool(core.queue_family.graphics_family.unwrap());
-        let descriptor_pool = VulkanGraphicsSetup::create_descriptor_pool(
+        let color_descriptor_pool = VulkanGraphicsSetup::create_color_descriptor_pool(
+            &core.device,
+            swapchain_composite.images.len(),
+        );
+        let textured_descriptor_pool = VulkanGraphicsSetup::create_textured_descriptor_pool(
             &core.device,
             swapchain_composite.images.len(),
         );
@@ -149,9 +156,10 @@ impl VulkanGraphicsSetup {
             swapchain_composite,
 
             render_pass,
-            descriptor_set_layout,
+            color_descriptor_set_layout,
             color_pipeline_layout,
             color_pipeline,
+            textured_descriptor_set_layout,
             textured_pipeline_layout,
             textured_pipeline,
 
@@ -166,7 +174,8 @@ impl VulkanGraphicsSetup {
             depth_image_memory,
 
             command_pool,
-            descriptor_pool,
+            color_descriptor_pool,
+            textured_descriptor_pool,
 
             window_width,
             window_height,
@@ -469,7 +478,38 @@ impl VulkanGraphicsSetup {
         }
     }
 
-    fn create_descriptor_set_layout(device: &ash::Device) -> vk::DescriptorSetLayout {
+    fn create_color_descriptor_set_layout(device: &ash::Device) -> vk::DescriptorSetLayout {
+        let descriptor_set_layout_bindings = [
+            vk::DescriptorSetLayoutBinding {
+                binding: CAMERA_UBO_INDEX as u32,
+                descriptor_type: vk::DescriptorType::UNIFORM_BUFFER,
+                descriptor_count: 1,
+                stage_flags: vk::ShaderStageFlags::VERTEX | vk::ShaderStageFlags::FRAGMENT,
+                ..Default::default()
+            },
+            vk::DescriptorSetLayoutBinding {
+                binding: LIGHTS_UBO_INDEX as u32,
+                descriptor_type: vk::DescriptorType::UNIFORM_BUFFER,
+                descriptor_count: 1,
+                stage_flags: vk::ShaderStageFlags::VERTEX | vk::ShaderStageFlags::FRAGMENT,
+                ..Default::default()
+            },
+        ];
+
+        let descriptor_set_layout_create_info = vk::DescriptorSetLayoutCreateInfo {
+            binding_count: descriptor_set_layout_bindings.len() as u32,
+            p_bindings: descriptor_set_layout_bindings.as_ptr(),
+            ..Default::default()
+        };
+
+        unsafe {
+            device
+                .create_descriptor_set_layout(&descriptor_set_layout_create_info, None)
+                .expect("Failed to create Descriptor Set Layout!")
+        }
+    }
+
+    fn create_textured_descriptor_set_layout(device: &ash::Device) -> vk::DescriptorSetLayout {
         let descriptor_set_layout_bindings = [
             vk::DescriptorSetLayoutBinding {
                 binding: CAMERA_UBO_INDEX as u32,
@@ -865,7 +905,38 @@ impl VulkanGraphicsSetup {
         framebuffers
     }
 
-    fn create_descriptor_pool(
+    fn create_color_descriptor_pool(
+        device: &ash::Device,
+        swapchain_images_size: usize,
+    ) -> vk::DescriptorPool {
+        let pool_sizes = [
+            vk::DescriptorPoolSize {
+                // CameraUBO
+                ty: vk::DescriptorType::UNIFORM_BUFFER,
+                descriptor_count: swapchain_images_size as u32,
+            },
+            vk::DescriptorPoolSize {
+                // LightsUBO
+                ty: vk::DescriptorType::UNIFORM_BUFFER,
+                descriptor_count: swapchain_images_size as u32,
+            },
+        ];
+
+        let descriptor_pool_create_info = vk::DescriptorPoolCreateInfo {
+            max_sets: swapchain_images_size as u32,
+            pool_size_count: pool_sizes.len() as u32,
+            p_pool_sizes: pool_sizes.as_ptr(),
+            ..Default::default()
+        };
+
+        unsafe {
+            device
+                .create_descriptor_pool(&descriptor_pool_create_info, None)
+                .expect("Failed to create Descriptor Pool!")
+        }
+    }
+
+    fn create_textured_descriptor_pool(
         device: &ash::Device,
         swapchain_images_size: usize,
     ) -> vk::DescriptorPool {
@@ -939,7 +1010,7 @@ impl VulkanGraphicsSetup {
             color_mesh::InstanceData::get_attribute_descriptions(),
             self.render_pass,
             self.swapchain_composite.extent,
-            self.descriptor_set_layout,
+            self.color_descriptor_set_layout,
             self.msaa_samples,
         );
         self.color_pipeline = color_pipeline;
@@ -954,7 +1025,7 @@ impl VulkanGraphicsSetup {
             textured_mesh::InstanceData::get_attribute_descriptions(),
             self.render_pass,
             self.swapchain_composite.extent,
-            self.descriptor_set_layout,
+            self.textured_descriptor_set_layout,
             self.msaa_samples,
         );
         self.textured_pipeline = textured_pipeline;
@@ -1020,10 +1091,16 @@ impl VulkanGraphicsSetup {
         unsafe {
             self.core
                 .device
-                .destroy_descriptor_pool(self.descriptor_pool, None);
+                .destroy_descriptor_pool(self.textured_descriptor_pool, None);
             self.core
                 .device
-                .destroy_descriptor_set_layout(self.descriptor_set_layout, None);
+                .destroy_descriptor_pool(self.color_descriptor_pool, None);
+            self.core
+                .device
+                .destroy_descriptor_set_layout(self.textured_descriptor_set_layout, None);
+            self.core
+                .device
+                .destroy_descriptor_set_layout(self.color_descriptor_set_layout, None);
             self.surface_composite
                 .loader
                 .destroy_surface(self.surface_composite.surface, None);

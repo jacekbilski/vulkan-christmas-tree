@@ -238,7 +238,8 @@ pub(crate) struct VulkanGraphicsExecution {
     color_meshes: Vec<VulkanColorMesh>,
     textured_meshes: Vec<VulkanTexturedMesh>,
     snow_mesh: Vec<VulkanColorMesh>,
-    descriptor_sets: Vec<vk::DescriptorSet>,
+    color_descriptor_sets: Vec<vk::DescriptorSet>,
+    textured_descriptor_sets: Vec<vk::DescriptorSet>,
     command_buffers: Vec<vk::CommandBuffer>,
 
     image_available_semaphores: Vec<vk::Semaphore>,
@@ -255,10 +256,17 @@ impl VulkanGraphicsExecution {
             &core,
             graphics_setup.swapchain_composite.images.len(),
         );
-        let descriptor_sets = VulkanGraphicsExecution::create_descriptor_sets(
+        let color_descriptor_sets = VulkanGraphicsExecution::create_color_descriptor_sets(
             &core.device,
-            graphics_setup.descriptor_pool,
-            graphics_setup.descriptor_set_layout,
+            graphics_setup.color_descriptor_pool,
+            graphics_setup.color_descriptor_set_layout,
+            &uniform_buffers,
+            graphics_setup.swapchain_composite.images.len(),
+        );
+        let textured_descriptor_sets = VulkanGraphicsExecution::create_textured_descriptor_sets(
+            &core.device,
+            graphics_setup.textured_descriptor_pool,
+            graphics_setup.textured_descriptor_set_layout,
             &uniform_buffers,
             graphics_setup.swapchain_composite.images.len(),
         );
@@ -273,7 +281,8 @@ impl VulkanGraphicsExecution {
             color_meshes: vec![],
             textured_meshes: vec![],
             snow_mesh: vec![],
-            descriptor_sets,
+            color_descriptor_sets,
+            textured_descriptor_sets,
             command_buffers: vec![],
 
             image_available_semaphores: sync_objects.image_available_semaphores,
@@ -336,7 +345,7 @@ impl VulkanGraphicsExecution {
         uniform_buffers
     }
 
-    fn create_descriptor_sets(
+    fn create_color_descriptor_sets(
         device: &ash::Device,
         descriptor_pool: vk::DescriptorPool,
         descriptor_set_layout: vk::DescriptorSetLayout,
@@ -361,7 +370,7 @@ impl VulkanGraphicsExecution {
                 .expect("Failed to allocate descriptor sets!")
         };
 
-        for (i, &descritptor_set) in descriptor_sets.iter().enumerate() {
+        for (i, &descriptor_set) in descriptor_sets.iter().enumerate() {
             let descriptor_buffer_info = [
                 vk::DescriptorBufferInfo {
                     buffer: uniforms_buffers[CAMERA_UBO_INDEX].buffers[i],
@@ -376,7 +385,66 @@ impl VulkanGraphicsExecution {
             ];
 
             let descriptor_write_sets = [vk::WriteDescriptorSet {
-                dst_set: descritptor_set,
+                dst_set: descriptor_set,
+                dst_binding: 0,
+                dst_array_element: 0,
+                descriptor_count: descriptor_buffer_info.len() as u32,
+                descriptor_type: vk::DescriptorType::UNIFORM_BUFFER,
+                p_image_info: ptr::null(),
+                p_buffer_info: descriptor_buffer_info.as_ptr(),
+                p_texel_buffer_view: ptr::null(),
+                ..Default::default()
+            }];
+
+            unsafe {
+                device.update_descriptor_sets(&descriptor_write_sets, &[]);
+            }
+        }
+
+        descriptor_sets
+    }
+
+    fn create_textured_descriptor_sets(
+        device: &ash::Device,
+        descriptor_pool: vk::DescriptorPool,
+        descriptor_set_layout: vk::DescriptorSetLayout,
+        uniforms_buffers: &Vec<UniformBuffer>,
+        swapchain_images_size: usize,
+    ) -> Vec<vk::DescriptorSet> {
+        let mut layouts: Vec<vk::DescriptorSetLayout> = vec![];
+        for _ in 0..swapchain_images_size {
+            layouts.push(descriptor_set_layout);
+        }
+
+        let descriptor_set_allocate_info = vk::DescriptorSetAllocateInfo {
+            descriptor_pool,
+            descriptor_set_count: swapchain_images_size as u32,
+            p_set_layouts: layouts.as_ptr(),
+            ..Default::default()
+        };
+
+        let descriptor_sets = unsafe {
+            device
+                .allocate_descriptor_sets(&descriptor_set_allocate_info)
+                .expect("Failed to allocate descriptor sets!")
+        };
+
+        for (i, &descriptor_set) in descriptor_sets.iter().enumerate() {
+            let descriptor_buffer_info = [
+                vk::DescriptorBufferInfo {
+                    buffer: uniforms_buffers[CAMERA_UBO_INDEX].buffers[i],
+                    offset: 0,
+                    range: std::mem::size_of::<CameraUBO>() as u64,
+                },
+                vk::DescriptorBufferInfo {
+                    buffer: uniforms_buffers[LIGHTS_UBO_INDEX].buffers[i],
+                    offset: 0,
+                    range: std::mem::size_of::<LightsUBO>() as u64,
+                },
+            ];
+
+            let descriptor_write_sets = [vk::WriteDescriptorSet {
+                dst_set: descriptor_set,
                 dst_binding: 0,
                 dst_array_element: 0,
                 descriptor_count: descriptor_buffer_info.len() as u32,
@@ -616,7 +684,7 @@ impl VulkanGraphicsExecution {
                 graphics_setup.color_pipeline,
             );
 
-            let descriptor_sets_to_bind = [self.descriptor_sets[frame_index]];
+            let descriptor_sets_to_bind = [self.color_descriptor_sets[frame_index]];
             device.cmd_bind_descriptor_sets(
                 command_buffer,
                 vk::PipelineBindPoint::GRAPHICS,
@@ -664,7 +732,7 @@ impl VulkanGraphicsExecution {
                 graphics_setup.textured_pipeline,
             );
 
-            let descriptor_sets_to_bind = [self.descriptor_sets[frame_index]];
+            let descriptor_sets_to_bind = [self.textured_descriptor_sets[frame_index]];
             device.cmd_bind_descriptor_sets(
                 command_buffer,
                 vk::PipelineBindPoint::GRAPHICS,
