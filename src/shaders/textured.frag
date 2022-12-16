@@ -4,9 +4,9 @@
 struct Light {
     vec3 position;
 
-    vec3 ambient;
-    vec3 diffuse;
-    vec3 specular;
+    vec4 ambient;
+    vec4 diffuse;
+    vec4 specular;
 };
 
 layout(set = 0, binding = 0) uniform CameraUBO {
@@ -28,27 +28,27 @@ layout(location = 2) in vec2 fragTexCoord;
 
 layout(location = 0) out vec4 outColor;
 
-vec3 calcLight(Light light);
+vec4 calcLight(Light light);
 
 void main() {
-    vec4 result = texture(texSampler, fragTexCoord);
-    //    for (int i = 0; i < lights.count; i++) {
-    //        result += vec4(calcLight(lights.light[i]), 0.0);
-    //    }
+    vec4 result = vec4(0.0);
+    for (int i = 0; i < lights.count; i++) {
+        result += calcLight(lights.light[i]);
+    }
     outColor = result;
 }
 
-vec3 calcLight(Light light) {
-    vec3 ambient = light.ambient * vec3(fragTexCoord, 0.0);
+vec4 calcLight(Light light) {
+    vec4 ambient = light.ambient * texture(texSampler, fragTexCoord);
 
     vec3 lightDir = normalize(light.position - fragPosition);
     float diff = max(dot(fragNormal, lightDir), 0.0);
-    vec3 diffuse = diff * light.diffuse * vec3(fragTexCoord, 0.0);
+    vec4 diffuse = diff * light.diffuse * texture(texSampler, fragTexCoord);
 
     vec3 viewDir = normalize(camera.position - fragPosition);
     vec3 halfwayDir = normalize(lightDir + viewDir);
     float spec = max(dot(fragNormal, halfwayDir), 0.0);
-    vec3 specular = spec * light.specular * vec3(fragTexCoord, 0.0);
+    vec4 specular = spec * light.specular * texture(texSampler, fragTexCoord);
 
     return ambient + diffuse + specular;
 }
