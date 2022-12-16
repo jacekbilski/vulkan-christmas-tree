@@ -9,7 +9,7 @@ use crate::scene::camera::Camera;
 use crate::scene::lights::{Light, Lights};
 use crate::textured_mesh::TexturedMesh;
 use crate::vulkan::core::VulkanCore;
-use crate::vulkan::graphics_setup::{CAMERA_UBO_INDEX, LIGHTS_UBO_INDEX, VulkanGraphicsSetup};
+use crate::vulkan::graphics_setup::{VulkanGraphicsSetup, CAMERA_UBO_INDEX, LIGHTS_UBO_INDEX};
 
 const MAX_FRAMES_IN_FLIGHT: usize = 2;
 
@@ -373,30 +373,38 @@ impl VulkanGraphicsExecution {
         };
 
         for (i, &descriptor_set) in descriptor_sets.iter().enumerate() {
-            let descriptor_buffer_info = [
-                vk::DescriptorBufferInfo {
-                    buffer: uniforms_buffers[CAMERA_UBO_INDEX].buffers[i],
-                    offset: 0,
-                    range: std::mem::size_of::<CameraUBO>() as u64,
+            // TODO - I have a feeling that both those can be somehow "bound" together. But how?
+            let camera_descriptor_buffer_info = [vk::DescriptorBufferInfo {
+                buffer: uniforms_buffers[CAMERA_UBO_INDEX].buffers[i],
+                offset: 0,
+                range: std::mem::size_of::<CameraUBO>() as u64,
+            }];
+            let lights_descriptor_buffer_info = [vk::DescriptorBufferInfo {
+                buffer: uniforms_buffers[LIGHTS_UBO_INDEX].buffers[i],
+                offset: 0,
+                range: std::mem::size_of::<LightsUBO>() as u64,
+            }];
+
+            let descriptor_write_sets = [
+                vk::WriteDescriptorSet {
+                    dst_set: descriptor_set,
+                    dst_binding: 0,
+                    dst_array_element: 0,
+                    descriptor_type: vk::DescriptorType::UNIFORM_BUFFER,
+                    descriptor_count: camera_descriptor_buffer_info.len() as u32,
+                    p_buffer_info: camera_descriptor_buffer_info.as_ptr(),
+                    ..Default::default()
                 },
-                vk::DescriptorBufferInfo {
-                    buffer: uniforms_buffers[LIGHTS_UBO_INDEX].buffers[i],
-                    offset: 0,
-                    range: std::mem::size_of::<LightsUBO>() as u64,
+                vk::WriteDescriptorSet {
+                    dst_set: descriptor_set,
+                    dst_binding: 1,
+                    dst_array_element: 0,
+                    descriptor_type: vk::DescriptorType::UNIFORM_BUFFER,
+                    descriptor_count: lights_descriptor_buffer_info.len() as u32,
+                    p_buffer_info: lights_descriptor_buffer_info.as_ptr(),
+                    ..Default::default()
                 },
             ];
-
-            let descriptor_write_sets = [vk::WriteDescriptorSet {
-                dst_set: descriptor_set,
-                dst_binding: 0,
-                dst_array_element: 0,
-                descriptor_count: descriptor_buffer_info.len() as u32,
-                descriptor_type: vk::DescriptorType::UNIFORM_BUFFER,
-                p_image_info: ptr::null(),
-                p_buffer_info: descriptor_buffer_info.as_ptr(),
-                p_texel_buffer_view: ptr::null(),
-                ..Default::default()
-            }];
 
             unsafe {
                 device.update_descriptor_sets(&descriptor_write_sets, &[]);
@@ -434,38 +442,52 @@ impl VulkanGraphicsExecution {
         };
 
         for (i, &descriptor_set) in descriptor_sets.iter().enumerate() {
-            let descriptor_image_info = [
-                vk::DescriptorImageInfo {
-                    image_layout: vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
-                    image_view,
-                    sampler,
-                },
-            ];
-
-            let descriptor_buffer_info = [
-                vk::DescriptorBufferInfo {
-                    buffer: uniforms_buffers[CAMERA_UBO_INDEX].buffers[i],
-                    offset: 0,
-                    range: std::mem::size_of::<CameraUBO>() as u64,
-                },
-                vk::DescriptorBufferInfo {
-                    buffer: uniforms_buffers[LIGHTS_UBO_INDEX].buffers[i],
-                    offset: 0,
-                    range: std::mem::size_of::<LightsUBO>() as u64,
-                },
-            ];
-
-            let descriptor_write_sets = [vk::WriteDescriptorSet {
-                dst_set: descriptor_set,
-                dst_binding: 0,
-                dst_array_element: 0,
-                descriptor_count: descriptor_buffer_info.len() as u32,
-                descriptor_type: vk::DescriptorType::UNIFORM_BUFFER,
-                p_image_info: descriptor_image_info.as_ptr(),
-                p_buffer_info: descriptor_buffer_info.as_ptr(),
-                p_texel_buffer_view: ptr::null(),
-                ..Default::default()
+            let camera_descriptor_buffer_info = [vk::DescriptorBufferInfo {
+                buffer: uniforms_buffers[CAMERA_UBO_INDEX].buffers[i],
+                offset: 0,
+                range: std::mem::size_of::<CameraUBO>() as u64,
             }];
+            let lights_descriptor_buffer_info = [vk::DescriptorBufferInfo {
+                buffer: uniforms_buffers[LIGHTS_UBO_INDEX].buffers[i],
+                offset: 0,
+                range: std::mem::size_of::<LightsUBO>() as u64,
+            }];
+
+            let descriptor_image_info = [vk::DescriptorImageInfo {
+                image_layout: vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
+                image_view,
+                sampler,
+            }];
+
+            let descriptor_write_sets = [
+                vk::WriteDescriptorSet {
+                    dst_set: descriptor_set,
+                    dst_binding: 0,
+                    dst_array_element: 0,
+                    descriptor_type: vk::DescriptorType::UNIFORM_BUFFER,
+                    descriptor_count: camera_descriptor_buffer_info.len() as u32,
+                    p_buffer_info: camera_descriptor_buffer_info.as_ptr(),
+                    ..Default::default()
+                },
+                vk::WriteDescriptorSet {
+                    dst_set: descriptor_set,
+                    dst_binding: 1,
+                    dst_array_element: 0,
+                    descriptor_type: vk::DescriptorType::UNIFORM_BUFFER,
+                    descriptor_count: lights_descriptor_buffer_info.len() as u32,
+                    p_buffer_info: lights_descriptor_buffer_info.as_ptr(),
+                    ..Default::default()
+                },
+                vk::WriteDescriptorSet {
+                    dst_set: descriptor_set,
+                    dst_binding: 2,
+                    dst_array_element: 0,
+                    descriptor_count: descriptor_image_info.len() as u32,
+                    descriptor_type: vk::DescriptorType::COMBINED_IMAGE_SAMPLER,
+                    p_image_info: descriptor_image_info.as_ptr(),
+                    ..Default::default()
+                },
+            ];
 
             unsafe {
                 device.update_descriptor_sets(&descriptor_write_sets, &[]);
@@ -1116,7 +1138,9 @@ impl VulkanGraphicsExecution {
         };
 
         let image_view = unsafe {
-            self.core.device.create_image_view(&view_info, None)
+            self.core
+                .device
+                .create_image_view(&view_info, None)
                 .expect("Failed to create texture image view")
         };
 
@@ -1124,7 +1148,11 @@ impl VulkanGraphicsExecution {
     }
 
     fn create_texture_sampler(&self) -> vk::Sampler {
-        let physical_device_properties = unsafe { self.core.instance.get_physical_device_properties(self.core.physical_device) };
+        let physical_device_properties = unsafe {
+            self.core
+                .instance
+                .get_physical_device_properties(self.core.physical_device)
+        };
 
         let sampler_info = vk::SamplerCreateInfo {
             mag_filter: vk::Filter::LINEAR,
@@ -1145,7 +1173,9 @@ impl VulkanGraphicsExecution {
         };
 
         unsafe {
-            self.core.device.create_sampler(&sampler_info, None)
+            self.core
+                .device
+                .create_sampler(&sampler_info, None)
                 .expect("Failed to create texture sampler")
         }
     }
