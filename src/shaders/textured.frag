@@ -20,6 +20,8 @@ layout(set = 0, binding = 1) uniform LightsUBO {
     Light light[2];
 } lights;
 
+layout(binding = 2) uniform sampler2D texSampler;
+
 layout(location = 0) in vec3 fragPosition;
 layout(location = 1) in vec3 fragNormal;
 layout(location = 2) in vec2 fragTexCoord;
@@ -29,11 +31,11 @@ layout(location = 0) out vec4 outColor;
 vec3 calcLight(Light light);
 
 void main() {
-    vec3 result = vec3(0.0);
-    for (int i = 0; i < lights.count; i++) {
-        result += calcLight(lights.light[i]);
-    }
-    outColor = vec4(result, 1.0);
+    vec4 result = texture(texSampler, fragTexCoord);
+    //    for (int i = 0; i < lights.count; i++) {
+    //        result += vec4(calcLight(lights.light[i]), 0.0);
+    //    }
+    outColor = result;
 }
 
 vec3 calcLight(Light light) {
