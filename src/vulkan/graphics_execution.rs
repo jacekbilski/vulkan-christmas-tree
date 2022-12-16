@@ -78,7 +78,7 @@ impl VulkanColorMesh {
     }
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone)]
 struct VulkanTexturedMesh {
     vertex_buffer: vk::Buffer,
     vertex_buffer_memory: vk::DeviceMemory,
@@ -92,6 +92,7 @@ struct VulkanTexturedMesh {
     texture_buffer_memory: vk::DeviceMemory,
     texture_image_view: vk::ImageView,
     texture_sampler: vk::Sampler,
+    textured_descriptor_sets: Vec<vk::DescriptorSet>,
 }
 
 impl VulkanTexturedMesh {
@@ -137,6 +138,15 @@ impl VulkanTexturedMesh {
             graphics_execution.create_texture(graphics_setup.command_pool, mesh.texture.clone());
         let texture_image_view = graphics_execution.create_texture_image_view(texture_buffer);
         let texture_sampler = graphics_execution.create_texture_sampler();
+        let textured_descriptor_sets = VulkanGraphicsExecution::create_textured_descriptor_sets(
+            &graphics_execution.core.device,
+            graphics_setup.textured_descriptor_pool,
+            graphics_setup.textured_descriptor_set_layout,
+            &graphics_execution.uniform_buffers,
+            graphics_setup.swapchain_composite.images.len(),
+            texture_image_view,
+            texture_sampler,
+        );
         Self {
             vertex_buffer,
             vertex_buffer_memory,
@@ -150,6 +160,7 @@ impl VulkanTexturedMesh {
             texture_buffer_memory,
             texture_image_view,
             texture_sampler,
+            textured_descriptor_sets,
         }
     }
 }
@@ -239,7 +250,6 @@ pub(crate) struct VulkanGraphicsExecution {
     textured_meshes: Vec<VulkanTexturedMesh>,
     snow_mesh: Vec<VulkanColorMesh>,
     color_descriptor_sets: Vec<vk::DescriptorSet>,
-    textured_descriptor_sets: Vec<vk::DescriptorSet>,
     command_buffers: Vec<vk::CommandBuffer>,
 
     image_available_semaphores: Vec<vk::Semaphore>,
@@ -263,13 +273,6 @@ impl VulkanGraphicsExecution {
             &uniform_buffers,
             graphics_setup.swapchain_composite.images.len(),
         );
-        let textured_descriptor_sets = VulkanGraphicsExecution::create_textured_descriptor_sets(
-            &core.device,
-            graphics_setup.textured_descriptor_pool,
-            graphics_setup.textured_descriptor_set_layout,
-            &uniform_buffers,
-            graphics_setup.swapchain_composite.images.len(),
-        );
         let sync_objects = VulkanGraphicsExecution::create_sync_objects(&core);
 
         VulkanGraphicsExecution {
@@ -282,7 +285,6 @@ impl VulkanGraphicsExecution {
             textured_meshes: vec![],
             snow_mesh: vec![],
             color_descriptor_sets,
-            textured_descriptor_sets,
             command_buffers: vec![],
 
             image_available_semaphores: sync_objects.image_available_semaphores,
@@ -410,6 +412,8 @@ impl VulkanGraphicsExecution {
         descriptor_set_layout: vk::DescriptorSetLayout,
         uniforms_buffers: &Vec<UniformBuffer>,
         swapchain_images_size: usize,
+        image_view: vk::ImageView,
+        sampler: vk::Sampler,
     ) -> Vec<vk::DescriptorSet> {
         let mut layouts: Vec<vk::DescriptorSetLayout> = vec![];
         for _ in 0..swapchain_images_size {
@@ -430,6 +434,14 @@ impl VulkanGraphicsExecution {
         };
 
         for (i, &descriptor_set) in descriptor_sets.iter().enumerate() {
+            let descriptor_image_info = [
+                vk::DescriptorImageInfo {
+                    image_layout: vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
+                    image_view,
+                    sampler,
+                },
+            ];
+
             let descriptor_buffer_info = [
                 vk::DescriptorBufferInfo {
                     buffer: uniforms_buffers[CAMERA_UBO_INDEX].buffers[i],
@@ -449,7 +461,7 @@ impl VulkanGraphicsExecution {
                 dst_array_element: 0,
                 descriptor_count: descriptor_buffer_info.len() as u32,
                 descriptor_type: vk::DescriptorType::UNIFORM_BUFFER,
-                p_image_info: ptr::null(),
+                p_image_info: descriptor_image_info.as_ptr(),
                 p_buffer_info: descriptor_buffer_info.as_ptr(),
                 p_texel_buffer_view: ptr::null(),
                 ..Default::default()
@@ -732,17 +744,17 @@ impl VulkanGraphicsExecution {
                 graphics_setup.textured_pipeline,
             );
 
-            let descriptor_sets_to_bind = [self.textured_descriptor_sets[frame_index]];
-            device.cmd_bind_descriptor_sets(
-                command_buffer,
-                vk::PipelineBindPoint::GRAPHICS,
-                graphics_setup.textured_pipeline_layout,
-                0,
-                &descriptor_sets_to_bind,
-                &[],
-            );
-
             for mesh in meshes.iter() {
+                let descriptor_sets_to_bind = [mesh.textured_descriptor_sets[frame_index]];
+                device.cmd_bind_descriptor_sets(
+                    command_buffer,
+                    vk::PipelineBindPoint::GRAPHICS,
+                    graphics_setup.textured_pipeline_layout,
+                    0,
+                    &descriptor_sets_to_bind,
+                    &[],
+                );
+
                 let vertex_buffers = [mesh.vertex_buffer, mesh.instance_buffer];
                 let offsets = [0_u64, 0_u64];
 

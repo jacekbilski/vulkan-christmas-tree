@@ -11,6 +11,7 @@ use crate::vulkan::core::VulkanCore;
 
 pub const CAMERA_UBO_INDEX: usize = 0;
 pub const LIGHTS_UBO_INDEX: usize = 1;
+pub const COMBINED_IMAGE_SAMPLER_INDEX: usize = 2;
 
 const COLOR_VERTEX_SHADER_SPV: &[u8] = include_bytes!("../../target/shaders/color.vert.spv");
 const COLOR_FRAGMENT_SHADER_SPV: &[u8] = include_bytes!("../../target/shaders/color.frag.spv");
@@ -525,6 +526,13 @@ impl VulkanGraphicsSetup {
                 stage_flags: vk::ShaderStageFlags::VERTEX | vk::ShaderStageFlags::FRAGMENT,
                 ..Default::default()
             },
+            vk::DescriptorSetLayoutBinding {
+                binding: COMBINED_IMAGE_SAMPLER_INDEX as u32,
+                descriptor_type: vk::DescriptorType::COMBINED_IMAGE_SAMPLER,
+                descriptor_count: 1,
+                stage_flags: vk::ShaderStageFlags::FRAGMENT,
+                ..Default::default()
+            },
         ];
 
         let descriptor_set_layout_create_info = vk::DescriptorSetLayoutCreateInfo {
@@ -949,6 +957,10 @@ impl VulkanGraphicsSetup {
             vk::DescriptorPoolSize {
                 // LightsUBO
                 ty: vk::DescriptorType::UNIFORM_BUFFER,
+                descriptor_count: swapchain_images_size as u32,
+            },
+            vk::DescriptorPoolSize {
+                ty: vk::DescriptorType::COMBINED_IMAGE_SAMPLER,
                 descriptor_count: swapchain_images_size as u32,
             },
         ];
