@@ -7,11 +7,11 @@ use std::ptr;
 
 #[cfg(feature = "validation-layers")]
 use ash::extensions::ext::DebugUtils;
+#[cfg(all(unix, not(target_os = "android"), not(target_os = "macos")))]
+use ash::extensions::khr::{WaylandSurface, XlibSurface};
 use ash::extensions::khr::Surface;
 #[cfg(target_os = "windows")]
 use ash::extensions::khr::Win32Surface;
-#[cfg(all(unix, not(target_os = "android"), not(target_os = "macos")))]
-use ash::extensions::khr::{WaylandSurface, XlibSurface};
 use ash::vk;
 use ash::vk::PhysicalDeviceType;
 use raw_window_handle::{HasRawDisplayHandle, HasRawWindowHandle};
@@ -695,6 +695,7 @@ impl VulkanCore {
         }];
 
         let physical_device_features = vk::PhysicalDeviceFeatures {
+            sampler_anisotropy: vk::TRUE,
             ..Default::default()
         };
 

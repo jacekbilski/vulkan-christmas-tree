@@ -91,11 +91,13 @@ struct VulkanTexturedMesh {
     texture_buffer: vk::Image,
     texture_buffer_memory: vk::DeviceMemory,
     texture_image_view: vk::ImageView,
+    texture_sampler: vk::Sampler,
 }
 
 impl VulkanTexturedMesh {
     fn drop(&self, device: &ash::Device) {
         unsafe {
+            device.destroy_sampler(self.texture_sampler, None);
             device.destroy_image_view(self.texture_image_view, None);
             device.destroy_image(self.texture_buffer, None);
             device.free_memory(self.texture_buffer_memory, None);
@@ -134,6 +136,7 @@ impl VulkanTexturedMesh {
         let (texture_buffer, texture_buffer_memory) =
             graphics_execution.create_texture(graphics_setup.command_pool, mesh.texture.clone());
         let texture_image_view = graphics_execution.create_texture_image_view(texture_buffer);
+        let texture_sampler = graphics_execution.create_texture_sampler();
         Self {
             vertex_buffer,
             vertex_buffer_memory,
@@ -146,6 +149,7 @@ impl VulkanTexturedMesh {
             texture_buffer,
             texture_buffer_memory,
             texture_image_view,
+            texture_sampler,
         }
     }
 }
@@ -1037,6 +1041,33 @@ impl VulkanGraphicsExecution {
         };
 
         image_view
+    }
+
+    fn create_texture_sampler(&self) -> vk::Sampler {
+        let physical_device_properties = unsafe { self.core.instance.get_physical_device_properties(self.core.physical_device) };
+
+        let sampler_info = vk::SamplerCreateInfo {
+            mag_filter: vk::Filter::LINEAR,
+            min_filter: vk::Filter::LINEAR,
+            address_mode_u: vk::SamplerAddressMode::CLAMP_TO_BORDER,
+            address_mode_v: vk::SamplerAddressMode::CLAMP_TO_BORDER,
+            address_mode_w: vk::SamplerAddressMode::CLAMP_TO_BORDER,
+            anisotropy_enable: vk::TRUE,
+            max_anisotropy: physical_device_properties.limits.max_sampler_anisotropy,
+            border_color: vk::BorderColor::INT_OPAQUE_BLACK,
+            unnormalized_coordinates: vk::FALSE,
+            compare_enable: vk::FALSE,
+            mipmap_mode: vk::SamplerMipmapMode::LINEAR,
+            mip_lod_bias: 0.,
+            min_lod: 0.,
+            max_lod: 0.,
+            ..Default::default()
+        };
+
+        unsafe {
+            self.core.device.create_sampler(&sampler_info, None)
+                .expect("Failed to create texture sampler")
+        }
     }
 
     pub(crate) fn drop(&mut self) {
