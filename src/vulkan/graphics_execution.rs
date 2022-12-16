@@ -9,7 +9,7 @@ use crate::scene::camera::Camera;
 use crate::scene::lights::{Light, Lights};
 use crate::textured_mesh::TexturedMesh;
 use crate::vulkan::core::VulkanCore;
-use crate::vulkan::graphics_setup::{VulkanGraphicsSetup, CAMERA_UBO_INDEX, LIGHTS_UBO_INDEX};
+use crate::vulkan::graphics_setup::{CAMERA_UBO_INDEX, LIGHTS_UBO_INDEX, VulkanGraphicsSetup};
 
 const MAX_FRAMES_IN_FLIGHT: usize = 2;
 
@@ -90,11 +90,13 @@ struct VulkanTexturedMesh {
     instances_no: u32,
     texture_buffer: vk::Image,
     texture_buffer_memory: vk::DeviceMemory,
+    texture_image_view: vk::ImageView,
 }
 
 impl VulkanTexturedMesh {
     fn drop(&self, device: &ash::Device) {
         unsafe {
+            device.destroy_image_view(self.texture_image_view, None);
             device.destroy_image(self.texture_buffer, None);
             device.free_memory(self.texture_buffer_memory, None);
             device.destroy_buffer(self.instance_buffer, None);
@@ -131,6 +133,7 @@ impl VulkanTexturedMesh {
         let instances_no = mesh.instances.len() as u32;
         let (texture_buffer, texture_buffer_memory) =
             graphics_execution.create_texture(graphics_setup.command_pool, mesh.texture.clone());
+        let texture_image_view = graphics_execution.create_texture_image_view(texture_buffer);
         Self {
             vertex_buffer,
             vertex_buffer_memory,
@@ -142,6 +145,7 @@ impl VulkanTexturedMesh {
             instances_no,
             texture_buffer,
             texture_buffer_memory,
+            texture_image_view,
         }
     }
 }
@@ -1009,6 +1013,30 @@ impl VulkanGraphicsExecution {
 
         self.core
             .end_one_time_commands(command_pool, &command_buffers, command_buffer);
+    }
+
+    pub(crate) fn create_texture_image_view(&self, texture_image: vk::Image) -> vk::ImageView {
+        let view_info = vk::ImageViewCreateInfo {
+            image: texture_image,
+            view_type: vk::ImageViewType::TYPE_2D,
+            format: vk::Format::R8G8B8A8_SRGB,
+            subresource_range: vk::ImageSubresourceRange {
+                aspect_mask: vk::ImageAspectFlags::COLOR,
+                base_mip_level: 0,
+                level_count: 1,
+                base_array_layer: 0,
+                layer_count: 1,
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+
+        let image_view = unsafe {
+            self.core.device.create_image_view(&view_info, None)
+                .expect("Failed to create texture image view")
+        };
+
+        image_view
     }
 
     pub(crate) fn drop(&mut self) {
