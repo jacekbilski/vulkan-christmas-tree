@@ -6,8 +6,8 @@ use ash::vk;
 use crate::color_mesh;
 use crate::textured_mesh;
 use crate::textured_mesh::TexturedVertex;
-use crate::vulkan::{SurfaceComposite, Vertex};
 use crate::vulkan::core::VulkanCore;
+use crate::vulkan::{SurfaceComposite, Vertex};
 
 pub const CAMERA_UBO_INDEX: usize = 0;
 pub const LIGHTS_UBO_INDEX: usize = 1;
@@ -92,7 +92,8 @@ impl VulkanGraphicsSetup {
             swapchain_composite.format,
             msaa_samples,
         );
-        let color_descriptor_set_layout = VulkanGraphicsSetup::create_color_descriptor_set_layout(&core.device);
+        let color_descriptor_set_layout =
+            VulkanGraphicsSetup::create_color_descriptor_set_layout(&core.device);
         let (color_pipeline, color_pipeline_layout) = VulkanGraphicsSetup::create_pipeline(
             &core,
             COLOR_VERTEX_SHADER_SPV,
@@ -106,7 +107,8 @@ impl VulkanGraphicsSetup {
             color_descriptor_set_layout,
             msaa_samples,
         );
-        let textured_descriptor_set_layout = VulkanGraphicsSetup::create_textured_descriptor_set_layout(&core.device);
+        let textured_descriptor_set_layout =
+            VulkanGraphicsSetup::create_textured_descriptor_set_layout(&core.device);
         let (textured_pipeline, textured_pipeline_layout) = VulkanGraphicsSetup::create_pipeline(
             &core,
             TEXTURED_VERTEX_SHADER_SPV,
@@ -269,6 +271,7 @@ impl VulkanGraphicsSetup {
         surface_composite: &SurfaceComposite,
     ) -> SwapChainSupportDetails {
         unsafe {
+            // TODO - validation layers are complaining on the notebook
             let capabilities = surface_composite
                 .loader
                 .get_physical_device_surface_capabilities(
