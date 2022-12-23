@@ -11,9 +11,8 @@ use ash::extensions::khr::Surface;
 #[cfg(target_os = "windows")]
 use ash::extensions::khr::Win32Surface;
 #[cfg(all(unix, not(target_os = "android"), not(target_os = "macos")))]
-use ash::extensions::khr::{WaylandSurface, XlibSurface};
 use ash::vk;
-use raw_window_handle::{HasRawDisplayHandle, HasRawWindowHandle};
+use raw_window_handle::{HasRawDisplayHandle, HasRawWindowHandle, RawDisplayHandle};
 
 use crate::vulkan::{QueueFamilyIndices, SurfaceComposite, VulkanGraphicsSetup};
 
@@ -45,7 +44,8 @@ pub struct VulkanCore {
 impl VulkanCore {
     pub fn new(window: &winit::window::Window, application_name: &str) -> (Self, SurfaceComposite) {
         let entry = ash::Entry::linked();
-        let instance = VulkanCore::create_instance(&entry, application_name);
+        let instance =
+            VulkanCore::create_instance(&entry, application_name, window.raw_display_handle());
         #[cfg(feature = "validation-layers")]
         let (debug_utils_loader, debug_messenger) =
             VulkanCore::setup_debug_utils(&entry, &instance);
@@ -434,7 +434,11 @@ impl VulkanCore {
         panic!("Failed to find suitable memory type!")
     }
 
-    fn create_instance(entry: &ash::Entry, application_name: &str) -> ash::Instance {
+    fn create_instance(
+        entry: &ash::Entry,
+        application_name: &str,
+        display_handle: RawDisplayHandle,
+    ) -> ash::Instance {
         let app_name = CString::new(application_name).unwrap();
         let engine_name = CString::new("Vulkan Engine").unwrap();
         let app_info = vk::ApplicationInfo {
@@ -455,10 +459,11 @@ impl VulkanCore {
             .map(|name| name.as_ptr())
             .collect();
 
-        let enabled_extension_raw_names: Vec<CString> = VulkanCore::required_extension_names()
-            .iter()
-            .map(|layer_name| CString::new(*layer_name).unwrap())
-            .collect();
+        let enabled_extension_raw_names: Vec<CString> =
+            VulkanCore::required_extension_names(display_handle)
+                .iter()
+                .map(|layer_name| CString::new(*layer_name).unwrap())
+                .collect();
         let enabled_extension_names: Vec<*const c_char> = enabled_extension_raw_names
             .iter()
             .map(|layer_name| layer_name.as_ptr())
@@ -734,25 +739,21 @@ impl VulkanCore {
         ]
     }
 
-    #[cfg(all(unix, not(target_os = "android"), not(target_os = "macos")))]
-    fn required_extension_names() -> Vec<&'static str> {
-        vec![
-            Surface::name().to_str().unwrap(),
-            XlibSurface::name().to_str().unwrap(),
-            WaylandSurface::name().to_str().unwrap(),
+    fn required_extension_names(display_handle: RawDisplayHandle) -> Vec<&'static str> {
+        let mut required_extensions = vec![
             #[cfg(feature = "validation-layers")]
             DebugUtils::name().to_str().unwrap(),
-        ]
-    }
+        ];
 
-    #[cfg(all(windows))]
-    fn required_extension_names() -> Vec<&'static str> {
-        vec![
-            Surface::name().to_str().unwrap(),
-            Win32Surface::name().to_str().unwrap(),
-            #[cfg(feature = "validation-layers")]
-            DebugUtils::name().to_str().unwrap(),
-        ]
+        for extension in ash_window::enumerate_required_extensions(display_handle)
+            .unwrap()
+            .iter()
+        {
+            let extension_name = unsafe { CStr::from_ptr(*extension) }.to_str().unwrap();
+            required_extensions.push(extension_name);
+        }
+
+        required_extensions
     }
 
     fn required_device_extensions() -> Vec<&'static str> {
