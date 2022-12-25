@@ -83,14 +83,27 @@ At last, I pass the descriptor to the `draw` command.
 
 Not that complex. First of all, I need to create a struct holding the data per instance.
 
-Second, I need to create an instances buffer holding actual instances information. Technically it's a yet another buffer, like vertex buffer.
+Second, I need to create an instances buffer holding actual instances information. Technically it's a yet another
+buffer, like vertex buffer.
 
-Third, creating the pipeline changes a bit. In `vertex_input` call I need to say, that I'll be passing two buffers, one for vertices, one for instances.
+Third, creating the pipeline changes a bit. In `vertex_input` call I need to say, that I'll be passing two buffers, one
+for vertices, one for instances.
 
 Fourth, to the `draw` call I'm passing in instances buffer as a second vertex buffer.
 
-As a last step I need to adapt the shader. Simply adding more `layout(location = x) in vec3 y;` is enough, just make sure locations are correct that is `x` is greater by one than last location taken from vertex buffer. 
+As a last step I need to adapt the shader. Simply adding more `layout(location = x) in vec3 y;` is enough, just make
+sure locations are correct that is `x` is greater by one than last location taken from vertex buffer.
+
+# External resources
+
+Code is mostly taken from https://vulkan-tutorial.com/, though I had to translate it into Rust.
+A few times I also peaked at [Rust version](https://github.com/bwasty/vulkan-tutorial-rs) of the tutorial.
+Still, models and textures ar completely not my thing.
 
 ## Tree model
 
 The tree model is taken from Internet: https://www.turbosquid.com/3d-models/forest-pack-obj-free/917762
+
+## Snow texture
+
+https://www.textures.com/download/Snow0166/122121

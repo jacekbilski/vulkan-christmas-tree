@@ -42,13 +42,13 @@ vec4 calcLight(Light light) {
     vec4 ambient = light.ambient * texture(texSampler, fragTexCoord);
 
     vec3 lightDir = normalize(light.position - fragPosition);
-    float diff = max(dot(fragNormal, lightDir), 0.0);
-    vec4 diffuse = diff * light.diffuse * texture(texSampler, fragTexCoord);
+    //    float diff = max(dot(fragNormal, lightDir), 0.0);
+    //    vec4 diffuse = diff * light.diffuse * texture(texSampler, fragTexCoord);
 
     vec3 viewDir = normalize(camera.position - fragPosition);
     vec3 halfwayDir = normalize(lightDir + viewDir);
     float spec = max(dot(fragNormal, halfwayDir), 0.0);
     vec4 specular = spec * light.specular * texture(texSampler, fragTexCoord);
 
-    return ambient + diffuse + specular;
+    return 2.5 * ambient + specular;
 }
