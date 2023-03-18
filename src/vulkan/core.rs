@@ -457,7 +457,7 @@ impl VulkanCore {
             .collect();
 
         let enabled_extension_raw_names: Vec<CString> =
-            VulkanCore::required_extension_names(display_handle)
+            VulkanCore::required_instance_extensions(display_handle)
                 .iter()
                 .map(|layer_name| CString::new(*layer_name).unwrap())
                 .collect();
@@ -469,6 +469,11 @@ impl VulkanCore {
         #[cfg(feature = "validation-layers")]
         let debug_utils_messenger_ci = VulkanCore::build_messenger_create_info();
 
+        #[cfg(not(target_os = "macos"))]
+        let flags = vk::InstanceCreateFlags::empty();
+        #[cfg(target_os = "macos")]
+        let flags = vk::InstanceCreateFlags::ENUMERATE_PORTABILITY_KHR;
+
         let create_info = vk::InstanceCreateInfo {
             p_application_info: &app_info,
             #[cfg(feature = "validation-layers")]
@@ -478,6 +483,7 @@ impl VulkanCore {
             pp_enabled_layer_names: enabled_layer_names.as_ptr(),
             enabled_extension_count: enabled_extension_names.len() as u32,
             pp_enabled_extension_names: enabled_extension_names.as_ptr(),
+            flags,
             ..Default::default()
         };
 
@@ -736,10 +742,12 @@ impl VulkanCore {
         ]
     }
 
-    fn required_extension_names(display_handle: RawDisplayHandle) -> Vec<&'static str> {
+    fn required_instance_extensions(display_handle: RawDisplayHandle) -> Vec<&'static str> {
         let mut required_extensions = vec![
             #[cfg(feature = "validation-layers")]
             DebugUtils::name().to_str().unwrap(),
+            #[cfg(target_os = "macos")]
+            "VK_KHR_portability_enumeration",
         ];
 
         for extension in ash_window::enumerate_required_extensions(display_handle)
@@ -754,7 +762,11 @@ impl VulkanCore {
     }
 
     fn required_device_extensions() -> Vec<&'static str> {
-        vec![ash::extensions::khr::Swapchain::name().to_str().unwrap()]
+        vec![
+            ash::extensions::khr::Swapchain::name().to_str().unwrap(),
+            #[cfg(target_os = "macos")]
+            "VK_KHR_portability_subset",
+        ]
     }
 
     pub fn drop(&self) {
