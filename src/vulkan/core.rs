@@ -698,14 +698,6 @@ impl VulkanCore {
             ..Default::default()
         };
 
-        let enabled_layer_raw_names: Vec<CString> = VulkanCore::required_layer_names()
-            .iter()
-            .map(|name| CString::new(*name).unwrap())
-            .collect();
-        let enabled_layer_names: Vec<*const c_char> = enabled_layer_raw_names
-            .iter()
-            .map(|name| name.as_ptr())
-            .collect();
         let enabled_extension_raw_names: Vec<CString> = VulkanCore::required_device_extensions()
             .iter()
             .map(|name| CString::new(*name).unwrap())
@@ -718,8 +710,6 @@ impl VulkanCore {
         let device_create_info = vk::DeviceCreateInfo {
             queue_create_info_count: queue_create_infos.len() as u32,
             p_queue_create_infos: queue_create_infos.as_ptr(),
-            enabled_layer_count: enabled_layer_names.len() as u32,
-            pp_enabled_layer_names: enabled_layer_names.as_ptr(),
             p_enabled_features: &physical_device_features,
             enabled_extension_count: enabled_extension_names.len() as u32,
             pp_enabled_extension_names: enabled_extension_names.as_ptr(),
