@@ -19,11 +19,13 @@ const SNOW_Z_MAX: f32 = 10.;
 pub const MAX_SNOWFLAKES: usize = 10_000;
 const SNOWFLAKE_RADIUS: f32 = 0.04;
 
+#[repr(C)]
+#[derive(Debug, Clone, Copy)]
 pub struct Snowflake {
     pub position: Point3<f32>,
-    pub padding1: f32, // needed for std430 layout
+    padding1: f32, // needed for std430 layout
     pub rotation: Vector3<Rad<f32>>,
-    pub padding2: f32, // needed for std430 layout
+    padding2: f32, // needed for std430 layout
 }
 
 impl Default for Snowflake {
