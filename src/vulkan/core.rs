@@ -531,8 +531,8 @@ impl VulkanCore {
     }
 
     fn create_surface(
-        entry: &ash::entry::Entry,
-        instance: &ash::instance::Instance,
+        entry: &ash::Entry,
+        instance: &ash::Instance,
         window: &winit::window::Window,
     ) -> SurfaceComposite {
         unsafe {
