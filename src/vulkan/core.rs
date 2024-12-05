@@ -5,13 +5,11 @@ use std::os::raw::c_char;
 use std::os::raw::c_void;
 use std::ptr;
 
-#[cfg(feature = "validation-layers")]
-use ash::extensions::ext::DebugUtils;
-use ash::extensions::khr::Surface;
-use ash::vk;
-use raw_window_handle::{HasRawDisplayHandle, HasRawWindowHandle, RawDisplayHandle};
-
 use crate::vulkan::{QueueFamilyIndices, SurfaceComposite, VulkanGraphicsSetup};
+#[cfg(feature = "validation-layers")]
+use ash::{khr, vk};
+use raw_window_handle::RawDisplayHandle;
+use winit::raw_window_handle::{HasDisplayHandle, HasWindowHandle};
 
 const APPLICATION_VERSION: u32 = vk::make_api_version(0, 0, 1, 0);
 const ENGINE_VERSION: u32 = vk::make_api_version(0, 0, 1, 0);
@@ -41,8 +39,11 @@ pub struct VulkanCore {
 impl VulkanCore {
     pub fn new(window: &winit::window::Window, application_name: &str) -> (Self, SurfaceComposite) {
         let entry = ash::Entry::linked();
-        let instance =
-            VulkanCore::create_instance(&entry, application_name, window.raw_display_handle());
+        let instance = VulkanCore::create_instance(
+            &entry,
+            application_name,
+            window.display_handle().unwrap().as_raw(),
+        );
         #[cfg(feature = "validation-layers")]
         let (debug_utils_loader, debug_messenger) =
             VulkanCore::setup_debug_utils(&entry, &instance);
@@ -187,7 +188,7 @@ impl VulkanCore {
         usage: vk::BufferUsageFlags,
         data: &[T],
     ) -> (vk::Buffer, vk::DeviceMemory) {
-        let buffer_size = std::mem::size_of_val(data) as vk::DeviceSize;
+        let buffer_size = size_of_val(data) as vk::DeviceSize;
         let (staging_buffer, staging_buffer_memory) = self.create_buffer(
             buffer_size,
             vk::BufferUsageFlags::TRANSFER_SRC,
@@ -530,20 +531,20 @@ impl VulkanCore {
     }
 
     fn create_surface(
-        entry: &ash::Entry,
-        instance: &ash::Instance,
+        entry: &ash::entry::Entry,
+        instance: &ash::instance::Instance,
         window: &winit::window::Window,
     ) -> SurfaceComposite {
         unsafe {
             let surface = ash_window::create_surface(
                 entry,
                 instance,
-                window.raw_display_handle(),
-                window.raw_window_handle(),
+                window.display_handle().unwrap().as_raw(),
+                window.window_handle().unwrap().as_raw(),
                 None,
             )
             .expect("Unable to create surface");
-            let surface_loader = Surface::new(entry, instance);
+            let surface_loader = khr::surface::Instance::new(entry, instance);
 
             SurfaceComposite {
                 loader: surface_loader,
@@ -753,7 +754,7 @@ impl VulkanCore {
 
     fn required_device_extensions() -> Vec<&'static str> {
         vec![
-            ash::extensions::khr::Swapchain::name().to_str().unwrap(),
+            "VK_KHR_swapchain",
             #[cfg(target_os = "macos")]
             "VK_KHR_portability_subset",
         ]
