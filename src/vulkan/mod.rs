@@ -1,4 +1,4 @@
-use ash::vk;
+use ash::{khr, vk};
 use memoffset::offset_of;
 
 use crate::color_mesh::{ColorMesh, InstanceData};
@@ -44,7 +44,7 @@ impl QueueFamilyIndices {
 }
 
 pub struct SurfaceComposite {
-    loader: ash::extensions::khr::Surface,
+    loader: khr::surface::Instance,
     surface: vk::SurfaceKHR,
 }
 
@@ -60,7 +60,7 @@ impl Vertex {
     fn get_binding_descriptions() -> Vec<vk::VertexInputBindingDescription> {
         vec![vk::VertexInputBindingDescription {
             binding: 0,
-            stride: std::mem::size_of::<Self>() as u32,
+            stride: size_of::<Self>() as u32,
             input_rate: vk::VertexInputRate::VERTEX,
         }]
     }
@@ -135,7 +135,7 @@ impl Vulkan {
             self.compute_setup.clone(),
             snowflakes,
             drawing_buffer,
-            std::mem::size_of::<InstanceData>() * MAX_SNOWFLAKES,
+            size_of::<InstanceData>() * MAX_SNOWFLAKES,
         ));
     }
 

@@ -1,7 +1,7 @@
 use std::ffi::CString;
 use std::ptr;
 
-use ash::vk;
+use ash::{khr, vk};
 
 use crate::color_mesh;
 use crate::textured_mesh;
@@ -23,7 +23,7 @@ const COLOR_FORMAT: vk::Format = vk::Format::B8G8R8A8_UNORM;
 
 #[derive(Clone)]
 pub struct SwapChainComposite {
-    pub loader: ash::extensions::khr::Swapchain,
+    pub loader: khr::swapchain::Device,
     pub swapchain: vk::SwapchainKHR,
     pub images: Vec<vk::Image>,
     format: vk::Format,
@@ -242,7 +242,7 @@ impl VulkanGraphicsSetup {
             ..Default::default()
         };
 
-        let loader = ash::extensions::khr::Swapchain::new(&core.instance, &core.device);
+        let loader = khr::swapchain::Device::new(&core.instance, &core.device);
         let swapchain = unsafe {
             loader
                 .create_swapchain(&swapchain_create_info, None)
