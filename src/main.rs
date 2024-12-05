@@ -66,122 +66,127 @@ fn main_loop(
     let mut mouse_rotating = false;
     let mut last_cursor_position: PhysicalPosition<f64> = PhysicalPosition::new(0.0, 0.0);
     let desired_frame_duration = Duration::from_secs_f32(1.0 / MAX_FPS as f32);
-    event_loop.run(move |event, elwt| match event {
-        Event::WindowEvent {
-            event: WindowEvent::CloseRequested,
-            ..
-        } => {
-            vulkan.wait_device_idle();
-            elwt.exit();
-        }
-        Event::WindowEvent {
-            event:
-                WindowEvent::KeyboardInput {
-                    event:
-                        KeyEvent {
-                            physical_key: PhysicalKey::Code(code),
-                            state: Pressed,
-                            ..
-                        },
-                    ..
-                },
-            ..
-        } => match code {
-            KeyCode::Escape => {
+    event_loop
+        .run(move |event, elwt| match event {
+            Event::WindowEvent {
+                event: WindowEvent::CloseRequested,
+                ..
+            } => {
                 vulkan.wait_device_idle();
                 elwt.exit();
             }
-            KeyCode::ArrowUp => {
-                autorotate = false;
-                let angle_change = FRAC_PI_8 / 4.;
-                scene.rotate_camera_vertically(angle_change, &mut vulkan);
+            Event::WindowEvent {
+                event:
+                    WindowEvent::KeyboardInput {
+                        event:
+                            KeyEvent {
+                                physical_key: PhysicalKey::Code(code),
+                                state: Pressed,
+                                ..
+                            },
+                        ..
+                    },
+                ..
+            } => match code {
+                KeyCode::Escape => {
+                    vulkan.wait_device_idle();
+                    elwt.exit();
+                }
+                KeyCode::ArrowUp => {
+                    autorotate = false;
+                    let angle_change = FRAC_PI_8 / 4.;
+                    scene.rotate_camera_vertically(angle_change, &mut vulkan);
+                }
+                KeyCode::ArrowDown => {
+                    autorotate = false;
+                    let angle_change = FRAC_PI_8 / 4.;
+                    scene.rotate_camera_vertically(-angle_change, &mut vulkan);
+                }
+                KeyCode::ArrowLeft => {
+                    autorotate = false;
+                    let angle_change = FRAC_PI_8 / 4.;
+                    scene.rotate_camera_horizontally(-angle_change, &mut vulkan);
+                }
+                KeyCode::ArrowRight => {
+                    autorotate = false;
+                    let angle_change = FRAC_PI_8 / 4.;
+                    scene.rotate_camera_horizontally(angle_change, &mut vulkan);
+                }
+                KeyCode::KeyR => {
+                    autorotate = !autorotate;
+                }
+                _ => (),
+            },
+            Event::WindowEvent {
+                event:
+                    WindowEvent::MouseInput {
+                        button: MouseButton::Left,
+                        state,
+                        ..
+                    },
+                ..
+            } => {
+                mouse_rotating = state == Pressed;
             }
-            KeyCode::ArrowDown => {
-                autorotate = false;
-                let angle_change = FRAC_PI_8 / 4.;
-                scene.rotate_camera_vertically(-angle_change, &mut vulkan);
+            Event::WindowEvent {
+                event:
+                    WindowEvent::MouseWheel {
+                        delta: MouseScrollDelta::LineDelta(_, vertical),
+                        ..
+                    },
+                ..
+            } => {
+                scene.change_camera_distance(-0.5 * vertical, &mut vulkan);
             }
-            KeyCode::ArrowLeft => {
-                autorotate = false;
-                let angle_change = FRAC_PI_8 / 4.;
-                scene.rotate_camera_horizontally(-angle_change, &mut vulkan);
+            Event::WindowEvent {
+                event: WindowEvent::CursorMoved { position, .. },
+                ..
+            } => {
+                if mouse_rotating {
+                    let x_diff = position.x - last_cursor_position.x;
+                    let y_diff = position.y - last_cursor_position.y;
+
+                    let angle_change = FRAC_PI_8 / 128.;
+                    scene.rotate_camera_horizontally(-angle_change * x_diff as f32, &mut vulkan);
+                    scene.rotate_camera_vertically(angle_change * y_diff as f32, &mut vulkan);
+                }
+                last_cursor_position = position;
             }
-            KeyCode::ArrowRight => {
-                autorotate = false;
-                let angle_change = FRAC_PI_8 / 4.;
-                scene.rotate_camera_horizontally(angle_change, &mut vulkan);
+            Event::WindowEvent {
+                event: WindowEvent::Resized(new_size),
+                ..
+            } => {
+                vulkan.wait_device_idle();
+                scene.framebuffer_resized(new_size, &mut vulkan);
+                vulkan.framebuffer_resized(new_size.width, new_size.height);
             }
-            KeyCode::KeyR => {
-                autorotate = !autorotate;
+            Event::AboutToWait => {
+                window.request_redraw();
+            }
+            Event::WindowEvent {
+                event: WindowEvent::RedrawRequested,
+                ..
+            } => {
+                let frame_start = Instant::now();
+                fps_calculator.tick();
+                let last_frame_time_secs = fps_calculator.last_frame_time_secs();
+                if autorotate {
+                    scene.rotate_camera_horizontally(
+                        AUTO_ROTATION_SPEED_RAD_PER_SEC * last_frame_time_secs,
+                        &mut vulkan,
+                    );
+                }
+                vulkan.draw_frame(last_frame_time_secs);
+                let frame_end = Instant::now();
+                let actual_frame_duration = frame_end - frame_start;
+                if actual_frame_duration < desired_frame_duration {
+                    thread::sleep(desired_frame_duration - actual_frame_duration);
+                }
+            }
+            Event::LoopExiting => {
+                vulkan.wait_device_idle();
             }
             _ => (),
-        },
-        Event::WindowEvent {
-            event:
-                WindowEvent::MouseInput {
-                    button: MouseButton::Left,
-                    state,
-                    ..
-                },
-            ..
-        } => {
-            mouse_rotating = state == Pressed;
-        }
-        Event::WindowEvent {
-            event:
-                WindowEvent::MouseWheel {
-                    delta: MouseScrollDelta::LineDelta(_, vertical),
-                    ..
-                },
-            ..
-        } => {
-            scene.change_camera_distance(-0.5 * vertical, &mut vulkan);
-        }
-        Event::WindowEvent {
-            event: WindowEvent::CursorMoved { position, .. },
-            ..
-        } => {
-            if mouse_rotating {
-                let x_diff = position.x - last_cursor_position.x;
-                let y_diff = position.y - last_cursor_position.y;
-
-                let angle_change = FRAC_PI_8 / 128.;
-                scene.rotate_camera_horizontally(-angle_change * x_diff as f32, &mut vulkan);
-                scene.rotate_camera_vertically(angle_change * y_diff as f32, &mut vulkan);
-            }
-            last_cursor_position = position;
-        }
-        Event::WindowEvent {
-            event: WindowEvent::Resized(new_size),
-            ..
-        } => {
-            vulkan.wait_device_idle();
-            scene.framebuffer_resized(new_size, &mut vulkan);
-            vulkan.framebuffer_resized(new_size.width, new_size.height);
-        }
-        Event::AboutToWait => {
-            window.request_redraw();
-        }
-        WindowEvent::RedrawRequested => {
-            let frame_start = Instant::now();
-            fps_calculator.tick();
-            let last_frame_time_secs = fps_calculator.last_frame_time_secs();
-            if autorotate {
-                scene.rotate_camera_horizontally(
-                    AUTO_ROTATION_SPEED_RAD_PER_SEC * last_frame_time_secs,
-                    &mut vulkan,
-                );
-            }
-            vulkan.draw_frame(last_frame_time_secs);
-            let frame_end = Instant::now();
-            let actual_frame_duration = frame_end - frame_start;
-            if actual_frame_duration < desired_frame_duration {
-                thread::sleep(desired_frame_duration - actual_frame_duration);
-            }
-        }
-        Event::LoopExiting => {
-            vulkan.wait_device_idle();
-        }
-        _ => (),
-    });
+        })
+        .unwrap();
 }
