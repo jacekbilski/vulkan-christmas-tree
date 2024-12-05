@@ -7,7 +7,7 @@ use std::ptr;
 
 use crate::vulkan::{QueueFamilyIndices, SurfaceComposite, VulkanGraphicsSetup};
 #[cfg(feature = "validation-layers")]
-use ash::{khr, vk};
+use ash::{ext, khr, vk};
 use raw_window_handle::RawDisplayHandle;
 use winit::raw_window_handle::{HasDisplayHandle, HasWindowHandle};
 
@@ -21,7 +21,7 @@ pub struct VulkanCore {
     pub instance: ash::Instance,
 
     #[cfg(feature = "validation-layers")]
-    debug_utils_loader: DebugUtils,
+    debug_utils_loader: ext::debug_utils::Instance,
     #[cfg(feature = "validation-layers")]
     debug_messenger: vk::DebugUtilsMessengerEXT,
 
@@ -501,8 +501,8 @@ impl VulkanCore {
     fn setup_debug_utils(
         entry: &ash::Entry,
         instance: &ash::Instance,
-    ) -> (DebugUtils, vk::DebugUtilsMessengerEXT) {
-        let debug_utils_loader = DebugUtils::new(entry, instance);
+    ) -> (ext::debug_utils::Instance, vk::DebugUtilsMessengerEXT) {
+        let debug_utils_loader = ext::debug_utils::Instance::new(entry, instance);
 
         let messenger_ci = VulkanCore::build_messenger_create_info();
 
@@ -516,7 +516,7 @@ impl VulkanCore {
     }
 
     #[cfg(feature = "validation-layers")]
-    fn build_messenger_create_info() -> vk::DebugUtilsMessengerCreateInfoEXT {
+    fn build_messenger_create_info() -> vk::DebugUtilsMessengerCreateInfoEXT<'static> {
         vk::DebugUtilsMessengerCreateInfoEXT {
             message_severity: vk::DebugUtilsMessageSeverityFlagsEXT::WARNING
                 // | vk::DebugUtilsMessageSeverityFlagsEXT::VERBOSE
@@ -736,7 +736,7 @@ impl VulkanCore {
     fn required_instance_extensions(display_handle: RawDisplayHandle) -> Vec<&'static str> {
         let mut required_extensions = vec![
             #[cfg(feature = "validation-layers")]
-            DebugUtils::name().to_str().unwrap(),
+            "VK_EXT_debug_utils",
             #[cfg(target_os = "macos")]
             "VK_KHR_portability_enumeration",
         ];
