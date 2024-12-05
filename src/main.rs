@@ -4,15 +4,15 @@ use std::f32::consts::{FRAC_PI_8, TAU};
 use std::thread;
 use std::time::{Duration, Instant};
 
+use crate::fps_calculator::FpsCalculator;
+use crate::scene::Scene;
 use vulkan::Vulkan;
 use winit::dpi::{PhysicalPosition, PhysicalSize};
 use winit::event::ElementState::Pressed;
 use winit::event::{Event, KeyEvent, MouseButton, MouseScrollDelta, WindowEvent};
 use winit::event_loop::EventLoop;
 use winit::keyboard::{KeyCode, PhysicalKey};
-
-use crate::fps_calculator::FpsCalculator;
-use crate::scene::Scene;
+use winit::window::Window;
 
 mod vulkan;
 
@@ -36,11 +36,13 @@ fn main() {
     main_loop(vulkan, window, scene, event_loop);
 }
 
-fn init_window(event_loop: &EventLoop<()>) -> winit::window::Window {
-    let window = winit::window::WindowBuilder::new()
-        .with_title(APPLICATION_NAME)
-        .with_inner_size(PhysicalSize::new(1, 1))
-        .build(event_loop)
+fn init_window(event_loop: &EventLoop<()>) -> Window {
+    let window = event_loop
+        .create_window(
+            Window::default_attributes()
+                .with_title(APPLICATION_NAME)
+                .with_inner_size(PhysicalSize::new(1, 1)),
+        )
         .expect("Failed to create window.");
     let monitor = window
         .current_monitor()
@@ -55,12 +57,7 @@ fn init_window(event_loop: &EventLoop<()>) -> winit::window::Window {
     window
 }
 
-fn main_loop(
-    mut vulkan: Vulkan,
-    window: winit::window::Window,
-    mut scene: Scene,
-    event_loop: EventLoop<()>,
-) {
+fn main_loop(mut vulkan: Vulkan, window: Window, mut scene: Scene, event_loop: EventLoop<()>) {
     let mut fps_calculator = FpsCalculator::new();
     let mut autorotate = false;
     let mut mouse_rotating = false;
